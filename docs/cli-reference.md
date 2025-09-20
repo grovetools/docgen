@@ -186,6 +186,48 @@ The generated `manifest.json` has the following structure:
 
 ---
 
+## `docgen regen-json`
+
+Regenerates the structured JSON output file from existing, pre-generated markdown files.
+
+### Syntax
+
+```bash
+docgen regen-json
+```
+
+### Description
+
+This command is a utility for quickly updating the structured JSON output without running a full `generate` command. It reads the `docs/docgen.config.yml` file to find the path specified in `structured_output_file`. It then parses the existing markdown documentation files (e.g., `introduction.md`, `core-concepts.md`) and writes a new JSON file.
+
+This is useful in two main scenarios:
+1. After manually editing the generated markdown files, to ensure the JSON reflects the changes.
+2. When the JSON parsing logic in `docgen` has been updated, to apply the new logic to existing content.
+
+This command **does not** call any LLMs or modify your markdown files.
+
+### Options
+
+This command has no specific options.
+
+### Examples
+
+**Regenerate the JSON output for the current package:**
+
+```bash
+# Run from the root of your package
+docgen regen-json
+```
+
+**Expected Output:**
+
+```
+INFO Generating structured JSON from markdown files...
+INFO Successfully wrote structured JSON to pkg/docs/my-package-docs.json
+```
+
+---
+
 ## `docgen version`
 
 Prints the version information for the `docgen` binary.
