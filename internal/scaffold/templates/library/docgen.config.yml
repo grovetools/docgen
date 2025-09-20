@@ -7,6 +7,7 @@ settings:
   model: "gemini-1.5-flash-latest"
   regeneration_mode: "scratch"
   system_prompt: "default"  # Use built-in tone guidelines, or specify a custom prompt file
+  structured_output_file: "pkg/docs/docs.json"
   
   # Generation parameters (optional, configure as needed):
   # max_output_tokens: 4096  # Maximum length of generated content
