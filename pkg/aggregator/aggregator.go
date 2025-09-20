@@ -103,6 +103,11 @@ func (a *Aggregator) Aggregate(outputDir string) error {
 
 	m.GeneratedAt = time.Now()
 
+	// Ensure output directory exists
+	if err := os.MkdirAll(outputDir, 0755); err != nil {
+		return fmt.Errorf("failed to create output directory: %w", err)
+	}
+
 	// Save the manifest
 	manifestPath := filepath.Join(outputDir, "manifest.json")
 	return m.Save(manifestPath)
