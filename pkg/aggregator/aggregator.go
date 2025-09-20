@@ -4,8 +4,10 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/mattsolo1/grove-docgen/pkg/config"
@@ -63,13 +65,18 @@ func (a *Aggregator) Aggregate(outputDir string) error {
 			continue
 		}
 
+		// Get version and repo URL
+		version := a.getPackageVersion(wsPath)
+		repoURL := a.getRepoURL(wsPath)
+
 		// Add to manifest
 		pkgManifest := manifest.PackageManifest{
 			Name:     wsName,
 			Title:    cfg.Title,
 			Category: cfg.Category,
 			DocsPath: fmt.Sprintf("./%s", wsName),
-			// Version and RepoURL will be filled in a later step
+			Version:  version,
+			RepoURL:  repoURL,
 		}
 
 		// Copy generated files and build section manifest
@@ -99,6 +106,59 @@ func (a *Aggregator) Aggregate(outputDir string) error {
 	// Save the manifest
 	manifestPath := filepath.Join(outputDir, "manifest.json")
 	return m.Save(manifestPath)
+}
+
+// getPackageVersion attempts to get the version from git tags or grove.yml
+func (a *Aggregator) getPackageVersion(wsPath string) string {
+	// Try to get version from git tags
+	cmd := exec.Command("git", "describe", "--tags", "--abbrev=0")
+	cmd.Dir = wsPath
+	output, err := cmd.Output()
+	if err == nil {
+		version := strings.TrimSpace(string(output))
+		if version != "" {
+			return version
+		}
+	}
+
+	// Fall back to checking grove.yml for version info
+	groveYmlPath := filepath.Join(wsPath, "grove.yml")
+	data, err := os.ReadFile(groveYmlPath)
+	if err == nil {
+		// Simple search for version field in YAML
+		lines := strings.Split(string(data), "\n")
+		for _, line := range lines {
+			if strings.HasPrefix(line, "version:") {
+				parts := strings.SplitN(line, ":", 2)
+				if len(parts) == 2 {
+					return strings.TrimSpace(parts[1])
+				}
+			}
+		}
+	}
+
+	// Default to "latest" if no version found
+	return "latest"
+}
+
+// getRepoURL attempts to get the repository URL from git remote
+func (a *Aggregator) getRepoURL(wsPath string) string {
+	cmd := exec.Command("git", "remote", "get-url", "origin")
+	cmd.Dir = wsPath
+	output, err := cmd.Output()
+	if err != nil {
+		return ""
+	}
+
+	url := strings.TrimSpace(string(output))
+	// Convert SSH URLs to HTTPS URLs for consistency
+	if strings.HasPrefix(url, "git@github.com:") {
+		url = strings.Replace(url, "git@github.com:", "https://github.com/", 1)
+	}
+	// Remove .git suffix if present
+	url = strings.TrimSuffix(url, ".git")
+	
+	return url
 }
 
 func copyDir(src, dst string) error {

@@ -16,6 +16,7 @@ type DocgenConfig struct {
 	Title       string          `yaml:"title"`
 	Description string          `yaml:"description"`
 	Category    string          `yaml:"category"`
+	Model       string          `yaml:"model,omitempty"` // Optional LLM model to use
 	Sections    []SectionConfig `yaml:"sections"`
 }
 

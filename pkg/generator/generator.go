@@ -41,7 +41,7 @@ func (g *Generator) Generate(packageDir string) error {
 		g.logger.Infof("Generating section: %s", section.Name)
 		
 		promptPath := filepath.Join(packageDir, "docs", section.Prompt)
-		output, err := g.callLLM(promptPath)
+		output, err := g.callLLM(promptPath, cfg.Model)
 		if err != nil {
 			g.logger.WithError(err).Errorf("LLM call failed for section '%s'", section.Name)
 			continue // Continue to the next section even if one fails
@@ -70,12 +70,17 @@ func (g *Generator) buildContext(packageDir string) error {
 	return cmd.Run()
 }
 
-func (g *Generator) callLLM(promptPath string) (string, error) {
+func (g *Generator) callLLM(promptPath string, model string) (string, error) {
+	// Use provided model or default to gemini-1.5-flash-latest
+	if model == "" {
+		model = "gemini-1.5-flash-latest"
+	}
+	
 	// This reuses the simple gemapi call from grove-tend's generator.
 	// We assume gemapi is configured and available in the PATH.
 	args := []string{
 		"request",
-		"--model", "gemini-1.5-flash-latest", // This could be made configurable later
+		"--model", model,
 		"--file", promptPath,
 		"--yes",
 	}
