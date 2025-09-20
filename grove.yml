@@ -1,0 +1,6 @@
+name: grove-docgen
+description: LLM-powered, workspace-aware documentation generator.
+type: go
+binary:
+  name: docgen
+  path: ./bin/docgen
