@@ -2,12 +2,14 @@ package generator
 
 import (
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
 
 	"github.com/mattsolo1/grove-docgen/pkg/config"
+	"github.com/mattsolo1/grove-docgen/pkg/parser"
 	"github.com/sirupsen/logrus"
 )
 
@@ -20,35 +22,128 @@ func New(logger *logrus.Logger) *Generator {
 	return &Generator{logger: logger}
 }
 
-// Generate reads a config, builds context, calls an LLM, and writes the output.
+// Generate orchestrates an isolated documentation generation process.
 func (g *Generator) Generate(packageDir string) error {
-	g.logger.Infof("Generating documentation for package at: %s", packageDir)
+	g.logger.Infof("Starting isolated generation for package at: %s", packageDir)
 
-	// 1. Load config
-	cfg, err := config.Load(packageDir)
+	// 1. Create temporary directory for the clone
+	tempDir, err := os.MkdirTemp("", "docgen-isolated-*")
 	if err != nil {
-		return fmt.Errorf("failed to load docgen config: %w", err)
+		return fmt.Errorf("failed to create temporary directory: %w", err)
+	}
+	defer func() {
+		g.logger.Debugf("Cleaning up temporary directory: %s", tempDir)
+		os.RemoveAll(tempDir)
+	}()
+	g.logger.Debugf("Created temporary directory: %s", tempDir)
+
+	// 2. Perform a local clone
+	g.logger.Debug("Cloning repository locally for isolation...")
+	cloneCmd := exec.Command("git", "clone", "--local", ".", tempDir)
+	cloneCmd.Dir = packageDir
+	if output, err := cloneCmd.CombinedOutput(); err != nil {
+		return fmt.Errorf("failed to clone repository into temp dir: %w\nOutput: %s", err, string(output))
 	}
 
-	// 2. Build context using `cx`
+	// 3. Run the generation logic inside the isolated environment
+	if err := g.generateInPlace(tempDir, packageDir); err != nil {
+		return fmt.Errorf("generation process failed in isolation: %w", err)
+	}
+
+	// 4. Copy generated markdown files back (only the output files)
+	cfg, err := config.Load(packageDir)
+	if err != nil {
+		return fmt.Errorf("failed to load config for copying files: %w", err)
+	}
+	
+	for _, section := range cfg.Sections {
+		srcPath := filepath.Join(tempDir, "docs", section.Output)
+		destPath := filepath.Join(packageDir, "docs", section.Output)
+		
+		if _, err := os.Stat(srcPath); os.IsNotExist(err) {
+			g.logger.Warnf("Generated file %s does not exist", srcPath)
+			continue
+		}
+		
+		// Copy the file
+		srcData, err := os.ReadFile(srcPath)
+		if err != nil {
+			return fmt.Errorf("failed to read generated file %s: %w", srcPath, err)
+		}
+		
+		if err := os.WriteFile(destPath, srcData, 0644); err != nil {
+			return fmt.Errorf("failed to write file %s: %w", destPath, err)
+		}
+		
+		g.logger.Infof("Copied %s to %s", section.Output, destPath)
+	}
+
+	// 5. Generate JSON from markdown if configured
+	if cfg.Settings.StructuredOutputFile != "" {
+		g.logger.Info("Generating structured JSON from markdown...")
+		p := parser.New(g.logger)
+		if err := p.GenerateJSON(packageDir, cfg); err != nil {
+			g.logger.WithError(err).Error("Failed to generate JSON from markdown")
+			// Don't fail the whole process if JSON generation fails
+		}
+	}
+
+	return nil
+}
+
+// generateInPlace runs the core doc generation logic within a given directory.
+func (g *Generator) generateInPlace(cloneDir, originalDir string) error {
+	g.logger.Infof("Generating documentation within isolated directory: %s", cloneDir)
+
+	// 1. Load config from the cloned directory
+	cfg, err := config.Load(cloneDir)
+	if err != nil {
+		return fmt.Errorf("failed to load docgen config from temp dir: %w", err)
+	}
+
+	// 2. Setup rules file if specified
+	if cfg.Settings.RulesFile != "" {
+		if err := g.setupRulesFile(cloneDir, originalDir, cfg.Settings.RulesFile); err != nil {
+			return fmt.Errorf("failed to setup rules file: %w", err)
+		}
+	}
+
+	// 3. Build context using `cx`
 	g.logger.Info("Building context with 'cx generate'...")
-	if err := g.buildContext(packageDir); err != nil {
+	if err := g.buildContext(cloneDir); err != nil {
 		return fmt.Errorf("failed to build context: %w", err)
 	}
 
 	// 3. Generate each section
 	for _, section := range cfg.Sections {
 		g.logger.Infof("Generating section: %s", section.Name)
-		
-		promptPath := filepath.Join(packageDir, "docs", section.Prompt)
-		output, err := g.callLLM(promptPath, cfg.Model)
+
+		promptPath := filepath.Join(cloneDir, "docs", section.Prompt)
+		promptContent, err := os.ReadFile(promptPath)
+		if err != nil {
+			return fmt.Errorf("failed to read prompt file %s: %w", promptPath, err)
+		}
+
+		finalPrompt := string(promptContent)
+
+		// Handle reference mode
+		if cfg.Settings.RegenerationMode == "reference" {
+			originalOutputPath := filepath.Join(originalDir, "docs", "dist", section.Output)
+			if existingDocs, err := os.ReadFile(originalOutputPath); err == nil {
+				g.logger.Debugf("Injecting reference content from %s", originalOutputPath)
+				finalPrompt = "For your reference, here is the previous version of the documentation:\n\n<reference_docs>\n" +
+					string(existingDocs) + "\n</reference_docs>\n\n---\n\n" + finalPrompt
+			}
+		}
+
+		output, err := g.callLLM(finalPrompt, cfg.Settings.Model, cloneDir)
 		if err != nil {
 			g.logger.WithError(err).Errorf("LLM call failed for section '%s'", section.Name)
 			continue // Continue to the next section even if one fails
 		}
 
 		// 4. Write output
-		outputPath := filepath.Join(packageDir, "docs", "dist", section.Output)
+		outputPath := filepath.Join(cloneDir, "docs", section.Output)
 		if err := os.MkdirAll(filepath.Dir(outputPath), 0755); err != nil {
 			return fmt.Errorf("failed to create output directory: %w", err)
 		}
@@ -61,42 +156,184 @@ func (g *Generator) Generate(packageDir string) error {
 	return nil
 }
 
+func (g *Generator) setupRulesFile(cloneDir, originalDir, rulesFile string) error {
+	// Read the specified rules file
+	rulesPath := filepath.Join(cloneDir, "docs", rulesFile)
+	content, err := os.ReadFile(rulesPath)
+	if err != nil {
+		return fmt.Errorf("failed to read rules file %s: %w", rulesPath, err)
+	}
+
+	// Adjust relative paths for isolation
+	lines := strings.Split(string(content), "\n")
+	for i, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		// Check if line starts with ../
+		if strings.HasPrefix(trimmed, "../") {
+			// Get the grove-ecosystem root, handling worktrees
+			var groveEcosystemRoot string
+			
+			// Check if we're in a worktree by looking for .grove-worktrees in the path
+			if strings.Contains(originalDir, ".grove-worktrees") {
+				// Extract the path up to the package (before .grove-worktrees)
+				parts := strings.Split(originalDir, ".grove-worktrees")
+				if len(parts) > 0 {
+					// parts[0] should be /path/to/grove-ecosystem/package-name/
+					// We want the parent of the package
+					packagePath := strings.TrimSuffix(parts[0], "/")
+					groveEcosystemRoot = filepath.Dir(packagePath)
+				}
+			} else {
+				// Regular checkout - just get the parent directory
+				groveEcosystemRoot = filepath.Dir(originalDir)
+			}
+			
+			// Remove the leading ../ and resolve the absolute path
+			relativePart := strings.TrimPrefix(trimmed, "../")
+			absolutePath := filepath.Join(groveEcosystemRoot, relativePart)
+			
+			// Validate path exists (check up to the last non-glob part)
+			pathParts := strings.Split(relativePart, "/")
+			var checkPath string
+			for j, part := range pathParts {
+				if strings.Contains(part, "*") || strings.Contains(part, "?") || strings.Contains(part, "[") {
+					// Found a glob pattern, use path up to previous part
+					if j > 0 {
+						checkPath = filepath.Join(groveEcosystemRoot, strings.Join(pathParts[:j], "/"))
+					}
+					break
+				}
+			}
+			// If no glob found, check the full path
+			if checkPath == "" && len(pathParts) > 0 {
+				checkPath = filepath.Join(groveEcosystemRoot, strings.Split(relativePart, "*")[0])
+			}
+			
+			if checkPath != "" {
+				if _, err := os.Stat(checkPath); os.IsNotExist(err) {
+					g.logger.Debugf("Path doesn't exist, commenting out: %s", trimmed)
+					lines[i] = "# " + line // Comment out the line
+					continue
+				}
+			}
+			
+			lines[i] = absolutePath
+			g.logger.Debugf("Converted relative path %s to %s", trimmed, absolutePath)
+		}
+	}
+
+	// Ensure .grove directory exists
+	groveDir := filepath.Join(cloneDir, ".grove")
+	if err := os.MkdirAll(groveDir, 0755); err != nil {
+		return fmt.Errorf("failed to create .grove directory: %w", err)
+	}
+
+	// Write adjusted content to .grove/rules
+	adjustedContent := strings.Join(lines, "\n")
+	groveRulesPath := filepath.Join(groveDir, "rules")
+	if err := os.WriteFile(groveRulesPath, []byte(adjustedContent), 0644); err != nil {
+		return fmt.Errorf("failed to write .grove/rules: %w", err)
+	}
+
+	g.logger.Debugf("Setup rules file from %s to .grove/rules", rulesFile)
+	return nil
+}
+
 func (g *Generator) buildContext(packageDir string) error {
 	// cx generate uses the .grove/rules file if it exists, relative to the CWD.
 	cmd := exec.Command("cx", "generate")
 	cmd.Dir = packageDir
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
+	// Discard output to avoid contaminating the LLM response
+	cmd.Stdout = io.Discard
+	cmd.Stderr = io.Discard
 	return cmd.Run()
 }
 
-func (g *Generator) callLLM(promptPath string, model string) (string, error) {
+func (g *Generator) callLLM(promptContent, model, workDir string) (string, error) {
 	// Use provided model or default to gemini-1.5-flash-latest
 	if model == "" {
 		model = "gemini-1.5-flash-latest"
 	}
-	
-	// This reuses the simple gemapi call from grove-tend's generator.
-	// We assume gemapi is configured and available in the PATH.
+
+	// Create a temporary file for the prompt
+	promptFile, err := os.CreateTemp("", "docgen-prompt-*.md")
+	if err != nil {
+		return "", fmt.Errorf("failed to create temp prompt file: %w", err)
+	}
+	defer os.Remove(promptFile.Name())
+
+	if _, err := promptFile.WriteString(promptContent); err != nil {
+		return "", fmt.Errorf("failed to write to temp prompt file: %w", err)
+	}
+	if err := promptFile.Close(); err != nil {
+		return "", fmt.Errorf("failed to close temp prompt file: %w", err)
+	}
+
+	// Use gemapi to make the request (following grove-tend's original approach)
 	args := []string{
 		"request",
 		"--model", model,
-		"--file", promptPath,
+		"--file", promptFile.Name(),
 		"--yes",
 	}
 	cmd := exec.Command("gemapi", args...)
-	output, err := cmd.CombinedOutput()
+	cmd.Dir = workDir // Run in the isolated clone directory
+	// Let stderr go to console for debug output, capture only stdout
+	cmd.Stderr = os.Stderr
+	
+	output, err := cmd.Output()
 	if err != nil {
-		return "", fmt.Errorf("gemapi request failed: %w\nOutput: %s", err, string(output))
+		return "", fmt.Errorf("gemapi request failed: %w", err)
 	}
-
-	// Clean up potential markdown code fences from the output
+	
+	// Clean up the output
 	response := string(output)
 	response = strings.TrimSpace(response)
-	if strings.HasPrefix(response, "```") && strings.HasSuffix(response, "```") {
+	
+	// Remove markdown code fences if present
+	if strings.HasPrefix(response, "```markdown") || strings.HasPrefix(response, "```md") {
 		lines := strings.Split(response, "\n")
-		response = strings.Join(lines[1:len(lines)-1], "\n")
+		if len(lines) > 2 && strings.HasSuffix(response, "```") {
+			response = strings.Join(lines[1:len(lines)-1], "\n")
+		}
+	} else if strings.HasPrefix(response, "```") && strings.HasSuffix(response, "```") {
+		lines := strings.Split(response, "\n")
+		if len(lines) > 2 {
+			response = strings.Join(lines[1:len(lines)-1], "\n")
+		}
 	}
-
+	
+	// Clean up any remaining issues
+	// The response should be clean markdown at this point
+	
 	return response, nil
+}
+
+func copyDir(src, dst string) error {
+	return filepath.Walk(src, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+		relPath, _ := filepath.Rel(src, path)
+		dstPath := filepath.Join(dst, relPath)
+
+		if info.IsDir() {
+			return os.MkdirAll(dstPath, info.Mode())
+		}
+
+		srcFile, err := os.Open(path)
+		if err != nil {
+			return err
+		}
+		defer srcFile.Close()
+
+		dstFile, err := os.Create(dstPath)
+		if err != nil {
+			return err
+		}
+		defer dstFile.Close()
+
+		_, err = io.Copy(dstFile, srcFile)
+		return err
+	})
 }

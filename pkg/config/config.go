@@ -16,17 +16,26 @@ type DocgenConfig struct {
 	Title       string          `yaml:"title"`
 	Description string          `yaml:"description"`
 	Category    string          `yaml:"category"`
-	Model       string          `yaml:"model,omitempty"` // Optional LLM model to use
+	Settings    SettingsConfig  `yaml:"settings,omitempty"`
 	Sections    []SectionConfig `yaml:"sections"`
+}
+
+// SettingsConfig holds generator-wide settings.
+type SettingsConfig struct {
+	Model                string `yaml:"model,omitempty"`
+	RegenerationMode     string `yaml:"regeneration_mode,omitempty"`     // "scratch" or "reference"
+	RulesFile            string `yaml:"rules_file,omitempty"`            // Custom rules file for cx generate
+	StructuredOutputFile string `yaml:"structured_output_file,omitempty"` // Path for JSON output
 }
 
 // SectionConfig defines a single piece of documentation to be generated.
 type SectionConfig struct {
-	Name   string `yaml:"name"`
-	Title  string `yaml:"title"`
-	Order  int    `yaml:"order"`
-	Prompt string `yaml:"prompt"` // Path to the LLM prompt file
-	Output string `yaml:"output"` // Output markdown file
+	Name    string `yaml:"name"`
+	Title   string `yaml:"title"`
+	Order   int    `yaml:"order"`
+	Prompt  string `yaml:"prompt"`   // Path to the LLM prompt file
+	Output  string `yaml:"output"`   // Output markdown file
+	JSONKey string `yaml:"json_key,omitempty"` // Key for structured JSON output
 }
 
 // Load attempts to load a docgen.config.yml file from a given directory's docs/ subdirectory.
