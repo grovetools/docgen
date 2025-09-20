@@ -1,0 +1,30 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/mattsolo1/grove-docgen/main/schema/docgen.config.schema.json
+enabled: true
+title: "My Library"
+description: "A brief description of this library."
+category: "Libraries"
+settings:
+  model: "gemini-1.5-flash-latest"
+  regeneration_mode: "scratch"
+  system_prompt: "default"  # Use built-in tone guidelines, or specify a custom prompt file
+sections:
+  - name: "introduction"
+    title: "Introduction"
+    order: 1
+    prompt: "prompts/introduction.md"
+    output: "introduction.md"
+  - name: "core-concepts"
+    title: "Core Concepts"
+    order: 2
+    prompt: "prompts/core-concepts.md"
+    output: "core-concepts.md"
+  - name: "usage-patterns"
+    title: "Usage Patterns"
+    order: 3
+    prompt: "prompts/usage-patterns.md"
+    output: "usage-patterns.md"
+  - name: "best-practices"
+    title: "Best Practices"
+    order: 4
+    prompt: "prompts/best-practices.md"
+    output: "best-practices.md"

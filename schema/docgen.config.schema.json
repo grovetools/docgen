@@ -1,0 +1,138 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://github.com/mattsolo1/grove-docgen/schema/docgen.config.schema.json",
+  "title": "Grove Docgen Configuration",
+  "description": "Configuration schema for grove-docgen documentation generation",
+  "type": "object",
+  "required": ["enabled", "title", "sections"],
+  "properties": {
+    "enabled": {
+      "type": "boolean",
+      "description": "Whether documentation generation is enabled for this package",
+      "default": true
+    },
+    "title": {
+      "type": "string",
+      "description": "The display title for this package's documentation"
+    },
+    "description": {
+      "type": "string",
+      "description": "A brief description of the package"
+    },
+    "category": {
+      "type": "string",
+      "description": "Category for organizing documentation (e.g., 'Core Libraries', 'Tools', 'Templates')",
+      "examples": ["Core Libraries", "Developer Tools", "Project Templates", "Utilities"]
+    },
+    "settings": {
+      "type": "object",
+      "description": "Global settings for documentation generation",
+      "properties": {
+        "model": {
+          "type": "string",
+          "description": "The LLM model to use for generation",
+          "default": "gemini-1.5-flash-latest",
+          "examples": [
+            "gemini-1.5-flash-latest",
+            "gemini-1.5-pro-latest",
+            "gemini-2.0-flash-exp"
+          ]
+        },
+        "regeneration_mode": {
+          "type": "string",
+          "description": "How to handle existing documentation during regeneration",
+          "enum": ["scratch", "reference"],
+          "default": "scratch",
+          "enumDescriptions": [
+            "scratch: Generate fresh documentation without considering existing content",
+            "reference: Include existing documentation as context for improvements"
+          ]
+        },
+        "rules_file": {
+          "type": "string",
+          "description": "Path to a custom .grove/rules file for documentation-specific context gathering (relative to docs/)",
+          "examples": ["docs.rules", "custom.rules"]
+        },
+        "structured_output_file": {
+          "type": "string",
+          "description": "Path to generate structured JSON output for programmatic access (e.g., MCP integration)",
+          "examples": ["pkg/docs/package-docs.json"]
+        },
+        "system_prompt": {
+          "type": "string",
+          "description": "System prompt to prepend to all section prompts. Use 'default' for built-in tone guidelines or specify a custom prompt file path",
+          "default": "default",
+          "examples": ["default", "prompts/custom-system.md", "prompts/technical-style.md"]
+        }
+      },
+      "additionalProperties": false
+    },
+    "sections": {
+      "type": "array",
+      "description": "Documentation sections to generate",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["name", "title", "order", "prompt", "output"],
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "Unique identifier for this section",
+            "pattern": "^[a-z][a-z0-9-]*$",
+            "examples": ["introduction", "core-concepts", "usage-patterns", "best-practices", "api-reference"]
+          },
+          "title": {
+            "type": "string",
+            "description": "Display title for this section"
+          },
+          "order": {
+            "type": "integer",
+            "description": "Numeric order for sorting sections",
+            "minimum": 1
+          },
+          "prompt": {
+            "type": "string",
+            "description": "Path to the prompt file for this section (relative to docs/)",
+            "pattern": "^prompts/.*\\.md$",
+            "examples": ["prompts/introduction.md", "prompts/core-concepts.md"]
+          },
+          "output": {
+            "type": "string",
+            "description": "Output filename for the generated markdown",
+            "pattern": "^[a-z][a-z0-9-]*\\.md$",
+            "examples": ["introduction.md", "core-concepts.md", "api.md"]
+          },
+          "json_key": {
+            "type": "string",
+            "description": "Optional key for structured JSON output. Used when generating JSON from markdown",
+            "examples": ["introduction", "core_concepts", "usage_patterns"]
+          }
+        },
+        "additionalProperties": false
+      }
+    }
+  },
+  "additionalProperties": false,
+  "examples": [
+    {
+      "enabled": true,
+      "title": "My Library",
+      "description": "A powerful Go library for testing",
+      "category": "Core Libraries",
+      "settings": {
+        "model": "gemini-1.5-flash-latest",
+        "regeneration_mode": "scratch",
+        "system_prompt": "default"
+      },
+      "sections": [
+        {
+          "name": "introduction",
+          "title": "Introduction",
+          "order": 1,
+          "prompt": "prompts/introduction.md",
+          "output": "introduction.md"
+        }
+      ]
+    }
+  ]
+}

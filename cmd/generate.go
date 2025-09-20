@@ -12,7 +12,7 @@ func newGenerateCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "generate",
 		Short: "Generate documentation for the current package",
-		Long:  `Reads the docs/docgen.config.yml in the current directory, builds context, calls an LLM for each section, and writes the output to docs/dist/.`,
+		Long:  `Reads the docs/docgen.config.yml in the current directory, builds context, calls an LLM for each section, and writes the output to docs/.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			logger := cli.GetLogger(cmd)
 			gen := generator.New(logger)

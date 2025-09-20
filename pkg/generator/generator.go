@@ -65,6 +65,11 @@ func (g *Generator) Generate(packageDir string) error {
 			continue
 		}
 		
+		// Ensure destination directory exists
+		if err := os.MkdirAll(filepath.Dir(destPath), 0755); err != nil {
+			return fmt.Errorf("failed to create destination directory: %w", err)
+		}
+		
 		// Copy the file
 		srcData, err := os.ReadFile(srcPath)
 		if err != nil {
@@ -114,7 +119,25 @@ func (g *Generator) generateInPlace(cloneDir, originalDir string) error {
 		return fmt.Errorf("failed to build context: %w", err)
 	}
 
-	// 3. Generate each section
+	// 3. Load system prompt if configured
+	systemPrompt := ""
+	if cfg.Settings.SystemPrompt != "" {
+		if cfg.Settings.SystemPrompt == "default" {
+			systemPrompt = DefaultSystemPrompt
+			g.logger.Debug("Using default system prompt")
+		} else {
+			// Load custom system prompt file
+			systemPromptPath := filepath.Join(cloneDir, "docs", cfg.Settings.SystemPrompt)
+			if content, err := os.ReadFile(systemPromptPath); err == nil {
+				systemPrompt = string(content)
+				g.logger.Debugf("Loaded system prompt from %s", cfg.Settings.SystemPrompt)
+			} else {
+				g.logger.Warnf("Failed to load system prompt from %s, proceeding without it", cfg.Settings.SystemPrompt)
+			}
+		}
+	}
+
+	// 4. Generate each section
 	for _, section := range cfg.Sections {
 		g.logger.Infof("Generating section: %s", section.Name)
 
@@ -124,11 +147,15 @@ func (g *Generator) generateInPlace(cloneDir, originalDir string) error {
 			return fmt.Errorf("failed to read prompt file %s: %w", promptPath, err)
 		}
 
+		// Build the final prompt with system prompt prepended if available
 		finalPrompt := string(promptContent)
+		if systemPrompt != "" {
+			finalPrompt = systemPrompt + "\n" + finalPrompt
+		}
 
 		// Handle reference mode
 		if cfg.Settings.RegenerationMode == "reference" {
-			originalOutputPath := filepath.Join(originalDir, "docs", "dist", section.Output)
+			originalOutputPath := filepath.Join(originalDir, "docs", section.Output)
 			if existingDocs, err := os.ReadFile(originalOutputPath); err == nil {
 				g.logger.Debugf("Injecting reference content from %s", originalOutputPath)
 				finalPrompt = "For your reference, here is the previous version of the documentation:\n\n<reference_docs>\n" +
@@ -142,7 +169,7 @@ func (g *Generator) generateInPlace(cloneDir, originalDir string) error {
 			continue // Continue to the next section even if one fails
 		}
 
-		// 4. Write output
+		// 5. Write output
 		outputPath := filepath.Join(cloneDir, "docs", section.Output)
 		if err := os.MkdirAll(filepath.Dir(outputPath), 0755); err != nil {
 			return fmt.Errorf("failed to create output directory: %w", err)

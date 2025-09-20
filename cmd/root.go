@@ -14,6 +14,7 @@ func init() {
 	rootCmd.AddCommand(newVersionCmd())
 	rootCmd.AddCommand(newGenerateCmd())
 	rootCmd.AddCommand(newAggregateCmd())
+	rootCmd.AddCommand(newInitCmd())
 }
 
 func Execute() error {

@@ -11,7 +11,6 @@ import (
 	"time"
 
 	"github.com/mattsolo1/grove-docgen/pkg/config"
-	"github.com/mattsolo1/grove-docgen/pkg/generator"
 	"github.com/mattsolo1/grove-docgen/pkg/manifest"
 	"github.com/mattsolo1/grove-meta/pkg/workspace"
 	"github.com/sirupsen/logrus"
@@ -40,7 +39,7 @@ func (a *Aggregator) Aggregate(outputDir string) error {
 		Packages: []manifest.PackageManifest{},
 	}
 
-	gen := generator.New(a.logger)
+	// Removed generator - aggregator should only collect, not generate
 
 	for _, wsPath := range workspaces {
 		wsName := filepath.Base(wsPath)
@@ -59,9 +58,18 @@ func (a *Aggregator) Aggregate(outputDir string) error {
 			continue
 		}
 
-		// Generate docs for this package
-		if err := gen.Generate(wsPath); err != nil {
-			a.logger.WithError(err).Errorf("Failed to generate docs for %s, skipping aggregation for this package.", wsName)
+		// Check if documentation exists for this package
+		hasAllDocs := true
+		for _, section := range cfg.Sections {
+			docPath := filepath.Join(wsPath, "docs", section.Output)
+			if _, err := os.Stat(docPath); os.IsNotExist(err) {
+				a.logger.Warnf("Documentation file %s not found for %s", section.Output, wsName)
+				hasAllDocs = false
+			}
+		}
+		
+		if !hasAllDocs {
+			a.logger.Warnf("Skipping %s: some documentation files are missing. Run 'docgen generate' in that package first.", wsName)
 			continue
 		}
 
@@ -80,11 +88,35 @@ func (a *Aggregator) Aggregate(outputDir string) error {
 		}
 
 		// Copy generated files and build section manifest
-		distSrc := filepath.Join(wsPath, "docs", "dist")
+		// Copy only the markdown output files specified in the config, not everything in docs/
 		distDest := filepath.Join(outputDir, wsName)
-		if err := copyDir(distSrc, distDest); err != nil {
-			a.logger.WithError(err).Errorf("Failed to copy generated docs for %s", wsName)
+		if err := os.MkdirAll(distDest, 0755); err != nil {
+			a.logger.WithError(err).Errorf("Failed to create output directory for %s", wsName)
 			continue
+		}
+		
+		// Copy only the output files specified in the config
+		for _, section := range cfg.Sections {
+			srcFile := filepath.Join(wsPath, "docs", section.Output)
+			destFile := filepath.Join(distDest, section.Output)
+			
+			// Check if source file exists
+			if _, err := os.Stat(srcFile); os.IsNotExist(err) {
+				a.logger.Warnf("Output file %s does not exist for %s", section.Output, wsName)
+				continue
+			}
+			
+			// Copy the file
+			srcData, err := os.ReadFile(srcFile)
+			if err != nil {
+				a.logger.WithError(err).Errorf("Failed to read %s", srcFile)
+				continue
+			}
+			
+			if err := os.WriteFile(destFile, srcData, 0644); err != nil {
+				a.logger.WithError(err).Errorf("Failed to write %s", destFile)
+				continue
+			}
 		}
 
 		sort.Slice(cfg.Sections, func(i, j int) bool {

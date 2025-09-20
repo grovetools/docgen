@@ -26,6 +26,7 @@ type SettingsConfig struct {
 	RegenerationMode     string `yaml:"regeneration_mode,omitempty"`     // "scratch" or "reference"
 	RulesFile            string `yaml:"rules_file,omitempty"`            // Custom rules file for cx generate
 	StructuredOutputFile string `yaml:"structured_output_file,omitempty"` // Path for JSON output
+	SystemPrompt         string `yaml:"system_prompt,omitempty"`         // Path to system prompt file or "default" to use built-in
 }
 
 // SectionConfig defines a single piece of documentation to be generated.
