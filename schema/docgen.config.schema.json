@@ -5,6 +5,41 @@
   "description": "Configuration schema for grove-docgen documentation generation",
   "type": "object",
   "required": ["enabled", "title", "sections"],
+  "definitions": {
+    "generationParameters": {
+      "type": "object",
+      "properties": {
+        "temperature": {
+          "type": "number",
+          "description": "Controls randomness in generation. Lower values (0.0-0.5) make output more focused and deterministic. Higher values (0.5-1.0) make output more creative and varied.",
+          "minimum": 0.0,
+          "maximum": 1.0,
+          "examples": [0.3, 0.7, 0.9]
+        },
+        "top_p": {
+          "type": "number",
+          "description": "Nucleus sampling threshold. The model considers tokens until their cumulative probability reaches this value. Lower values make output more focused.",
+          "minimum": 0.0,
+          "maximum": 1.0,
+          "default": 0.95,
+          "examples": [0.9, 0.95, 0.99]
+        },
+        "top_k": {
+          "type": "integer",
+          "description": "Limits the model to consider only the top K most likely tokens at each step. Lower values make output more predictable.",
+          "minimum": 1,
+          "examples": [20, 40, 100]
+        },
+        "max_output_tokens": {
+          "type": "integer",
+          "description": "Maximum number of tokens to generate. Use this to control documentation length. Typical values: 2048 (concise), 4096 (standard), 8192 (detailed).",
+          "minimum": 1,
+          "maximum": 32768,
+          "examples": [2048, 4096, 8192, 16384]
+        }
+      }
+    }
+  },
   "properties": {
     "enabled": {
       "type": "boolean",
@@ -27,7 +62,10 @@
     "settings": {
       "type": "object",
       "description": "Global settings for documentation generation",
-      "properties": {
+      "allOf": [
+        { "$ref": "#/definitions/generationParameters" },
+        {
+          "properties": {
         "model": {
           "type": "string",
           "description": "The LLM model to use for generation",
@@ -64,8 +102,9 @@
           "default": "default",
           "examples": ["default", "prompts/custom-system.md", "prompts/technical-style.md"]
         }
-      },
-      "additionalProperties": false
+          }
+        }
+      ]
     },
     "sections": {
       "type": "array",
@@ -106,6 +145,38 @@
             "type": "string",
             "description": "Optional key for structured JSON output. Used when generating JSON from markdown",
             "examples": ["introduction", "core_concepts", "usage_patterns"]
+          },
+          "model": {
+            "type": "string",
+            "description": "Model override for this specific section. If not specified, uses the global model setting.",
+            "examples": [
+              "gemini-1.5-flash-latest",
+              "gemini-1.5-pro-latest",
+              "gemini-2.0-flash-exp"
+            ]
+          },
+          "temperature": {
+            "type": "number",
+            "description": "Temperature override for this section. Lower for more deterministic output.",
+            "minimum": 0.0,
+            "maximum": 1.0
+          },
+          "top_p": {
+            "type": "number",
+            "description": "Top-p override for this section.",
+            "minimum": 0.0,
+            "maximum": 1.0
+          },
+          "top_k": {
+            "type": "integer",
+            "description": "Top-k override for this section.",
+            "minimum": 1
+          },
+          "max_output_tokens": {
+            "type": "integer",
+            "description": "Maximum output tokens override for this section. Use larger values for detailed sections like API references.",
+            "minimum": 1,
+            "maximum": 32768
           }
         },
         "additionalProperties": false

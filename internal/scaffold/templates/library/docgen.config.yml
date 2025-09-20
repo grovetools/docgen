@@ -7,6 +7,12 @@ settings:
   model: "gemini-1.5-flash-latest"
   regeneration_mode: "scratch"
   system_prompt: "default"  # Use built-in tone guidelines, or specify a custom prompt file
+  
+  # Generation parameters (optional, configure as needed):
+  # max_output_tokens: 4096  # Maximum length of generated content
+  # temperature: 0.7         # Controls randomness (0.0-1.0, lower = more deterministic)
+  # top_p: 0.95             # Nucleus sampling threshold
+  # top_k: 40               # Top-k sampling parameter
 sections:
   - name: "introduction"
     title: "Introduction"
@@ -28,3 +34,8 @@ sections:
     order: 4
     prompt: "prompts/best-practices.md"
     output: "best-practices.md"
+    
+    # Per-section overrides (optional):
+    # model: "gemini-1.5-pro-latest"  # Use a different model for this section
+    # max_output_tokens: 8192         # Allow longer output for detailed docs
+    # temperature: 0.3                # More deterministic for technical docs

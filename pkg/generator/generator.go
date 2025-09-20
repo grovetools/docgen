@@ -18,13 +18,27 @@ type Generator struct {
 	logger *logrus.Logger
 }
 
+// GenerateOptions configures what sections to generate
+type GenerateOptions struct {
+	Sections []string // List of section names to generate (empty means all)
+}
+
 func New(logger *logrus.Logger) *Generator {
 	return &Generator{logger: logger}
 }
 
-// Generate orchestrates an isolated documentation generation process.
+// Generate orchestrates an isolated documentation generation process for all sections.
 func (g *Generator) Generate(packageDir string) error {
-	g.logger.Infof("Starting isolated generation for package at: %s", packageDir)
+	return g.GenerateWithOptions(packageDir, GenerateOptions{})
+}
+
+// GenerateWithOptions orchestrates an isolated documentation generation with specific options.
+func (g *Generator) GenerateWithOptions(packageDir string, opts GenerateOptions) error {
+	if len(opts.Sections) > 0 {
+		g.logger.Infof("Starting isolated generation for package at: %s (sections: %v)", packageDir, opts.Sections)
+	} else {
+		g.logger.Infof("Starting isolated generation for package at: %s", packageDir)
+	}
 
 	// 1. Create temporary directory for the clone
 	tempDir, err := os.MkdirTemp("", "docgen-isolated-*")
@@ -46,7 +60,7 @@ func (g *Generator) Generate(packageDir string) error {
 	}
 
 	// 3. Run the generation logic inside the isolated environment
-	if err := g.generateInPlace(tempDir, packageDir); err != nil {
+	if err := g.generateInPlace(tempDir, packageDir, opts); err != nil {
 		return fmt.Errorf("generation process failed in isolation: %w", err)
 	}
 
@@ -56,7 +70,25 @@ func (g *Generator) Generate(packageDir string) error {
 		return fmt.Errorf("failed to load config for copying files: %w", err)
 	}
 	
-	for _, section := range cfg.Sections {
+	// Determine which sections to copy back
+	sectionsToCopy := cfg.Sections
+	if len(opts.Sections) > 0 {
+		// Only copy back the sections that were requested
+		requestedMap := make(map[string]bool)
+		for _, name := range opts.Sections {
+			requestedMap[name] = true
+		}
+		
+		var filtered []config.SectionConfig
+		for _, section := range cfg.Sections {
+			if requestedMap[section.Name] {
+				filtered = append(filtered, section)
+			}
+		}
+		sectionsToCopy = filtered
+	}
+	
+	for _, section := range sectionsToCopy {
 		srcPath := filepath.Join(tempDir, "docs", section.Output)
 		destPath := filepath.Join(packageDir, "docs", section.Output)
 		
@@ -97,7 +129,7 @@ func (g *Generator) Generate(packageDir string) error {
 }
 
 // generateInPlace runs the core doc generation logic within a given directory.
-func (g *Generator) generateInPlace(cloneDir, originalDir string) error {
+func (g *Generator) generateInPlace(cloneDir, originalDir string, opts GenerateOptions) error {
 	g.logger.Infof("Generating documentation within isolated directory: %s", cloneDir)
 
 	// 1. Load config from the cloned directory
@@ -137,8 +169,42 @@ func (g *Generator) generateInPlace(cloneDir, originalDir string) error {
 		}
 	}
 
-	// 4. Generate each section
-	for _, section := range cfg.Sections {
+	// 4. Filter sections if specified
+	sectionsToGenerate := cfg.Sections
+	if len(opts.Sections) > 0 {
+		// Create a map for quick lookup
+		requestedSections := make(map[string]bool)
+		for _, name := range opts.Sections {
+			requestedSections[name] = true
+		}
+		
+		// Filter sections and validate
+		var filteredSections []config.SectionConfig
+		var invalidSections []string
+		
+		for _, section := range cfg.Sections {
+			// Check if this section was requested
+			if requestedSections[section.Name] {
+				filteredSections = append(filteredSections, section)
+				delete(requestedSections, section.Name) // Remove from map to track found sections
+			}
+		}
+		
+		// Check for any requested sections that weren't found
+		for name := range requestedSections {
+			invalidSections = append(invalidSections, name)
+		}
+		
+		if len(invalidSections) > 0 {
+			return fmt.Errorf("sections not found in config: %v", invalidSections)
+		}
+		
+		sectionsToGenerate = filteredSections
+		g.logger.Infof("Generating %d of %d sections: %v", len(sectionsToGenerate), len(cfg.Sections), opts.Sections)
+	}
+	
+	// 5. Generate each section
+	for _, section := range sectionsToGenerate {
 		g.logger.Infof("Generating section: %s", section.Name)
 
 		promptPath := filepath.Join(cloneDir, "docs", section.Prompt)
@@ -163,13 +229,23 @@ func (g *Generator) generateInPlace(cloneDir, originalDir string) error {
 			}
 		}
 
-		output, err := g.callLLM(finalPrompt, cfg.Settings.Model, cloneDir)
+		// Determine model to use (section override or global)
+		model := cfg.Settings.Model
+		if section.Model != "" {
+			model = section.Model
+			g.logger.Debugf("Using section-specific model: %s", model)
+		}
+
+		// Merge generation configs (global + section overrides)
+		genConfig := config.MergeGenerationConfig(cfg.Settings.GenerationConfig, section.GenerationConfig)
+
+		output, err := g.callLLM(finalPrompt, model, genConfig, cloneDir)
 		if err != nil {
 			g.logger.WithError(err).Errorf("LLM call failed for section '%s'", section.Name)
 			continue // Continue to the next section even if one fails
 		}
 
-		// 5. Write output
+		// 6. Write output
 		outputPath := filepath.Join(cloneDir, "docs", section.Output)
 		if err := os.MkdirAll(filepath.Dir(outputPath), 0755); err != nil {
 			return fmt.Errorf("failed to create output directory: %w", err)
@@ -276,7 +352,7 @@ func (g *Generator) buildContext(packageDir string) error {
 	return cmd.Run()
 }
 
-func (g *Generator) callLLM(promptContent, model, workDir string) (string, error) {
+func (g *Generator) callLLM(promptContent, model string, genConfig config.GenerationConfig, workDir string) (string, error) {
 	// Use provided model or default to gemini-1.5-flash-latest
 	if model == "" {
 		model = "gemini-1.5-flash-latest"
@@ -303,6 +379,21 @@ func (g *Generator) callLLM(promptContent, model, workDir string) (string, error
 		"--file", promptFile.Name(),
 		"--yes",
 	}
+	
+	// Add generation parameters if specified
+	if genConfig.Temperature != nil {
+		args = append(args, "--temperature", fmt.Sprintf("%.2f", *genConfig.Temperature))
+	}
+	if genConfig.TopP != nil {
+		args = append(args, "--top-p", fmt.Sprintf("%.2f", *genConfig.TopP))
+	}
+	if genConfig.TopK != nil {
+		args = append(args, "--top-k", fmt.Sprintf("%d", *genConfig.TopK))
+	}
+	if genConfig.MaxOutputTokens != nil {
+		args = append(args, "--max-output-tokens", fmt.Sprintf("%d", *genConfig.MaxOutputTokens))
+	}
+	
 	cmd := exec.Command("gemapi", args...)
 	cmd.Dir = workDir // Run in the isolated clone directory
 	// Let stderr go to console for debug output, capture only stdout
