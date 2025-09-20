@@ -1,0 +1,51 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/mattsolo1/grove-docgen/main/schema/docgen.config.schema.json
+enabled: true
+title: "Grove Docgen"
+description: "AI-powered documentation generator for Grove ecosystem projects"
+category: "Developer Tools"
+settings:
+  model: "gemini-2.5-pro"
+  regeneration_mode: "scratch"
+  system_prompt: "default"
+  rules_file: "docs.rules"
+  
+  # Global generation parameters
+  max_output_tokens: 6000
+  temperature: 0.4  # Balanced for technical documentation
+
+sections:
+  - name: "introduction"
+    title: "Introduction"
+    order: 1
+    prompt: "prompts/introduction.md"
+    output: "introduction.md"
+    max_output_tokens: 4000
+    temperature: 0.3
+    
+  - name: "getting-started"
+    title: "Getting Started"
+    order: 2
+    prompt: "prompts/getting-started.md"
+    output: "getting-started.md"
+    temperature: 0.2  # Very clear instructions
+    
+  - name: "configuration"
+    title: "Configuration Guide"
+    order: 3
+    prompt: "prompts/configuration.md"
+    output: "configuration.md"
+    max_output_tokens: 8000  # Detailed configuration options
+    
+  - name: "usage-patterns"
+    title: "Usage Patterns"
+    order: 4
+    prompt: "prompts/usage-patterns.md"
+    output: "usage-patterns.md"
+    max_output_tokens: 7000
+    
+  - name: "cli-reference"
+    title: "CLI Reference"
+    order: 5
+    prompt: "prompts/cli-reference.md"
+    output: "cli-reference.md"
+    temperature: 0.1  # Very precise for command documentation

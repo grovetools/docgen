@@ -1,0 +1,32 @@
+# Grove Docgen Documentation Context Rules
+
+# Include all Go source files for implementation details
+**/*.go
+
+# Include configuration and schema files
+schema/*.json
+internal/scaffold/templates/**/*
+
+# Include build and project files for understanding the project structure
+Makefile
+go.mod
+go.sum
+
+# Include the README for high-level overview
+README.md
+
+# Include example configurations from grove-tend for real-world examples
+../grove-tend/docs/docgen.config.yml
+../grove-tend/docs/prompts/*.md
+
+# Exclude test files and vendor directory
+!**/*_test.go
+!vendor/**/*
+!bin/**/*
+!.git/**/*
+
+# Include the system prompt for reference
+pkg/generator/system_prompt.go
+
+# Include CLAUDE.md for any special instructions
+CLAUDE.md
