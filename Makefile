@@ -18,7 +18,7 @@ LDFLAGS = -ldflags="\
 -X '$(VERSION_PKG).Branch=$(GIT_BRANCH)' \
 -X '$(VERSION_PKG).BuildDate=$(BUILD_DATE)'"
 
-.PHONY: all build test clean fmt vet lint run check dev build-all help
+.PHONY: all build test clean fmt vet lint run check dev build-all generate-docs help
 
 all: build
 
@@ -74,9 +74,15 @@ build-all:
 		GOOS=$$os GOARCH=$$arch go build $(LDFLAGS) -o $(DIST_DIR)/$${output_name} .; \
 	done
 
+# Generate documentation for grove-docgen itself
+generate-docs: build
+	@echo "Generating docgen documentation using docgen..."
+	@$(BIN_DIR)/$(BINARY_NAME) generate
+
 help:
 	@echo "Available targets:"
 	@echo "  make build       - Build the binary"
 	@echo "  make test        - Run tests"
 	@echo "  make clean       - Clean build artifacts"
 	@echo "  make run ARGS=.. - Run the CLI with arguments"
+	@echo "  make generate-docs - Generate documentation using docgen"
