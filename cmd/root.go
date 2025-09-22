@@ -16,6 +16,7 @@ func init() {
 	rootCmd.AddCommand(newAggregateCmd())
 	rootCmd.AddCommand(newInitCmd())
 	rootCmd.AddCommand(newRegenJSONCmd())
+	rootCmd.AddCommand(newCustomizeCmd())
 }
 
 func Execute() error {

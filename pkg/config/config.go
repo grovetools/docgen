@@ -35,6 +35,7 @@ type SettingsConfig struct {
 	RulesFile            string `yaml:"rules_file,omitempty"`            // Custom rules file for cx generate
 	StructuredOutputFile string `yaml:"structured_output_file,omitempty"` // Path for JSON output
 	SystemPrompt         string `yaml:"system_prompt,omitempty"`         // Path to system prompt file or "default" to use built-in
+	OutputDir            string `yaml:"output_dir,omitempty"`            // Output directory for generated docs
 	GenerationConfig     `yaml:",inline"`                                  // Global generation parameters
 }
 

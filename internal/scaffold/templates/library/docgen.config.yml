@@ -6,6 +6,8 @@ category: "Libraries"
 settings:
   model: "gemini-1.5-flash-latest"
   regeneration_mode: "scratch"
+  rules_file: "docs.rules"
+  output_dir: "docs"
   system_prompt: "default"  # Use built-in tone guidelines, or specify a custom prompt file
   structured_output_file: "pkg/docs/docs.json"
   

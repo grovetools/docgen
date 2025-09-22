@@ -5,15 +5,32 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/sirupsen/logrus"
+	"gopkg.in/yaml.v3"
 )
 
 //go:embed all:templates
 var templatesFS embed.FS
 
-// Init scaffolds a new docgen configuration in the current directory.
+// InitOptions holds configuration options for the init command
+type InitOptions struct {
+	Model                string
+	RegenerationMode     string
+	RulesFile            string
+	StructuredOutputFile string
+	SystemPrompt         string
+	OutputDir            string
+}
+
+// Init scaffolds a new docgen configuration in the current directory with default options.
 func Init(projectType string, logger *logrus.Logger) error {
+	return InitWithOptions(projectType, InitOptions{}, logger)
+}
+
+// InitWithOptions scaffolds a new docgen configuration with custom options.
+func InitWithOptions(projectType string, opts InitOptions, logger *logrus.Logger) error {
 	cwd, err := os.Getwd()
 	if err != nil {
 		return fmt.Errorf("failed to get current working directory: %w", err)
@@ -34,10 +51,10 @@ func Init(projectType string, logger *logrus.Logger) error {
 		return fmt.Errorf("failed to create directories: %w", err)
 	}
 
-	// 3. Copy config file
+	// 3. Copy and customize config file
 	configSrcPath := filepath.Join("templates", projectType, "docgen.config.yml")
 	logger.Debugf("Copying %s to %s", configSrcPath, configDest)
-	if err := copyFileFromFS(configSrcPath, configDest); err != nil {
+	if err := copyAndCustomizeConfig(configSrcPath, configDest, opts); err != nil {
 		return err
 	}
 	logger.Infof("✓ Created configuration file: %s", filepath.Join("docs", "docgen.config.yml"))
@@ -78,4 +95,64 @@ func copyFileFromFS(src, dest string) error {
 		return fmt.Errorf("failed to write file %s: %w", dest, err)
 	}
 	return nil
+}
+
+// copyAndCustomizeConfig copies the config template and applies any custom options
+func copyAndCustomizeConfig(src, dest string, opts InitOptions) error {
+	content, err := templatesFS.ReadFile(src)
+	if err != nil {
+		return fmt.Errorf("failed to read embedded file %s: %w", src, err)
+	}
+
+	// If no options are provided, just write the file as-is
+	if opts == (InitOptions{}) {
+		return os.WriteFile(dest, content, 0644)
+	}
+
+	// Parse the YAML
+	var config map[string]interface{}
+	if err := yaml.Unmarshal(content, &config); err != nil {
+		return fmt.Errorf("failed to parse config template: %w", err)
+	}
+
+	// Get or create settings section
+	settings, ok := config["settings"].(map[string]interface{})
+	if !ok {
+		settings = make(map[string]interface{})
+		config["settings"] = settings
+	}
+
+	// Apply custom options
+	if opts.Model != "" {
+		settings["model"] = opts.Model
+	}
+	if opts.RegenerationMode != "" {
+		settings["regeneration_mode"] = opts.RegenerationMode
+	}
+	if opts.RulesFile != "" {
+		settings["rules_file"] = opts.RulesFile
+	}
+	if opts.StructuredOutputFile != "" {
+		settings["structured_output_file"] = opts.StructuredOutputFile
+	}
+	if opts.SystemPrompt != "" {
+		settings["system_prompt"] = opts.SystemPrompt
+	}
+	if opts.OutputDir != "" {
+		settings["output_dir"] = opts.OutputDir
+	}
+
+	// Marshal back to YAML
+	updatedContent, err := yaml.Marshal(config)
+	if err != nil {
+		return fmt.Errorf("failed to marshal updated config: %w", err)
+	}
+
+	// Add the schema comment back at the top
+	finalContent := "# yaml-language-server: $schema=https://raw.githubusercontent.com/mattsolo1/grove-docgen/main/schema/docgen.config.schema.json\n" + string(updatedContent)
+	
+	// Clean up the YAML formatting
+	finalContent = strings.ReplaceAll(finalContent, "\n    ", "\n  ")
+
+	return os.WriteFile(dest, []byte(finalContent), 0644)
 }

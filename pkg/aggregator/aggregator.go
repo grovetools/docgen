@@ -79,12 +79,13 @@ func (a *Aggregator) Aggregate(outputDir string) error {
 
 		// Add to manifest
 		pkgManifest := manifest.PackageManifest{
-			Name:     wsName,
-			Title:    cfg.Title,
-			Category: cfg.Category,
-			DocsPath: fmt.Sprintf("./%s", wsName),
-			Version:  version,
-			RepoURL:  repoURL,
+			Name:        wsName,
+			Title:       cfg.Title,
+			Description: cfg.Description,
+			Category:    cfg.Category,
+			DocsPath:    fmt.Sprintf("./%s", wsName),
+			Version:     version,
+			RepoURL:     repoURL,
 		}
 
 		// Copy generated files and build section manifest
