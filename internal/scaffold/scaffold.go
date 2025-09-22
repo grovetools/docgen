@@ -64,33 +64,8 @@ func InitWithOptions(projectType string, opts InitOptions, logger *logrus.Logger
 		rulesPath := filepath.Join(docsDir, opts.RulesFile)
 		// Only create if it doesn't exist
 		if _, err := os.Stat(rulesPath); os.IsNotExist(err) {
-			// Create a basic rules file with helpful comments
-			rulesContent := `# Documentation context rules
-# These patterns define which files should be included in the context when generating documentation
-
-# Include all source files
-**/*.go
-!**/*_test.go
-
-# Include important project files
-README.md
-go.mod
-go.sum
-
-# Include configuration files
-*.yml
-*.yaml
-*.json
-*.toml
-
-# Exclude common non-documentation files
-!vendor/**
-!.git/**
-!*.log
-!*.tmp
-!build/**
-!dist/**
-!node_modules/**
+			// Create a basic rules file
+			rulesContent := `*
 `
 			if err := os.WriteFile(rulesPath, []byte(rulesContent), 0644); err != nil {
 				return fmt.Errorf("failed to create rules file: %w", err)
