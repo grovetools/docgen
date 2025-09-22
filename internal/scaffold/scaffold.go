@@ -59,7 +59,49 @@ func InitWithOptions(projectType string, opts InitOptions, logger *logrus.Logger
 	}
 	logger.Infof("✓ Created configuration file: %s", filepath.Join("docs", "docgen.config.yml"))
 
-	// 4. Copy prompt files
+	// 4. Create rules file if specified
+	if opts.RulesFile != "" {
+		rulesPath := filepath.Join(docsDir, opts.RulesFile)
+		// Only create if it doesn't exist
+		if _, err := os.Stat(rulesPath); os.IsNotExist(err) {
+			// Create a basic rules file with helpful comments
+			rulesContent := `# Documentation context rules
+# These patterns define which files should be included in the context when generating documentation
+
+# Include all source files
+**/*.go
+!**/*_test.go
+
+# Include important project files
+README.md
+go.mod
+go.sum
+
+# Include configuration files
+*.yml
+*.yaml
+*.json
+*.toml
+
+# Exclude common non-documentation files
+!vendor/**
+!.git/**
+!*.log
+!*.tmp
+!build/**
+!dist/**
+!node_modules/**
+`
+			if err := os.WriteFile(rulesPath, []byte(rulesContent), 0644); err != nil {
+				return fmt.Errorf("failed to create rules file: %w", err)
+			}
+			logger.Infof("✓ Created rules file: %s", filepath.Join("docs", opts.RulesFile))
+		} else if err == nil {
+			logger.Infof("✓ Rules file already exists: %s", filepath.Join("docs", opts.RulesFile))
+		}
+	}
+
+	// 5. Copy prompt files
 	promptsSrcDir := filepath.Join("templates", projectType, "prompts")
 	entries, err := templatesFS.ReadDir(promptsSrcDir)
 	if err != nil {
@@ -80,8 +122,14 @@ func InitWithOptions(projectType string, opts InitOptions, logger *logrus.Logger
 
 	logger.Info("✅ Docgen initialized successfully.")
 	logger.Info("   Next steps: 1. Edit docs/docgen.config.yml to match your project.")
-	logger.Info("               2. Review and customize the prompts in docs/prompts/.")
-	logger.Info("               3. Run 'docgen generate' to create your documentation.")
+	if opts.RulesFile != "" {
+		logger.Infof("               2. Review and customize the rules in docs/%s.", opts.RulesFile)
+		logger.Info("               3. Review and customize the prompts in docs/prompts/.")
+		logger.Info("               4. Run 'docgen generate' to create your documentation.")
+	} else {
+		logger.Info("               2. Review and customize the prompts in docs/prompts/.")
+		logger.Info("               3. Run 'docgen generate' to create your documentation.")
+	}
 
 	return nil
 }
