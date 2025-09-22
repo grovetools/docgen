@@ -258,14 +258,15 @@ func (g *Generator) callLLM(promptContent, model string, genConfig config.Genera
 		return "", fmt.Errorf("failed to close temp prompt file: %w", err)
 	}
 
-	// Use gemapi to make the request (following grove-tend's original approach)
+	// Use the grove llm facade to make the request
 	args := []string{
+		"llm",
 		"request",
 		"--model", model,
 		"--file", promptFile.Name(),
 		"--yes",
 	}
-	
+
 	// Add generation parameters if specified
 	if genConfig.Temperature != nil {
 		args = append(args, "--temperature", fmt.Sprintf("%.2f", *genConfig.Temperature))
@@ -279,15 +280,15 @@ func (g *Generator) callLLM(promptContent, model string, genConfig config.Genera
 	if genConfig.MaxOutputTokens != nil {
 		args = append(args, "--max-output-tokens", fmt.Sprintf("%d", *genConfig.MaxOutputTokens))
 	}
-	
-	cmd := exec.Command("gemapi", args...)
+
+	cmd := exec.Command("grove", args...)
 	cmd.Dir = workDir // Run in the isolated clone directory
 	// Let stderr go to console for debug output, capture only stdout
 	cmd.Stderr = os.Stderr
 	
 	output, err := cmd.Output()
 	if err != nil {
-		return "", fmt.Errorf("gemapi request failed: %w", err)
+		return "", fmt.Errorf("grove llm request failed: %w", err)
 	}
 	
 	// Clean up the output

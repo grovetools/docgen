@@ -48,7 +48,11 @@ vet:
 
 lint:
 	@echo "Running linter..."
-	@golangci-lint run
+	@if command -v golangci-lint > /dev/null; then \
+		golangci-lint run; \
+	else \
+		echo "golangci-lint not installed. Install with: go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest"; \
+	fi
 
 run: build
 	@$(BIN_DIR)/$(BINARY_NAME) $(ARGS)
