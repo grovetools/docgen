@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"os/exec"
@@ -8,13 +9,14 @@ import (
 
 	"github.com/mattsolo1/grove-core/cli"
 	"github.com/mattsolo1/grove-docgen/pkg/config"
+	"github.com/mattsolo1/grove-docgen/pkg/recipes"
 	"github.com/spf13/cobra"
 	"gopkg.in/yaml.v3"
 )
 
 func newCustomizeCmd() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "customize",
+		Use:   "customize [subcommand]",
 		Short: "Create a customized documentation plan using grove-flow",
 		Long: `Creates a Grove Flow plan for interactively customizing and generating documentation.
 
@@ -35,6 +37,10 @@ Example:
   docgen customize                # Create a customization plan
   flow run                         # Run the plan after creation`,
 		RunE: func(cmd *cobra.Command, args []string) error {
+			// Check if this is the print-recipes subcommand
+			if len(args) > 0 && args[0] == "print-recipes" {
+				return printRecipes()
+			}
 			logger := cli.GetLogger(cmd)
 			
 			// Load the docgen configuration
@@ -58,6 +64,7 @@ Example:
 			args = []string{
 				"plan", "init", planName,
 				"--recipe", "docgen-customize",
+				"--recipe-cmd", "docgen recipe print",
 			}
 			
 			// Add recipe variables from the configuration
@@ -125,4 +132,25 @@ func loadDocgenConfig(dir string) (*config.DocgenConfig, error) {
 	}
 	
 	return &cfg, nil
+}
+
+// printRecipes prints all available recipes in JSON format (for grove-flow integration)
+func printRecipes() error {
+	collection := make(recipes.RecipeCollection)
+
+	// Load the docgen-customize recipe
+	recipe, err := loadDocgenCustomizeRecipe()
+	if err != nil {
+		return fmt.Errorf("failed to load docgen-customize recipe: %w", err)
+	}
+	collection["docgen-customize"] = recipe
+
+	// Output as JSON
+	jsonData, err := json.MarshalIndent(collection, "", "  ")
+	if err != nil {
+		return fmt.Errorf("failed to marshal recipes to JSON: %w", err)
+	}
+	fmt.Println(string(jsonData))
+
+	return nil
 }
