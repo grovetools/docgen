@@ -58,20 +58,6 @@ func (a *Aggregator) Aggregate(outputDir string) error {
 			continue
 		}
 
-		// Check if documentation exists for this package
-		hasAllDocs := true
-		for _, section := range cfg.Sections {
-			docPath := filepath.Join(wsPath, "docs", section.Output)
-			if _, err := os.Stat(docPath); os.IsNotExist(err) {
-				a.logger.Warnf("Documentation file %s not found for %s", section.Output, wsName)
-				hasAllDocs = false
-			}
-		}
-		
-		if !hasAllDocs {
-			a.logger.Warnf("Skipping %s: some documentation files are missing. Run 'docgen generate' in that package first.", wsName)
-			continue
-		}
 
 		// Get version and repo URL
 		version := a.getPackageVersion(wsPath)
@@ -96,27 +82,50 @@ func (a *Aggregator) Aggregate(outputDir string) error {
 			continue
 		}
 		
-		// Copy only the output files specified in the config
+		// Copy output files or use prompt files as placeholders
 		for _, section := range cfg.Sections {
 			srcFile := filepath.Join(wsPath, "docs", section.Output)
 			destFile := filepath.Join(distDest, section.Output)
 			
-			// Check if source file exists
+			// Check if the actual documentation file exists
 			if _, err := os.Stat(srcFile); os.IsNotExist(err) {
-				a.logger.Warnf("Output file %s does not exist for %s", section.Output, wsName)
-				continue
-			}
-			
-			// Copy the file
-			srcData, err := os.ReadFile(srcFile)
-			if err != nil {
-				a.logger.WithError(err).Errorf("Failed to read %s", srcFile)
-				continue
-			}
-			
-			if err := os.WriteFile(destFile, srcData, 0644); err != nil {
-				a.logger.WithError(err).Errorf("Failed to write %s", destFile)
-				continue
+				// Try to use the prompt file as a placeholder
+				promptFile := filepath.Join(wsPath, "docs", "prompts", section.Prompt)
+				if _, promptErr := os.Stat(promptFile); promptErr == nil {
+					a.logger.Infof("Using prompt file as placeholder for %s/%s", wsName, section.Output)
+					
+					// Read the prompt file
+					promptData, err := os.ReadFile(promptFile)
+					if err != nil {
+						a.logger.WithError(err).Errorf("Failed to read prompt %s", promptFile)
+						continue
+					}
+					
+					// Add a header to indicate this is a placeholder
+					placeholder := fmt.Sprintf("# %s\n\n*Note: This is a placeholder generated from the prompt file. Full documentation is pending.*\n\n---\n\n%s", section.Title, string(promptData))
+					
+					if err := os.WriteFile(destFile, []byte(placeholder), 0644); err != nil {
+						a.logger.WithError(err).Errorf("Failed to write placeholder %s", destFile)
+						continue
+					}
+				} else {
+					a.logger.Warnf("No documentation or prompt found for %s/%s", wsName, section.Output)
+					continue
+				}
+			} else {
+				// Copy the actual documentation file
+				a.logger.Infof("Copying documentation for %s/%s", wsName, section.Output)
+				
+				srcData, err := os.ReadFile(srcFile)
+				if err != nil {
+					a.logger.WithError(err).Errorf("Failed to read %s", srcFile)
+					continue
+				}
+				
+				if err := os.WriteFile(destFile, srcData, 0644); err != nil {
+					a.logger.WithError(err).Errorf("Failed to write %s", destFile)
+					continue
+				}
 			}
 		}
 
