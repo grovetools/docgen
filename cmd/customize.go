@@ -96,9 +96,11 @@ Examples:
 			}
 			
 			if cfg.Settings.RulesFile != "" {
-				args = append(args, "--recipe-vars", fmt.Sprintf("rules_file=%s", cfg.Settings.RulesFile))
+				// The rules file is relative to docs/, so prepend docs/ for the full path
+				rulesPath := filepath.Join("docs", cfg.Settings.RulesFile)
+				args = append(args, "--recipe-vars", fmt.Sprintf("rules_file=%s", rulesPath))
 			} else {
-				args = append(args, "--recipe-vars", "rules_file=docs.rules")
+				args = append(args, "--recipe-vars", "rules_file=docs/docs.rules")
 			}
 			
 			if cfg.Settings.OutputDir != "" {

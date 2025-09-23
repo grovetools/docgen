@@ -4,7 +4,8 @@ title: "Customize Documentation Plan"
 status: pending_user
 type: chat
 template: chat{{ if .Vars.model }}
-model: "{{ .Vars.model }}"{{ end }}
+model: "{{ .Vars.model }}"{{ end }}{{ if .Vars.rules_file }}
+rules_file: "{{ .Vars.rules_file }}"{{ end }}
 ---
 
 Let's create a custom documentation plan for your project.

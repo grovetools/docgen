@@ -4,7 +4,8 @@ title: "Generate Documentation"
 status: pending
 type: interactive_agent
 depends_on:
-  - 01-customize-docs.md
+  - 01-customize-docs.md{{ if .Vars.rules_file }}
+rules_file: "{{ .Vars.rules_file }}"{{ end }}
 ---
 
 Implement the documentation plan defined in `01-customize-docs.md`.
