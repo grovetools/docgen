@@ -131,6 +131,28 @@ func (a *Aggregator) Aggregate(outputDir string) error {
 			})
 		}
 
+		// Check for and copy CHANGELOG.md if it exists
+		changelogSrc := filepath.Join(wsPath, "CHANGELOG.md")
+		if _, err := os.Stat(changelogSrc); err == nil {
+			changelogDest := filepath.Join(distDest, "CHANGELOG.md")
+			
+			// Copy the CHANGELOG.md file
+			changelogData, err := os.ReadFile(changelogSrc)
+			if err != nil {
+				a.logger.WithError(err).Errorf("Failed to read CHANGELOG.md for %s", wsName)
+			} else {
+				if err := os.WriteFile(changelogDest, changelogData, 0644); err != nil {
+					a.logger.WithError(err).Errorf("Failed to write CHANGELOG.md for %s", wsName)
+				} else {
+					// Update the manifest with the changelog path
+					pkgManifest.ChangelogPath = fmt.Sprintf("./%s/CHANGELOG.md", wsName)
+					a.logger.Infof("Copied CHANGELOG.md for %s", wsName)
+				}
+			}
+		} else {
+			a.logger.Debugf("No CHANGELOG.md found for %s", wsName)
+		}
+
 		m.Packages = append(m.Packages, pkgManifest)
 	}
 

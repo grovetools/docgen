@@ -14,14 +14,15 @@ type Manifest struct {
 
 // PackageManifest represents documentation manifest for a single package
 type PackageManifest struct {
-	Name        string            `json:"name"`
-	Title       string            `json:"title"`
-	Description string            `json:"description"`
-	Category    string            `json:"category"`
-	DocsPath    string            `json:"docs_path"`
-	Version     string            `json:"version"`
-	RepoURL     string            `json:"repo_url,omitempty"`
-	Sections    []SectionManifest `json:"sections"`
+	Name          string            `json:"name"`
+	Title         string            `json:"title"`
+	Description   string            `json:"description"`
+	Category      string            `json:"category"`
+	DocsPath      string            `json:"docs_path"`
+	Version       string            `json:"version"`
+	RepoURL       string            `json:"repo_url,omitempty"`
+	ChangelogPath string            `json:"changelog_path,omitempty"`
+	Sections      []SectionManifest `json:"sections"`
 }
 
 // SectionManifest represents a single documentation section
