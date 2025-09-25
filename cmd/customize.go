@@ -3,9 +3,11 @@ package cmd
 import (
 	"encoding/json"
 	"fmt"
+	"io/fs"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 
 	"github.com/mattsolo1/grove-core/cli"
 	"github.com/mattsolo1/grove-docgen/pkg/config"
@@ -15,6 +17,8 @@ import (
 )
 
 func newCustomizeCmd() *cobra.Command {
+	var recipeType string
+	
 	cmd := &cobra.Command{
 		Use:   "customize [subcommand]",
 		Short: "Create a customized documentation plan using grove-flow",
@@ -22,20 +26,24 @@ func newCustomizeCmd() *cobra.Command {
 
 This command:
 1. Reads your docgen.config.yml configuration
-2. Creates a Grove Flow plan with the docgen-customize recipe
+2. Creates a Grove Flow plan with the selected recipe type
 3. Passes your configuration to the flow plan via recipe variables
 
-The resulting flow plan will have two jobs:
-- A chat job to help you customize your documentation structure
-- An interactive agent job to generate the documentation
+Available recipe types:
+- agent: Uses AI agents for interactive customization (default)
+- prompts: Uses structured prompts for customization
+
+The resulting flow plan will have jobs specific to the chosen recipe type.
 
 Prerequisites:
 - Run 'docgen init' first to create docgen.config.yml
 - Ensure 'flow' command is available in your PATH
 
-Example:
-  docgen customize                # Create a customization plan
-  flow run                         # Run the plan after creation`,
+Examples:
+  docgen customize                        # Create plan with default agent recipe
+  docgen customize --recipe-type agent    # Create plan with agent recipe
+  docgen customize --recipe-type prompts  # Create plan with prompts recipe
+  flow run                                # Run the plan after creation`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			// Check if this is the print-recipes subcommand
 			if len(args) > 0 && args[0] == "print-recipes" {
@@ -56,14 +64,27 @@ Example:
 				return err
 			}
 			
+			// Validate recipe type
+			var recipeName string
+			switch recipeType {
+			case "agent":
+				recipeName = "docgen-customize-agent"
+			case "prompts":
+				recipeName = "docgen-customize-prompts"
+			default:
+				logger.Errorf("Invalid recipe type: %s", recipeType)
+				logger.Info("Valid options are: agent, prompts")
+				return fmt.Errorf("invalid recipe type: %s", recipeType)
+			}
+			
 			// Determine the plan name
 			projectName := filepath.Base(cwd)
-			planName := fmt.Sprintf("docgen-customize-%s", projectName)
+			planName := fmt.Sprintf("%s-%s", recipeName, projectName)
 			
 			// Build the flow command arguments
 			args = []string{
 				"plan", "init", planName,
-				"--recipe", "docgen-customize",
+				"--recipe", recipeName,
 				"--recipe-cmd", "docgen recipe print",
 			}
 			
@@ -100,16 +121,23 @@ Example:
 			}
 			
 			logger.Info("")
-			logger.Infof("✅ Successfully created customization plan in 'plans/%s'", planName)
+			logger.Infof("✅ Successfully created customization plan in 'plans/%s' using %s recipe", planName, recipeType)
 			logger.Info("")
 			logger.Info("Next steps:")
 			logger.Info("  1. Run 'flow run' to start the customization process")
-			logger.Info("  2. The first job will help you define your documentation structure")
-			logger.Info("  3. The second job will generate the documentation based on your plan")
+			if recipeType == "agent" {
+				logger.Info("  2. The agent will interactively help you customize and generate documentation")
+			} else {
+				logger.Info("  2. Follow the prompts to customize your documentation structure")
+				logger.Info("  3. The generation job will create documentation based on your customizations")
+			}
 			
 			return nil
 		},
 	}
+	
+	// Add flags
+	cmd.Flags().StringVarP(&recipeType, "recipe-type", "r", "agent", "Recipe type to use: 'agent' or 'prompts'")
 	
 	return cmd
 }
@@ -138,12 +166,19 @@ func loadDocgenConfig(dir string) (*config.DocgenConfig, error) {
 func printRecipes() error {
 	collection := make(recipes.RecipeCollection)
 
-	// Load the docgen-customize recipe
-	recipe, err := loadDocgenCustomizeRecipe()
+	// Load the docgen-customize-agent recipe
+	agentRecipe, err := loadDocgenRecipe("docgen-customize-agent", recipes.DocgenCustomizeAgentFS)
 	if err != nil {
-		return fmt.Errorf("failed to load docgen-customize recipe: %w", err)
+		return fmt.Errorf("failed to load docgen-customize-agent recipe: %w", err)
 	}
-	collection["docgen-customize"] = recipe
+	collection["docgen-customize-agent"] = agentRecipe
+
+	// Load the docgen-customize-prompts recipe
+	promptsRecipe, err := loadDocgenRecipe("docgen-customize-prompts", recipes.DocgenCustomizePromptsFS)
+	if err != nil {
+		return fmt.Errorf("failed to load docgen-customize-prompts recipe: %w", err)
+	}
+	collection["docgen-customize-prompts"] = promptsRecipe
 
 	// Output as JSON
 	jsonData, err := json.MarshalIndent(collection, "", "  ")
@@ -153,4 +188,58 @@ func printRecipes() error {
 	fmt.Println(string(jsonData))
 
 	return nil
+}
+
+func loadDocgenRecipe(recipeName string, embedFS fs.FS) (recipes.RecipeDefinition, error) {
+	description := getRecipeDescription(recipeName)
+	recipe := recipes.RecipeDefinition{
+		Description: description,
+		Jobs:        make(map[string]string),
+	}
+
+	// Walk through the embedded filesystem to find all .md files
+	err := fs.WalkDir(embedFS, fmt.Sprintf("builtin/%s", recipeName), func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+
+		// Skip directories and non-markdown files
+		if d.IsDir() || !strings.HasSuffix(path, ".md") {
+			return nil
+		}
+
+		// Read the file content
+		content, err := fs.ReadFile(embedFS, path)
+		if err != nil {
+			return fmt.Errorf("failed to read %s: %w", path, err)
+		}
+
+		// Get the filename (e.g., "01-customize-docs.md")
+		filename := filepath.Base(path)
+		recipe.Jobs[filename] = string(content)
+
+		return nil
+	})
+
+	if err != nil {
+		return recipe, fmt.Errorf("failed to walk embedded files: %w", err)
+	}
+
+	// Ensure we have the expected files
+	if len(recipe.Jobs) == 0 {
+		return recipe, fmt.Errorf("no recipe files found")
+	}
+
+	return recipe, nil
+}
+
+func getRecipeDescription(recipeName string) string {
+	switch recipeName {
+	case "docgen-customize-agent":
+		return "Generate comprehensive project documentation using AI agents for interactive customization"
+	case "docgen-customize-prompts":
+		return "Generate comprehensive project documentation using structured prompts for customization"
+	default:
+		return "Generate comprehensive project documentation with customizable structure"
+	}
 }
