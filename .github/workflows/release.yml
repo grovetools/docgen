@@ -50,6 +50,14 @@ jobs:
         VERSION=$${GITHUB_REF_NAME#v}
         make build-all VERSION=$VERSION
     
+    - name: Extract Release Notes from Changelog
+      id: extract_release_notes
+      run: |
+        # This awk script finds the section for the current tag and prints it,
+        # stopping at the next version tag or end of file.
+        awk '/^## ${{ github.ref_name }}/{flag=1; next} /^## v/{flag=0} flag' CHANGELOG.md > release-notes.md
+        echo "Extracted notes:" ; cat release-notes.md
+    
     - name: Create release
       uses: softprops/action-gh-release@v2
       with:
@@ -58,4 +66,4 @@ jobs:
           dist/docgen-darwin-arm64
           dist/docgen-linux-amd64
           dist/docgen-linux-arm64
-        generate_release_notes: true
+        body_path: release-notes.md
