@@ -3,7 +3,6 @@ package cmd
 import (
 	"os"
 
-	"github.com/mattsolo1/grove-core/logging"
 	"github.com/mattsolo1/grove-docgen/pkg/generator"
 	"github.com/spf13/cobra"
 )
@@ -21,8 +20,7 @@ Examples:
   docgen generate --section introduction   # Generate only introduction
   docgen generate -s intro -s core         # Generate multiple specific sections`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			logger := logging.NewLogger("grove-docgen")
-			gen := generator.New(logger.Logger)
+			gen := generator.New(getLogger())
 
 			cwd, err := os.Getwd()
 			if err != nil {

@@ -3,7 +3,6 @@ package cmd
 import (
 	"fmt"
 
-	"github.com/mattsolo1/grove-core/logging"
 	"github.com/mattsolo1/grove-docgen/internal/scaffold"
 	"github.com/spf13/cobra"
 )
@@ -27,12 +26,11 @@ Examples:
   docgen init --rules-file custom.rules          # Use a custom rules file
   docgen init --output-dir generated-docs        # Output to a different directory`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			logger := logging.NewLogger("grove-docgen")
 			// For now, only 'library' is a valid type. This can be expanded later.
 			if projectType != "library" {
 				return fmt.Errorf("invalid project type '%s'. Currently, only 'library' is supported", projectType)
 			}
-			return scaffold.InitWithOptions(projectType, opts, logger.Logger)
+			return scaffold.InitWithOptions(projectType, opts, getLogger())
 		},
 	}
 

@@ -9,7 +9,6 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/mattsolo1/grove-core/logging"
 	"github.com/mattsolo1/grove-docgen/pkg/config"
 	"github.com/mattsolo1/grove-docgen/pkg/recipes"
 	"github.com/spf13/cobra"
@@ -49,7 +48,6 @@ Examples:
 			if len(args) > 0 && args[0] == "print-recipes" {
 				return printRecipes()
 			}
-			logger := logging.NewLogger("grove-docgen")
 			
 			// Load the docgen configuration
 			cwd, err := os.Getwd()
@@ -59,8 +57,9 @@ Examples:
 			
 			cfg, err := loadDocgenConfig(cwd)
 			if err != nil {
-				logger.Error("Failed to load docgen.config.yml")
-				logger.Info("Please run 'docgen init' first to create the configuration file")
+				log.Error("Failed to load docgen.config.yml")
+				prettyLog.ErrorPretty("Failed to load docgen.config.yml", err)
+				prettyLog.InfoPretty("Please run 'docgen init' first to create the configuration file")
 				return err
 			}
 			
@@ -72,8 +71,9 @@ Examples:
 			case "prompts":
 				recipeName = "docgen-customize-prompts"
 			default:
-				logger.Errorf("Invalid recipe type: %s", recipeType)
-				logger.Info("Valid options are: agent, prompts")
+				log.Errorf("Invalid recipe type: %s", recipeType)
+				prettyLog.ErrorPretty(fmt.Sprintf("Invalid recipe type: %s", recipeType), nil)
+				prettyLog.InfoPretty("Valid options are: agent, prompts")
 				return fmt.Errorf("invalid recipe type: %s", recipeType)
 			}
 			
@@ -107,8 +107,9 @@ Examples:
 				args = append(args, "--recipe-vars", "output_dir=docs")
 			}
 			
-			logger.Infof("Creating customization plan: %s", planName)
-			logger.Debugf("Running: flow %v", args)
+			log.Infof("Creating customization plan: %s", planName)
+			prettyLog.InfoPretty(fmt.Sprintf("Creating customization plan: %s", planName))
+			log.Debugf("Running: flow %v", args)
 			
 			// Execute the flow command
 			flowCmd := exec.Command("flow", args...)
@@ -120,16 +121,16 @@ Examples:
 				return fmt.Errorf("failed to create flow plan: %w", err)
 			}
 			
-			logger.Info("")
-			logger.Infof("✅ Successfully created customization plan in 'plans/%s' using %s recipe", planName, recipeType)
-			logger.Info("")
-			logger.Info("Next steps:")
-			logger.Info("  1. Run 'flow run' to start the customization process")
+			prettyLog.Blank()
+			prettyLog.Success(fmt.Sprintf("Successfully created customization plan in 'plans/%s' using %s recipe", planName, recipeType))
+			prettyLog.Blank()
+			prettyLog.InfoPretty("Next steps:")
+			prettyLog.InfoPretty("  1. Run 'flow run' to start the customization process")
 			if recipeType == "agent" {
-				logger.Info("  2. The agent will interactively help you customize and generate documentation")
+				prettyLog.InfoPretty("  2. The agent will interactively help you customize and generate documentation")
 			} else {
-				logger.Info("  2. Follow the prompts to customize your documentation structure")
-				logger.Info("  3. The generation job will create documentation based on your customizations")
+				prettyLog.InfoPretty("  2. Follow the prompts to customize your documentation structure")
+				prettyLog.InfoPretty("  3. The generation job will create documentation based on your customizations")
 			}
 			
 			return nil
