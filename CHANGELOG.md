@@ -1,4 +1,4 @@
-## v0.1.0 (2025-09-26)
+## v1.0.0 (2025-09-26)
 
 This release introduces `grove-docgen`, an LLM-powered, workspace-aware documentation generator for the Grove ecosystem. The tool includes new commands to streamline the documentation process, such as `docgen init` for scaffolding new projects with configurable templates (d929db2, 68664db), `docgen regen-json` for updating structured output without calling LLMs (502b05a), and `docgen generate` for creating documentation for a single package (1c648e6).
 
