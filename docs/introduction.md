@@ -1,36 +1,24 @@
 # Introduction to grove-docgen
 
-`grove-docgen` is an LLM-powered, workspace-aware documentation generator designed specifically for the Grove ecosystem. It automates the creation of high-quality, narrative documentation by analyzing source code and applying expert technical writing principles. Its purpose is to solve the persistent problem of keeping documentation comprehensive, accurate, and synchronized with an evolving codebase.
+`grove-docgen` is an LLM-powered, workspace-aware documentation generator designed for the Grove ecosystem. It automates the creation of documentation by analyzing source code and applying technical writing principles. Its purpose is to solve the persistent challenge of keeping documentation comprehensive, accurate, and synchronized with an evolving codebase.
 
-## The Challenge of Traditional Documentation
+## The "Documentation as Code" Philosophy
 
-In software development, documentation is crucial but often neglected. Manual documentation writing is time-consuming and frequently falls out of sync with the code it describes. Traditional tools can help format documentation or generate basic API references, but they fall short in creating the conceptual, "how-to," and "why" content that developers need most. This leads to a documentation gap where the code is the only source of truth, increasing the barrier to entry for new contributors and slowing down development.
+Traditional documentation workflows often fail because documentation is treated as an artifact separate from the code it describes. This separation leads to staleness and neglect. `grove-docgen` addresses this by adopting a "Documentation from Code" philosophy, where the entire generation process is defined by configuration and prompt files that live alongside the source code.
 
-## The grove-docgen Approach
+## How It Works: An AI-Assisted Workflow
 
-`grove-docgen` addresses this challenge by treating documentation as code. The entire generation process is defined by configuration files and prompts that live alongside the source code in a project's repository. This approach has several key benefits:
+The `docgen generate` command orchestrates a multi-step process to create documentation for a package directly within its directory:
 
--   **Version Controlled:** Documentation definitions are versioned with the source code, ensuring that changes to the code can be accompanied by corresponding updates to the documentation prompts.
--   **Repeatable:** The generation process is deterministic and can be run on any machine or in a CI/CD pipeline, guaranteeing consistent output.
--   **Integrated:** Documentation becomes an integral part of the development workflow, not an afterthought.
+1.  **Configuration Loading:** It reads a `docs/docgen.config.yml` file to understand the project's metadata and the specific sections of documentation to generate (e.g., Introduction, Core Concepts, Best Practices).
+2.  **Context Gathering:** It leverages Grove's context-aware tool, `cx`, to scan the codebase. Based on rules defined in a `docs.rules` file, `cx` gathers the most relevant code snippets, file structures, and other artifacts to create a rich, code-aware context.
+3.  **LLM-Powered Generation:** For each section, `docgen` combines a user-written prompt with the context gathered by `cx` and sends it to an LLM, such as Google's Gemini. The LLM analyzes the code context and the prompt's instructions to write the documentation section in Markdown.
+4.  **Output and Aggregation:** The generated Markdown files are written to the project's `docs` directory. The companion `docgen aggregate` command can then discover all `docgen`-enabled packages in a workspace, collect their documentation, and assemble it into a unified output with a `manifest.json` for consumption by a frontend site.
 
-The core philosophy is to leverage the analytical power of Large Language Models (LLMs) to bridge the gap between code and human understanding, producing documentation that is both technically accurate and easy to read.
+## Key Differentiators
 
-### Isolated Generation Environments
+`grove-docgen` stands apart from traditional documentation tools and generic AI assistants in several ways:
 
-A unique and critical aspect of `grove-docgen` is its use of isolated environments. Before generating documentation, it performs a local `git clone` of the current repository into a temporary directory. All subsequent steps—context gathering, LLM prompting, and file generation—happen within this clean, isolated clone.
-
-This approach ensures that the documentation is generated based purely on the committed state of the repository. It prevents local, uncommitted changes, untracked files, or environment-specific configurations from influencing the output, leading to highly reproducible and accurate results.
-
-## How It Works
-
-The `docgen generate` command orchestrates a multi-step process to create documentation for a package:
-
-1.  **Configuration Loading:** It reads a `docs/docgen.config.yml` file to understand the project's title, description, and the specific sections of documentation to generate (e.g., Introduction, Core Concepts, Best Practices).
-2.  **Isolation:** It creates a temporary, clean clone of the repository.
-3.  **Context Gathering:** Within the clone, it leverages Grove's context-aware tool, `cx`, to scan the codebase. Based on rules defined in a `docs.rules` file, `cx` gathers the most relevant code snippets, file structures, and other artifacts.
-4.  **LLM Prompting:** For each section defined in the configuration, `docgen` combines a user-written prompt with the context gathered by `cx` and sends it to an LLM (e.g., Google's Gemini).
-5.  **Content Generation:** The LLM analyzes the code and the prompt's instructions to write the documentation section in Markdown format.
-6.  **Output:** The generated Markdown files are written back to the original project's `docs` directory.
-
-The `docgen aggregate` command complements this by discovering all `docgen`-enabled packages within a Grove workspace, collecting their generated documentation, and assembling it into a unified output directory with a `manifest.json` file, ready to be consumed by a frontend documentation site.
+-   **Deep Code Awareness:** By integrating with `cx`, `docgen` provides the LLM with a highly relevant and curated context from the source code. This results in documentation that is technically precise and grounded in the actual implementation, rather than generic explanations.
+-   **Structured and Repeatable:** The entire process is driven by version-controlled configuration, eliminating manual steps and ensuring that documentation is consistent and reproducible.
+-   **Iterative Refinement:** `grove-docgen` supports a "reference" mode for regeneration. Instead of starting from scratch, it can provide the existing documentation to the LLM as context, instructing it to refine, update, or expand upon the current version. This makes maintaining documentation as the code evolves a manageable process.

@@ -23,12 +23,12 @@ my-package/
 
 These are the primary fields that describe your package's documentation.
 
-| Field         | Type    | Description                                                              |
-|---------------|---------|--------------------------------------------------------------------------|
-| `enabled`     | boolean | A master switch to enable or disable documentation generation for this package. |
-| `title`       | string  | The display title for the documentation set (e.g., "Grove Tend").        |
-| `description` | string  | A brief, one-sentence summary of the package's purpose.                  |
-| `category`    | string  | A category used to group packages in the final documentation site (e.g., "Core Libraries", "Tools"). |
+| Field         | Type    | Required | Description                                                              |
+|---------------|---------|----------|--------------------------------------------------------------------------|
+| `enabled`     | boolean | Yes      | A master switch to enable or disable documentation generation for this package. |
+| `title`       | string  | Yes      | The display title for the documentation set (e.g., "Grove Tend").        |
+| `description` | string  | No       | A brief, one-sentence summary of the package's purpose.                  |
+| `category`    | string  | No       | A category used to group packages in the final documentation site (e.g., "Core Libraries", "Tools"). |
 
 ### Example
 
@@ -51,8 +51,9 @@ The `settings` block contains global configuration that applies to all documenta
 | `model`                  | string | The LLM model to use for generation (e.g., `gemini-1.5-flash-latest`, `gemini-1.5-pro-latest`).                                            |
 | `regeneration_mode`      | string | Determines how to handle existing documentation. `scratch` (default) generates from scratch. `reference` provides the old content as context for the new generation. |
 | `rules_file`             | string | Path to a custom rules file (relative to `docs/`) for `cx` to gather specific code context.                                               |
-| `structured_output_file` | string | If specified, `docgen` will parse the generated markdown and create a structured JSON file at this path (e.g., `pkg/docs/tend-docs.json`). |
+| `structured_output_file` | string | If specified, `docgen` will parse the generated markdown and create a structured JSON file at this path (e.g., `pkg/docs/docs.json`). |
 | `system_prompt`          | string | Use `default` for built-in style guidelines, or provide a path to a custom system prompt file (relative to `docs/`).                      |
+| `output_dir`             | string | The directory where generated markdown files will be saved, relative to the package root. Defaults to `docs`.                              |
 
 ### Example
 
@@ -61,8 +62,9 @@ settings:
   model: "gemini-1.5-pro-latest"
   regeneration_mode: "scratch"
   rules_file: "docs.rules"
-  structured_output_file: "pkg/docs/tend-docs.json"
+  structured_output_file: "pkg/docs/docs.json"
   system_prompt: "default"
+  output_dir: "docs"
 ```
 
 ---
@@ -92,16 +94,16 @@ settings:
 
 ## Defining Sections (`sections`)
 
-The `sections` block is an array where you define each piece of documentation to be generated. The order of sections in the final output is determined by the `order` field.
+The `sections` block is a required array where you define each piece of documentation to be generated. The order of sections in the final output is determined by the `order` field.
 
-| Field      | Type    | Description                                                                                             |
-|------------|---------|---------------------------------------------------------------------------------------------------------|
-| `name`     | string  | A unique, machine-readable identifier for the section (e.g., `core-concepts`).                          |
-| `title`    | string  | The human-readable title for the section (e.g., "Core Concepts").                                       |
-| `order`    | integer | A number that determines the sorting order of the sections.                                             |
-| `prompt`   | string  | The path to the prompt markdown file for this section, relative to the `docs/` directory.               |
-| `output`   | string  | The filename for the generated markdown output.                                                         |
-| `json_key` | string  | (Optional) The key to use for this section's content when generating structured JSON output. Defaults to `name`. |
+| Field      | Type    | Required | Description                                                                                             |
+|------------|---------|----------|---------------------------------------------------------------------------------------------------------|
+| `name`     | string  | Yes      | A unique, machine-readable identifier for the section (e.g., `core-concepts`).                          |
+| `title`    | string  | Yes      | The human-readable title for the section (e.g., "Core Concepts").                                       |
+| `order`    | integer | Yes      | A number that determines the sorting order of the sections.                                             |
+| `prompt`   | string  | Yes      | The path to the prompt markdown file for this section, relative to the `docs/` directory.               |
+| `output`   | string  | Yes      | The filename for the generated markdown output.                                                         |
+| `json_key` | string  | No       | The key to use for this section's content when generating structured JSON output. Defaults to `name`. |
 
 ### Example Section Definition
 
@@ -150,7 +152,7 @@ sections:
     prompt: "prompts/best-practices.prompt.md"
     output: "best-practices.md"
     # Overrides for this section
-    model: "gemini-1.5-pro-latest" # Use a more powerful model
+    model: "gemini-1.5-pro-latest" # Use a more capable model
     temperature: 0.3               # Make the output more focused
     max_output_tokens: 8192        # Allow for more detailed content
 ```
@@ -199,7 +201,7 @@ settings:
   model: "gemini-1.5-pro-latest"
   regeneration_mode: "scratch"
   rules_file: "docs.rules"
-  structured_output_file: "pkg/docs/tend-docs.json"
+  structured_output_file: "pkg/docs/docs.json"
   system_prompt: "default"
   temperature: 0.5
 sections:
@@ -247,19 +249,19 @@ The `rules_file` setting points to a file that tells the `cx` context engine whi
 **Example `docs/docs.rules`:**
 
 ```
-# Include all public Go files
+# Include all public Go files from the pkg directory
 pkg/**/*.go
 
 # Exclude test files
 !pkg/**/*_test.go
 
 # Include the main README
-../README.md
+README.md
 ```
 
 ### Editor Integration with JSON Schema
 
-To get autocompletion and validation for `docgen.config.yml` in editors like VS Code, add a schema comment to the top of your file.
+To get autocompletion and validation for `docgen.config.yml` in editors like VS Code, add a schema comment to the top of your file. This links the YAML file to its schema definition, enabling rich editor support.
 
 ```yaml
 # yaml-language-server: $schema=https://raw.githubusercontent.com/mattsolo1/grove-docgen/main/schema/docgen.config.schema.json

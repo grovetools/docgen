@@ -6,9 +6,9 @@ This guide provides a step-by-step walkthrough to get you from installation to g
 
 Before you begin, ensure your development environment meets the following requirements:
 
--   **Grove Ecosystem**: You must have the Grove development environment set up and your project must be part of a Grove workspace.
--   **Required Tools**: `grove-docgen` relies on other Grove tools. Make sure `gemapi` (for LLM interaction) and `cx` (for context building) are installed and available in your system's `PATH`.
--   **Git Repository**: Your project must be a Git repository. `grove-docgen` creates an isolated local clone to build context without affecting your working directory.
+-   **Grove Ecosystem**: You must have the Grove development environment set up, and your project must be part of a Grove workspace.
+-   **Required Tools**: `grove-docgen` relies on other Grove tools. Make sure `grove` and `cx` (for context building) are installed and available in your system's `PATH`.
+-   **Git Repository**: Your project should be a Git repository. This is used for gathering metadata like versioning and repository URLs during the aggregation step.
 
 ## 2. Installation
 
@@ -27,14 +27,14 @@ grove install docgen
 If you need to build from a specific branch or want to contribute to development, you can clone the repository and use the `Makefile`:
 
 ```bash
-# Clone the repository (adjust URL if needed)
+# Clone the repository
 git clone git@github.com:mattsolo1/grove-docgen.git
 cd grove-docgen
 
 # Build the binary
 make build
 ```
-This will create the `docgen` binary in the `bin/` directory. You can then move this binary to a location in your `PATH`.
+This will create the `docgen` binary in the `bin/` directory. The Grove toolchain will automatically discover and use this binary when you run `docgen` commands from within the project directory.
 
 ### Verification
 
@@ -46,18 +46,19 @@ docgen version
 
 You should see output detailing the version, commit, and build date.
 
-## 3. Quick Start: Scaffolding and First Generation
+## 3. Quick Start: Your First Generation
 
 The easiest way to start is by using the `docgen init` command within your package's directory. This command sets up the necessary configuration and prompt templates.
 
 ### Step 1: Initialize Docgen
 
-Navigate to the root of the package you want to document and run `init`. Currently, `library` is the supported project type.
+Navigate to the root of the package you want to document and run `init`.
 
 ```bash
 cd /path/to/your/go-library
-docgen init --type library
+docgen init
 ```
+This command scaffolds a default configuration suitable for a Go library.
 
 ### Step 2: Understand the Generated Structure
 
@@ -67,6 +68,7 @@ The `init` command creates a `docs/` directory with the following structure:
 your-library/
 ├── docs/
 │   ├── docgen.config.yml      # Main configuration file
+│   ├── docs.rules             # Rules for context gathering
 │   └── prompts/
 │       ├── introduction.md    # Prompt for the introduction section
 │       ├── core-concepts.md   # Prompt for core concepts
@@ -76,6 +78,7 @@ your-library/
 ```
 
 -   **`docgen.config.yml`**: This is where you define what documentation to generate. You'll edit the `title`, `description`, and `category` to match your project.
+-   **`docs.rules`**: This file tells `cx` which source files to include when building the context for the LLM.
 -   **`prompts/`**: This directory contains Markdown files that serve as instructions for the LLM for each section of your documentation.
 
 ### Step 3: Run Your First Generation
@@ -86,16 +89,16 @@ With the default configuration in place, you can now generate the documentation.
 docgen generate
 ```
 
-This command performs several actions:
-1.  Creates a temporary, isolated clone of your repository.
-2.  Runs `cx generate` within the clone to build a comprehensive context from your source code.
-3.  Calls the LLM via `gemapi` for each section defined in `docgen.config.yml`, using the corresponding prompt.
-4.  Writes the generated Markdown content to the output files specified in your configuration.
-5.  Copies the final Markdown files back into your project's `docs/` directory.
+This command performs the following actions directly in your project directory:
+1.  Reads your `docs/docgen.config.yml`.
+2.  Runs `cx generate` to build a comprehensive context from your source code, based on the patterns in `docs/docs.rules`.
+3.  For each section in your config, it reads the corresponding prompt from `docs/prompts/`.
+4.  Calls the configured LLM via `grove llm request`, sending the source code context and the prompt.
+5.  Writes the generated Markdown content to the output files specified in your configuration (e.g., `docs/introduction.md`).
 
 ### Step 4: Review the Output
 
-Once the command completes, you will find the generated documentation inside the `docs/` directory:
+Once the command completes, you will find the generated documentation inside the `docs/` directory, alongside your configuration files:
 
 ```
 your-library/
@@ -111,15 +114,13 @@ your-library/
 ```
 Open these files to review the initial, AI-generated documentation for your project.
 
-## 4. Your First Custom Documentation
+## 4. Customizing Your Documentation
 
 The initial output provides a solid baseline. Now, let's customize it to better reflect your project.
 
 ### Modifying Prompts
 
-The quality of your documentation depends heavily on the quality of your prompts. Edit the files in `docs/prompts/` to give the LLM better instructions.
-
-For example, to improve the "Core Concepts" section, you might edit `docs/prompts/core-concepts.md` to list the specific concepts you want documented:
+The quality of your documentation depends heavily on the quality of your prompts. Edit the files in `docs/prompts/` to give the LLM better instructions. For example, to improve the "Core Concepts" section, you might edit `docs/prompts/core-concepts.md` to list the specific concepts you want documented:
 
 ```markdown
 # Core Concepts Section Prompt
@@ -135,7 +136,7 @@ You are an expert Go developer...
 
 ### Adjusting Configuration
 
-Open `docs/docgen.config.yml` and tailor it to your project.
+Open `docs/docgen.config.yml` and tailor it to your project. You can change the title, description, use a more capable model, or tune generation parameters.
 
 ```yaml
 # docs/docgen.config.yml
@@ -163,4 +164,32 @@ docgen generate --section core-concepts
 docgen generate -s introduction -s core-concepts
 ```
 
-By following these steps, you can quickly integrate `grove-docgen` into your workflow, moving from a fully automated baseline to finely tuned, high-quality documentation.
+## 5. Next Steps
+
+### Aggregating Workspace Documentation
+
+Once you have generated documentation for one or more packages, you can aggregate it into a single, unified documentation site. From the root of your workspace, run:
+
+```bash
+docgen aggregate --output-dir ./dist
+```
+This command finds all packages with enabled `docgen` configs, copies their generated documentation into the output directory, and creates a `manifest.json` file that a frontend can use to build a navigation structure.
+
+### Advanced Customization with Grove Flow
+
+For a more interactive and guided documentation process, `grove-docgen` integrates with `grove-flow`. The `customize` command creates a multi-step plan to help you refine prompts and generate documentation.
+
+```bash
+# From your package directory
+docgen customize
+
+# Then, run the plan
+flow run
+```
+This will launch an interactive process to help you build out a high-quality documentation suite.
+
+## 6. Troubleshooting
+
+-   **`docgen.config.yml not found`**: Make sure you are in the root directory of your package and that you have run `docgen init` to create the configuration file.
+-   **`command not found: cx` or `command not found: grove`**: Ensure the Grove ecosystem is set up correctly and that the Grove binaries are in your system's `PATH`.
+-   **Poor Quality Output**: The LLM's output is only as good as its input. To improve results, refine your prompts in `docs/prompts/` to be more specific. You can also switch to a more advanced model (like `gemini-1.5-pro-latest`) in your `docgen.config.yml`.

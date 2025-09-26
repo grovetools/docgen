@@ -1,6 +1,6 @@
 # Usage Patterns
 
-This document outlines common workflows and patterns for using `grove-docgen` to create, manage, and maintain high-quality documentation for your projects.
+This document outlines common workflows and patterns for using `grove-docgen` to create, manage, and maintain high-quality, code-aware documentation for your projects.
 
 ## 1. Initial Documentation Creation
 
@@ -11,6 +11,7 @@ This pattern covers the first-time setup for a new project. The goal is to quick
 1.  **Initialize Configuration:** In your package's root directory, run the `init` command. This creates a `docs/` directory with a configuration file and a set of starter prompts.
 
     ```bash
+    # Initialize with sensible defaults for a Go library
     docgen init --type library
     ```
     This will create:
@@ -29,7 +30,7 @@ This pattern covers the first-time setup for a new project. The goal is to quick
     description: "A Go library for creating powerful, scenario-based end-to-end testing frameworks." # Changed
     category: "Core Libraries" # Changed
     settings:
-      model: "gemini-1.5-pro-latest" # Consider a more capable model for initial generation
+      model: "gemini-2.5-pro" 
     # ... sections remain the same initially
     ```
 
@@ -43,7 +44,28 @@ This pattern covers the first-time setup for a new project. The goal is to quick
 
 After this process, you will have a full set of generated documentation in your `docs/` directory, ready for review and version control.
 
-## 2. Iterative Documentation Development
+## 2. Interactive Customization with Grove Flow
+
+For a more guided and powerful setup experience, `docgen` integrates with `grove-flow` to provide interactive documentation plan customization.
+
+**Workflow:**
+
+1.  **Create a Customization Plan:** Instead of `docgen init`, run `docgen customize`. This command reads your configuration and creates an interactive `grove-flow` plan.
+
+    ```bash
+    # Create a plan using an AI agent for interactive customization
+    docgen customize --recipe-type agent
+    ```
+    This creates a new plan in the `plans/` directory, for example: `plans/docgen-customize-agent-my-project/`.
+
+2.  **Run the Interactive Flow:** Execute the plan using the `flow` command.
+
+    ```bash
+    flow run
+    ```
+    The AI agent will then guide you through a series of steps to define your documentation structure, refine prompts, and generate the final output, all within an interactive chat-like environment. This is the recommended approach for complex projects or for users who want fine-grained control without manually editing multiple files.
+
+## 3. Iterative Documentation Development
 
 Once the initial docs are created, you'll want to refine them. This workflow focuses on making targeted changes efficiently.
 
@@ -88,19 +110,17 @@ Once the initial docs are created, you'll want to refine them. This workflow foc
     ```
     Now, when you run `docgen generate`, the existing markdown file will be included in the prompt as a reference for the LLM to edit and improve.
 
-## 3. Maintaining Documentation
+## 4. Maintaining Documentation
 
 To keep documentation synchronized with code, integrate `docgen` into your development and CI/CD process.
 
 **Workflow:**
 
-1.  **Version Control:** Always commit the generated markdown files (`*.md`) and the `docgen` configuration (`docs/docgen.config.yml`, `docs/prompts/`) to your Git repository. This ensures documentation is versioned alongside the code it describes.
+1.  **Version Control:** Always commit the generated markdown files (`*.md`) and the `docgen` configuration (`docs/docgen.config.yml`, `docs/prompts/`, `docs.rules`) to your Git repository. This ensures documentation is versioned alongside the code it describes.
 
-2.  **CI/CD Integration:** Add a step to your CI pipeline (e.g., GitHub Actions) that runs `docgen generate`. You can configure this to run on every commit to a feature branch or before merging to `main`. This ensures documentation is always up-to-date.
+2.  **Regular Updates:** After significant code changes, run `docgen generate` to capture the updates. Using `regeneration_mode: "reference"` can help maintain consistency and style across updates.
 
-3.  **Regular Updates:** After significant code changes, run `docgen generate` to capture the updates. Using `regeneration_mode: "reference"` can help maintain consistency and style across updates.
-
-## 4. Multi-Package Documentation
+## 5. Multi-Package Documentation (Workspace Aggregation)
 
 For a Grove workspace with multiple packages, `docgen aggregate` collects all documentation into a single, structured output suitable for a documentation website.
 
@@ -119,9 +139,35 @@ For a Grove workspace with multiple packages, `docgen aggregate` collects all do
     - A `manifest.json` file listing all packages, categories, and sections.
     - A subdirectory for each package containing its generated markdown files.
 
-    This structure is designed to be consumed directly by frontends like the Grove developer portal, which uses the manifest to build its navigation.
+    This structure is designed to be consumed directly by static site generators.
 
-## 5. Advanced Workflows
+## 6. Prompt Engineering
+
+The quality of your documentation is directly tied to the quality of your prompts.
+
+-   **Control Context with a Rules File:** The most powerful feature for prompt engineering is the `rules_file`. This file tells the underlying `cx` tool exactly which source code files to include as context for the LLM. This is critical for generating accurate, code-aware documentation.
+
+    ```yaml
+    # docs/docgen.config.yml
+    settings:
+      # ...
+      # Point to a file that defines context for documentation generation
+      rules_file: "docs.rules"
+    ```
+
+    *Example `docs/docs.rules` file:*
+    ```
+    # Include all Go files in the pkg directory
+    pkg/**/*.go
+    
+    # Also include the main README file
+    README.md
+    
+    # Exclude test files from the context
+    !**/*_test.go
+    ```
+
+## 7. Advanced Workflows
 
 `docgen` provides several advanced features for fine-grained control and integration.
 
@@ -141,7 +187,7 @@ For a Grove workspace with multiple packages, `docgen aggregate` collects all do
     settings:
       # ...
       # This will parse the generated markdown and create a JSON file
-      structured_output_file: "pkg/docs/tend-docs.json"
+      structured_output_file: "pkg/docs/docs.json"
     
     sections:
       - name: "introduction"
@@ -151,53 +197,4 @@ For a Grove workspace with multiple packages, `docgen aggregate` collects all do
         # ...
         json_key: "core_concepts"
     ```
-
-## 6. Prompt Engineering
-
-The quality of your documentation is directly tied to the quality of your prompts.
-
--   **Be Specific:** Your prompts should be explicit about what you want. Instead of "Document the concepts," use a list: "Document the following core concepts: Scenario, Step, Context, and Harness."
-
--   **Define the Output Structure:** Clearly state the desired format. The default prompts are a good example of this.
-
-    *Example from `grove-tend/docs/prompts/core-concepts.prompt.md`:*
-    ```markdown
-    # Core Concepts Section Prompt
-    
-    ## Core Concepts to Document
-    1. **Scenario**: The fundamental unit of a test.
-    2. **Step**: A single action within a Scenario.
-    # ...
-    
-    ## Output Format
-    Please provide the output as a well-structured Markdown document with the following format:
-    
-    # Core Concepts
-    
-    For each concept, create a section with:
-    - A clear heading (## Concept Name)
-    - A description paragraph explaining the concept
-    - A code example in a fenced code block
-    ```
-
--   **Control Context with a Rules File:** The most powerful feature for prompt engineering is the `rules_file`. This file tells the underlying `cx` tool exactly which source code files to include as context for the LLM. This is critical for generating accurate, code-aware documentation.
-
-    ```yaml
-    # docs/docgen.config.yml
-    settings:
-      # ...
-      # Point to a file that defines context for documentation generation
-      rules_file: "docs.rules"
-    ```
-
-    *Example `docs.rules` file:*
-    ```
-    # Include all Go files in the pkg directory
-    pkg/**/*.go
-    
-    # Also include the main README file
-    README.md
-    
-    # Exclude test files from the context
-    !**/*_test.go
-    ```
+    After running `docgen generate`, a JSON file will be created. You can also regenerate it from existing markdown without calling the LLM by using `docgen regen-json`.
