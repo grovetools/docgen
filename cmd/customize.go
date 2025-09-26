@@ -9,7 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/mattsolo1/grove-core/cli"
+	"github.com/mattsolo1/grove-core/logging"
 	"github.com/mattsolo1/grove-docgen/pkg/config"
 	"github.com/mattsolo1/grove-docgen/pkg/recipes"
 	"github.com/spf13/cobra"
@@ -49,7 +49,7 @@ Examples:
 			if len(args) > 0 && args[0] == "print-recipes" {
 				return printRecipes()
 			}
-			logger := cli.GetLogger(cmd)
+			logger := logging.NewLogger("grove-docgen")
 			
 			// Load the docgen configuration
 			cwd, err := os.Getwd()

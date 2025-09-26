@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/mattsolo1/grove-core/cli"
+	"github.com/mattsolo1/grove-core/logging"
 	"github.com/mattsolo1/grove-docgen/pkg/config"
 	"github.com/mattsolo1/grove-docgen/pkg/parser"
 	"github.com/spf13/cobra"
@@ -18,7 +18,7 @@ func newRegenJSONCmd() *cobra.Command {
 
 This command does not call any LLMs or modify the markdown files. It's a quick way to update the JSON output if the parsing logic changes or if you have manually edited the markdown files.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			logger := cli.GetLogger(cmd)
+			logger := logging.NewLogger("grove-docgen")
 			
 			cwd, err := os.Getwd()
 			if err != nil {
@@ -38,7 +38,7 @@ This command does not call any LLMs or modify the markdown files. It's a quick w
 				return nil
 			}
 			
-			p := parser.New(logger)
+			p := parser.New(logger.Logger)
 			return p.GenerateJSON(cwd, cfg)
 		},
 	}
