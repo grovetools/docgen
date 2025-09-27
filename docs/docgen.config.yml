@@ -18,7 +18,7 @@ sections:
     title: "Introduction"
     order: 1
     prompt: "prompts/introduction.md"
-    output: "introduction.md"
+    output: "01-introduction.md"
     max_output_tokens: 4000
     temperature: 0.3
     
@@ -26,26 +26,26 @@ sections:
     title: "Getting Started"
     order: 2
     prompt: "prompts/getting-started.md"
-    output: "getting-started.md"
+    output: "02-getting-started.md"
     temperature: 0.2  # Very clear instructions
     
   - name: "configuration"
     title: "Configuration Guide"
     order: 3
     prompt: "prompts/configuration.md"
-    output: "configuration.md"
+    output: "03-configuration.md"
     max_output_tokens: 8000  # Detailed configuration options
     
   - name: "usage-patterns"
     title: "Usage Patterns"
     order: 4
     prompt: "prompts/usage-patterns.md"
-    output: "usage-patterns.md"
+    output: "04-usage-patterns.md"
     max_output_tokens: 7000
     
   - name: "cli-reference"
     title: "CLI Reference"
     order: 5
     prompt: "prompts/cli-reference.md"
-    output: "cli-reference.md"
+    output: "05-cli-reference.md"
     temperature: 0.1  # Very precise for command documentation
