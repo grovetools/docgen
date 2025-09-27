@@ -17,35 +17,85 @@ sections:
   - name: "overview"
     title: "Overview"
     order: 1
-    prompt: "prompts/introduction.md"
+    prompt: "prompts/01-overview.md"
     output: "01-overview.md"
     max_output_tokens: 4000
     temperature: 0.3
     
-  - name: "getting-started"
-    title: "Getting Started"
+  - name: "examples"
+    title: "Examples"
     order: 2
-    prompt: "prompts/getting-started.md"
-    output: "02-getting-started.md"
-    temperature: 0.2  # Very clear instructions
+    prompt: "prompts/02-examples.md"
+    output: "02-examples.md"
+    temperature: 0.2
     
-  - name: "configuration"
-    title: "Configuration Guide"
+  - name: "configuration-schema"
+    title: "Configuration Schema"
     order: 3
-    prompt: "prompts/configuration.md"
-    output: "03-configuration.md"
-    max_output_tokens: 8000  # Detailed configuration options
+    prompt: "prompts/03-configuration-schema.md"
+    output: "03-configuration-schema.md"
+    max_output_tokens: 6000
+    temperature: 0.1
     
-  - name: "usage-patterns"
-    title: "Usage Patterns"
+  - name: "prompt-engineering"
+    title: "Prompt Engineering"
     order: 4
-    prompt: "prompts/usage-patterns.md"
-    output: "04-usage-patterns.md"
+    prompt: "prompts/04-prompt-engineering.md"
+    output: "04-prompt-engineering.md"
     max_output_tokens: 7000
+    temperature: 0.3
     
-  - name: "cli-reference"
-    title: "CLI Reference"
+  - name: "model-selection"
+    title: "Model Selection"
     order: 5
-    prompt: "prompts/cli-reference.md"
-    output: "05-cli-reference.md"
-    temperature: 0.1  # Very precise for command documentation
+    prompt: "prompts/05-model-selection.md"
+    output: "05-model-selection.md"
+    max_output_tokens: 5000
+    temperature: 0.2
+    
+  - name: "section-management"
+    title: "Section Management"
+    order: 6
+    prompt: "prompts/06-section-management.md"
+    output: "06-section-management.md"
+    max_output_tokens: 5000
+    temperature: 0.2
+    
+  - name: "output-formats"
+    title: "Output Formats"
+    order: 7
+    prompt: "prompts/07-output-formats.md"
+    output: "07-output-formats.md"
+    max_output_tokens: 5000
+    temperature: 0.2
+    
+  - name: "system-prompts"
+    title: "System Prompts"
+    order: 8
+    prompt: "prompts/08-system-prompts.md"
+    output: "08-system-prompts.md"
+    max_output_tokens: 5000
+    temperature: 0.2
+    
+  - name: "rules-context"
+    title: "Rules & Context"
+    order: 9
+    prompt: "prompts/09-rules-context.md"
+    output: "09-rules-context.md"
+    max_output_tokens: 5000
+    temperature: 0.2
+    
+  - name: "recipes-templates"
+    title: "Recipes & Templates"
+    order: 10
+    prompt: "prompts/10-recipes-templates.md"
+    output: "10-recipes-templates.md"
+    max_output_tokens: 5000
+    temperature: 0.2
+    
+  - name: "command-reference"
+    title: "Command Reference"
+    order: 11
+    prompt: "prompts/11-command-reference.md"
+    output: "11-command-reference.md"
+    temperature: 0.1
