@@ -12,39 +12,31 @@ Before you begin, ensure your development environment meets the following requir
 
 ## 2. Installation
 
-You can install `grove-docgen` using the standard Grove installer or by building it from the source code.
+The recommended way to install `grove-docgen` is by using the `grove` meta-CLI, which manages all tools within the Grove ecosystem.
 
-### Using grove install (Recommended)
+### Prerequisites
 
-This is the simplest method. Run the following command from anywhere within your Grove workspace:
+You must have the `grove` meta-CLI installed. If you don't, please follow the **[Grove Ecosystem Installation Guide](https://github.com/mattsolo1/grove-meta/blob/main/docs/02-installation.md)** first. This guide also covers essential setup like configuring your `PATH`.
+
+### Install Command
+
+Once the `grove` CLI is set up, you can install `grove-docgen` with a single command:
 
 ```bash
 grove install docgen
 ```
 
-### Building from Source
+### Verifying the Installation
 
-If you need to build from a specific branch or want to contribute to development, you can clone the repository and use the `Makefile`:
-
-```bash
-# Clone the repository
-git clone git@github.com:mattsolo1/grove-docgen.git
-cd grove-docgen
-
-# Build the binary
-make build
-```
-This will create the `docgen` binary in the `bin/` directory. The Grove toolchain will automatically discover and use this binary when you run `docgen` commands from within the project directory.
-
-### Verification
-
-After installation, verify that `docgen` is working correctly by checking its version:
+To confirm that the tool was installed correctly, you can run its `version` command:
 
 ```bash
 docgen version
 ```
 
-You should see output detailing the version, commit, and build date.
+### Building from Source
+
+For contributors, the recommended way to work with the source code is to clone the entire Grove ecosystem monorepo. Please refer to the **[Building from Source](https://github.com/mattsolo1/grove-meta/blob/main/docs/02-installation.md#3-building-from-source-for-contributors)** section in the main installation guide for details.
 
 ## 3. Quick Start: Your First Generation
 
