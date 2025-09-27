@@ -1,10 +1,6 @@
-# Introduction to grove-docgen
+# Overview
 
-`grove-docgen` is an LLM-powered, workspace-aware documentation generator designed for the Grove ecosystem. It automates the creation of documentation by analyzing source code and applying technical writing principles. Its purpose is to solve the persistent challenge of keeping documentation comprehensive, accurate, and synchronized with an evolving codebase.
-
-## The "Documentation as Code" Philosophy
-
-Traditional documentation workflows often fail because documentation is treated as an artifact separate from the code it describes. This separation leads to staleness and neglect. `grove-docgen` addresses this by adopting a "Documentation from Code" philosophy, where the entire generation process is defined by configuration and prompt files that live alongside the source code.
+`grove-docgen` is an LLM-powered, workspace-aware documentation generator. It automates the creation of technical documentation by analyzing source code and applying technical writing principles, all driven by version-controlled configuration files and prompts that live alongside the code. This tool is part of the broader, experimental Grove ecosystem, which aims to make AI-driven development a more reliable and predictable process. 
 
 ## How It Works: An AI-Assisted Workflow
 

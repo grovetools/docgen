@@ -14,11 +14,11 @@ settings:
   temperature: 0.4  # Balanced for technical documentation
 
 sections:
-  - name: "introduction"
-    title: "Introduction"
+  - name: "overview"
+    title: "Overview"
     order: 1
     prompt: "prompts/introduction.md"
-    output: "01-introduction.md"
+    output: "01-overview.md"
     max_output_tokens: 4000
     temperature: 0.3
     
