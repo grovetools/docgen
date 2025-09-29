@@ -1,11 +1,11 @@
-# Configuration Schema Documentation
+# Configuration Documentation
 
-You are documenting the complete configuration schema for grove-docgen, focusing on the YAML structure and validation.
+You are documenting configuration for grove-docgen, covering essential setup and customization.
 
 ## Task
-Create a comprehensive reference for the docgen.config.yml schema, explaining each field and its purpose.
+Create a practical configuration guide that helps users set up and customize grove-docgen for their projects.
 
-## Schema Areas to Document
+## Topics to Document
 
 1. **Root-Level Fields**
    - `enabled` (boolean): Enable/disable documentation generation

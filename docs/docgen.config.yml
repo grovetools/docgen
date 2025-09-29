@@ -5,7 +5,7 @@ description: "AI-powered documentation generator for Grove ecosystem projects"
 category: "Developer Tools"
 settings:
   model: "gemini-2.5-pro"
-  regeneration_mode: "reference"
+  regeneration_mode: "scratch"
   system_prompt: "default"
   rules_file: "docs.rules"
   
@@ -29,73 +29,17 @@ sections:
     output: "02-examples.md"
     temperature: 0.2
     
-  - name: "configuration-schema"
-    title: "Configuration Schema"
+  - name: "configuration"
+    title: "Configuration"
     order: 3
-    prompt: "prompts/03-configuration-schema.md"
-    output: "03-configuration-schema.md"
+    prompt: "prompts/03-configuration.md"
+    output: "03-configuration.md"
     max_output_tokens: 6000
     temperature: 0.1
     
-  - name: "prompt-engineering"
-    title: "Prompt Engineering"
-    order: 4
-    prompt: "prompts/04-prompt-engineering.md"
-    output: "04-prompt-engineering.md"
-    max_output_tokens: 7000
-    temperature: 0.3
-    
-  - name: "model-selection"
-    title: "Model Selection"
-    order: 5
-    prompt: "prompts/05-model-selection.md"
-    output: "05-model-selection.md"
-    max_output_tokens: 5000
-    temperature: 0.2
-    
-  - name: "section-management"
-    title: "Section Management"
-    order: 6
-    prompt: "prompts/06-section-management.md"
-    output: "06-section-management.md"
-    max_output_tokens: 5000
-    temperature: 0.2
-    
-  - name: "output-formats"
-    title: "Output Formats"
-    order: 7
-    prompt: "prompts/07-output-formats.md"
-    output: "07-output-formats.md"
-    max_output_tokens: 5000
-    temperature: 0.2
-    
-  - name: "system-prompts"
-    title: "System Prompts"
-    order: 8
-    prompt: "prompts/08-system-prompts.md"
-    output: "08-system-prompts.md"
-    max_output_tokens: 5000
-    temperature: 0.2
-    
-  - name: "rules-context"
-    title: "Rules & Context"
-    order: 9
-    prompt: "prompts/09-rules-context.md"
-    output: "09-rules-context.md"
-    max_output_tokens: 5000
-    temperature: 0.2
-    
-  - name: "recipes-templates"
-    title: "Recipes & Templates"
-    order: 10
-    prompt: "prompts/10-recipes-templates.md"
-    output: "10-recipes-templates.md"
-    max_output_tokens: 5000
-    temperature: 0.2
-    
   - name: "command-reference"
     title: "Command Reference"
-    order: 11
-    prompt: "prompts/11-command-reference.md"
-    output: "11-command-reference.md"
+    order: 4
+    prompt: "prompts/04-command-reference.md"
+    output: "04-command-reference.md"
     temperature: 0.1
