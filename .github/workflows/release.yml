@@ -42,8 +42,7 @@ jobs:
         go mod download
         go mod tidy
     
-    - name: Run tests
-      run: make test
+    # Tests already passed in CI before tagging
     
     - name: Build binaries
       run: |
