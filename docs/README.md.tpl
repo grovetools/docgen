@@ -8,6 +8,12 @@
 <!-- Documentation content will be injected here -->
 <!-- DOCGEN:OVERVIEW:END -->
 
+## Documentation
+
+<!-- DOCGEN:TOC:START -->
+<!-- Automatically generated table of contents -->
+<!-- DOCGEN:TOC:END -->
+
 ## Quick Start
 
 ```bash

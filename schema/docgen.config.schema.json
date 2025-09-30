@@ -210,6 +210,12 @@
           "default": 0,
           "minimum": 0,
           "examples": [0, 1, 2, 3]
+        },
+        "generate_toc": {
+          "type": "boolean",
+          "description": "Whether to automatically generate a table of contents from documentation sections. Requires <!-- DOCGEN:TOC:START --> and <!-- DOCGEN:TOC:END --> markers in the template.",
+          "default": false,
+          "examples": [false, true]
         }
       },
       "required": ["template", "output", "source_section"]

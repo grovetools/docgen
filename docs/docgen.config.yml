@@ -8,6 +8,7 @@ readme:
   output: README.md
   source_section: overview
   strip_lines: 2  # Strip "# Overview" heading and blank line
+  generate_toc: true  # Generate table of contents
 settings:
   system_prompt: "default"
   rules_file: "docs.rules"

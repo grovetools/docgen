@@ -36,7 +36,7 @@ func (s *Synchronizer) Sync(packageDir string) error {
 		s.logger.Info("Skipping README sync: 'readme' section not configured in docgen.config.yml")
 		return nil
 	}
-	s.logger.Infof("Starting README sync for %s...", cfg.Title)
+	s.logger.Debugf("Starting README sync for %s...", cfg.Title)
 
 	// Validate configuration
 	if cfg.Readme.Template == "" || cfg.Readme.Output == "" || cfg.Readme.SourceSection == "" {
@@ -120,13 +120,21 @@ func (s *Synchronizer) Sync(packageDir string) error {
 		composedContent = prefix + "\n\n" + strings.TrimSpace(rewrittenSource) + "\n\n" + suffix
 	}
 
+	// 3. Generate and inject TOC if enabled
+	if cfg.Readme.GenerateTOC {
+		err := s.injectTOC(&composedContent, cfg, packageDir)
+		if err != nil {
+			s.logger.Warnf("Failed to generate TOC: %v", err)
+		}
+	}
+
 	// Write the final README.md
 	outputPath := filepath.Join(packageDir, cfg.Readme.Output)
 	if err := os.WriteFile(outputPath, []byte(composedContent), 0644); err != nil {
 		return fmt.Errorf("failed to write output README file %s: %w", outputPath, err)
 	}
 
-	s.logger.Infof("✓ Successfully synchronized %s", outputPath)
+	s.logger.Debugf("Successfully synchronized %s", outputPath)
 	return nil
 }
 
@@ -189,4 +197,105 @@ func rewriteImagePathsForReadme(content string) string {
 	})
 
 	return content
+}
+
+// injectTOC generates and injects a table of contents into the README content.
+func (s *Synchronizer) injectTOC(content *string, cfg *config.DocgenConfig, packageDir string) error {
+	// Look for TOC markers
+	startMarker := "<!-- DOCGEN:TOC:START -->"
+	endMarker := "<!-- DOCGEN:TOC:END -->"
+
+	startIdx := strings.Index(*content, startMarker)
+	endIdx := strings.Index(*content, endMarker)
+
+	if startIdx == -1 || endIdx == -1 {
+		s.logger.Debugf("No TOC markers found in template. Skipping TOC generation.")
+		return nil
+	}
+
+	// Generate TOC content
+	tocContent, err := s.generateTOC(cfg, packageDir)
+	if err != nil {
+		return fmt.Errorf("failed to generate TOC: %w", err)
+	}
+
+	// Replace content between markers
+	prefix := (*content)[:startIdx+len(startMarker)]
+	suffix := (*content)[endIdx:]
+	*content = prefix + "\n\n" + tocContent + "\n\n" + suffix
+
+	return nil
+}
+
+// generateTOC creates a markdown table of contents from the documentation sections.
+func (s *Synchronizer) generateTOC(cfg *config.DocgenConfig, packageDir string) (string, error) {
+	outputDir := cfg.Settings.OutputDir
+	if outputDir == "" {
+		outputDir = "docs"
+	}
+
+	var tocLines []string
+	tocLines = append(tocLines, "See the [documentation]("+outputDir+"/) for detailed usage instructions:")
+
+	// Sort sections by order
+	sections := cfg.Sections
+	for i := 0; i < len(sections); i++ {
+		for j := i + 1; j < len(sections); j++ {
+			if sections[j].Order < sections[i].Order {
+				sections[i], sections[j] = sections[j], sections[i]
+			}
+		}
+	}
+
+	// Generate TOC entries for each section
+	for _, section := range sections {
+		// Check if the documentation file exists
+		docPath := filepath.Join(packageDir, outputDir, section.Output)
+		if _, err := os.Stat(docPath); os.IsNotExist(err) {
+			s.logger.Debugf("Skipping TOC entry for %s: file not found at %s", section.Name, docPath)
+			continue
+		}
+
+		// Create clean TOC entry without description to avoid broken images
+		tocEntry := fmt.Sprintf("- [%s](%s/%s)", section.Title, outputDir, section.Output)
+		tocLines = append(tocLines, tocEntry)
+	}
+
+	return strings.Join(tocLines, "\n"), nil
+}
+
+// extractDescription attempts to extract a brief description from a documentation file.
+func (s *Synchronizer) extractDescription(filePath, title string) string {
+	content, err := os.ReadFile(filePath)
+	if err != nil {
+		return ""
+	}
+
+	lines := strings.Split(string(content), "\n")
+	
+	// Skip the title line and empty lines, look for the first substantial line
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+		
+		// Skip title lines (starting with #)
+		if strings.HasPrefix(line, "#") {
+			continue
+		}
+		
+		// Skip empty lines
+		if line == "" {
+			continue
+		}
+		
+		// Take the first substantial line as description
+		if len(line) > 20 { // Only use if it's substantial
+			// Truncate if too long
+			if len(line) > 80 {
+				line = line[:77] + "..."
+			}
+			return line
+		}
+	}
+	
+	return ""
 }

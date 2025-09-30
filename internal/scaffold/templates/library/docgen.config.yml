@@ -8,6 +8,7 @@ readme:
   output: README.md
   source_section: introduction
   strip_lines: 2  # Strip heading and blank line from source
+  generate_toc: true  # Automatically generate table of contents
 settings:
   model: "gemini-1.5-flash-latest"
   regeneration_mode: "scratch"

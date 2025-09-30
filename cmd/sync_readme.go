@@ -47,7 +47,16 @@ It provides a single source of truth for your project's overview, keeping the RE
 			}
 
 			sync := readme.New(getLogger())
-			return sync.Sync(cwd)
+			
+			// Use pretty logging for user-friendly output
+			prettyLog.InfoPretty("Synchronizing README from template and documentation...")
+			err = sync.Sync(cwd)
+			if err != nil {
+				return err
+			}
+			
+			prettyLog.Success("✓ README.md synchronized successfully")
+			return nil
 		},
 	}
 
