@@ -4,6 +4,7 @@ title: "My Library"
 description: "A brief description of this library."
 category: "Libraries"
 readme:
+  generate_toc: true
   template: docs/README.md.tpl
   output: README.md
   source_section: introduction

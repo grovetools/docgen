@@ -22,3 +22,5 @@ grove install {{ .PackageName }}
 ## Usage
 
 *TODO: Add a brief usage example here.*
+<!-- DOCGEN:TOC:START -->
+<!-- DOCGEN:TOC:END -->

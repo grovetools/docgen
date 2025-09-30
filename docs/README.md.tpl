@@ -1,29 +1,15 @@
-# {{ .Title }}
-
-{{ .Description }}
-
-## Overview
-
 <!-- DOCGEN:OVERVIEW:START -->
-<!-- Documentation content will be injected here -->
+<!-- This content will be automatically replaced by generated documentation -->
 <!-- DOCGEN:OVERVIEW:END -->
 
 ## Documentation
 
+See the [documentation](docs/) for detailed usage instructions:
+- [Overview](docs/01-overview.md) - Introduction and core concepts
+- [Examples](docs/02-examples.md) - Common usage patterns
+- [Configuration](docs/03-configuration.md) - Configuration reference
+- [Command Reference](docs/04-command-reference.md) - Complete CLI reference
+
+
 <!-- DOCGEN:TOC:START -->
-<!-- Automatically generated table of contents -->
 <!-- DOCGEN:TOC:END -->
-
-## Quick Start
-
-```bash
-# Initialize docgen in your project
-docgen init library
-
-# Generate documentation
-make generate-docs
-```
-
-## License
-
-MIT
