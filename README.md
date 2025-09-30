@@ -4,40 +4,48 @@ AI-powered documentation generator for Grove ecosystem projects
 
 ## Overview
 
-<!-- DOCGEN:INTRODUCTION:START -->
+<!-- DOCGEN:OVERVIEW:START -->
 
-# Introduction to grove-docgen
+`grove-docgen` is an LLM-powered, workspace-aware documentation generator. It automates the creation of technical documentation by combining a project's source code with user-defined prompts, providing a structured and repeatable workflow for keeping documentation in sync with development.
 
-`grove-docgen` is an LLM-powered, workspace-aware documentation generator designed for the Grove ecosystem. It automates the creation of documentation by analyzing source code and applying technical writing principles. Its purpose is to solve the persistent challenge of keeping documentation comprehensive, accurate, and synchronized with an evolving codebase.
+By defining documentation as a series of configurable sections, `grove-docgen` allows you to maintain full control over the structure, tone, and content of the output.
 
-## The "Documentation as Code" Philosophy
+<!-- placeholder for animated gif -->
 
-Traditional documentation workflows often fail because documentation is treated as an artifact separate from the code it describes. This separation leads to staleness and neglect. `grove-docgen` addresses this by adopting a "Documentation from Code" philosophy, where the entire generation process is defined by configuration and prompt files that live alongside the source code.
+### Key Features
 
-## How It Works: An AI-Assisted Workflow
+*   **Section-Based Architecture**: Define your documentation structure in a `docgen.config.yml` file. Each section is configured with its own prompt, output file, and LLM settings, allowing for granular control over the final output.
+*   **Customizable Prompts**: Use the `docgen init` command to scaffold a set of starter prompts. You have full ownership of these prompts, enabling you to engineer them to match your project's specific needs and desired documentation style.
+*   **Context-Aware Generation**: Leverages `grove-context` to automatically build a comprehensive understanding of your codebase based on a `.grove/rules` file. This ensures the LLM has the necessary context to generate accurate and relevant documentation.
+*   **Interactive Customization**: The `docgen customize` command integrates with `grove-flow` to create a multi-step plan for generating your documentation. This interactive workflow uses AI agents to help you refine the structure and content before final generation.
+*   **Multi-Model Support**: Configure different LLM models for different tasks. You can set a global default model or override it for specific sections, allowing you to use the best tool for each job (e.g., a powerful model for overviews and a faster model for simple sections).
+*   **Workspace Aggregation**: The `docgen aggregate` command discovers all `docgen`-enabled packages within a Grove workspace, generates their documentation, and aggregates the results into a single, unified output directory with a `manifest.json`.
 
-The `docgen generate` command orchestrates a multi-step process to create documentation for a package directly within its directory:
+## Ecosystem Integration
 
-1.  **Configuration Loading:** It reads a `docs/docgen.config.yml` file to understand the project's metadata and the specific sections of documentation to generate (e.g., Introduction, Core Concepts, Best Practices).
-2.  **Context Gathering:** It leverages Grove's context-aware tool, `cx`, to scan the codebase. Based on rules defined in a `docs.rules` file, `cx` gathers the most relevant code snippets, file structures, and other artifacts to create a rich, code-aware context.
-3.  **LLM-Powered Generation:** For each section, `docgen` combines a user-written prompt with the context gathered by `cx` and sends it to an LLM, such as Google's Gemini. The LLM analyzes the code context and the prompt's instructions to write the documentation section in Markdown.
-4.  **Output and Aggregation:** The generated Markdown files are written to the project's `docs` directory. The companion `docgen aggregate` command can then discover all `docgen`-enabled packages in a workspace, collect their documentation, and assemble it into a unified output with a `manifest.json` for consumption by a frontend site.
+`grove-docgen` is a key component of the Grove ecosystem, designed to work seamlessly with other developer tools.
 
-## Key Differentiators
+*   **`grove-context` (`cx`)**: Serves as the foundational context provider. Before generating any documentation, `docgen` uses `cx` to gather relevant source code and files, ensuring the LLM has a deep and accurate understanding of the project.
+*   **`grove-flow`**: The `docgen customize` command uses `grove-flow` to create and manage an interactive, plan-based workflow. This turns documentation generation into a guided, agent-assisted process.
+*   **`grove-gemini` and `grove-openai`**: The underlying `grove llm request` facade is used to execute the calls to the configured LLM providers, handling the API interactions required to generate the documentation content.
 
-`grove-docgen` stands apart from traditional documentation tools and generic AI assistants in several ways:
-
--   **Deep Code Awareness:** By integrating with `cx`, `docgen` provides the LLM with a highly relevant and curated context from the source code. This results in documentation that is technically precise and grounded in the actual implementation, rather than generic explanations.
--   **Structured and Repeatable:** The entire process is driven by version-controlled configuration, eliminating manual steps and ensuring that documentation is consistent and reproducible.
--   **Iterative Refinement:** `grove-docgen` supports a "reference" mode for regeneration. Instead of starting from scratch, it can provide the existing documentation to the LLM as context, instructing it to refine, update, or expand upon the current version. This makes maintaining documentation as the code evolves a manageable process.
-
-<!-- DOCGEN:INTRODUCTION:END -->
+By integrating these tools, `grove-docgen` provides a powerful, end-to-end solution for creating and maintaining high-quality technical documentation.
 
 ## Installation
 
+Install via the Grove meta-CLI:
 ```bash
-grove install grove-docgen
+grove install docgen
 ```
+
+Verify installation:
+```bash
+docgen version
+```
+
+Requires the `grove` meta-CLI. See the [Grove Installation Guide](https://github.com/mattsolo1/grove-meta/blob/main/docs/02-installation.md) if you don't have it installed.
+
+<!-- DOCGEN:OVERVIEW:END -->
 
 ## Quick Start
 

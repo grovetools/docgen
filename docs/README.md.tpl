@@ -4,15 +4,9 @@
 
 ## Overview
 
-<!-- DOCGEN:INTRODUCTION:START -->
+<!-- DOCGEN:OVERVIEW:START -->
 <!-- Documentation content will be injected here -->
-<!-- DOCGEN:INTRODUCTION:END -->
-
-## Installation
-
-```bash
-grove install grove-docgen
-```
+<!-- DOCGEN:OVERVIEW:END -->
 
 ## Quick Start
 

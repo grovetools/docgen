@@ -57,6 +57,7 @@ type ReadmeConfig struct {
 	Template      string `yaml:"template"`       // Path to the README template, relative to package root.
 	Output        string `yaml:"output"`         // Path to the output README file, relative to package root.
 	SourceSection string `yaml:"source_section"` // The 'name' of the section to inject into the template.
+	StripLines    int    `yaml:"strip_lines,omitempty"` // Number of lines to strip from the top of source file (default: 0).
 }
 
 // Load attempts to load a docgen.config.yml file from a given directory's docs/ subdirectory.

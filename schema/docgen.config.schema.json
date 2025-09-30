@@ -203,6 +203,13 @@
           "description": "The 'name' of the documentation section to inject into the template.",
           "default": "introduction",
           "examples": ["introduction", "core-concepts"]
+        },
+        "strip_lines": {
+          "type": "integer",
+          "description": "Number of lines to strip from the top of the source documentation file before injection. Useful for removing headings, blank lines, or metadata.",
+          "default": 0,
+          "minimum": 0,
+          "examples": [0, 1, 2, 3]
         }
       },
       "required": ["template", "output", "source_section"]

@@ -42,6 +42,13 @@ func newRecipePrintCmd() *cobra.Command {
 			}
 			collection["docgen-customize-prompts"] = promptsRecipe
 
+			// Load the add-readme-template recipe
+			readmeRecipe, err := loadDocgenRecipe("add-readme-template", recipes.AddReadmeTemplateFS)
+			if err != nil {
+				return fmt.Errorf("failed to load add-readme-template recipe: %w", err)
+			}
+			collection["add-readme-template"] = readmeRecipe
+
 			// Output as JSON
 			jsonData, err := json.MarshalIndent(collection, "", "  ")
 			if err != nil {

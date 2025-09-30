@@ -70,6 +70,19 @@ func (s *Synchronizer) Sync(packageDir string) error {
 		return fmt.Errorf("failed to read source documentation file %s: %w", sourceDocPath, err)
 	}
 
+	// Strip specified number of lines from the top if configured
+	if cfg.Readme.StripLines > 0 {
+		lines := strings.Split(string(sourceContent), "\n")
+		if len(lines) > cfg.Readme.StripLines {
+			// Join the remaining lines after stripping
+			sourceContent = []byte(strings.Join(lines[cfg.Readme.StripLines:], "\n"))
+		} else {
+			// If file has fewer lines than strip_lines, result is empty
+			sourceContent = []byte("")
+			s.logger.Warnf("Source file has fewer lines (%d) than strip_lines setting (%d)", len(lines), cfg.Readme.StripLines)
+		}
+	}
+
 	// Read template content
 	templatePath := filepath.Join(packageDir, cfg.Readme.Template)
 	templateContentBytes, err := os.ReadFile(templatePath)
