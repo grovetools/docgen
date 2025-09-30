@@ -132,13 +132,12 @@ func (s *Synchronizer) Sync(packageDir string) error {
 
 // rewriteImagePathsForReadme prepends 'docs/' to relative image paths in markdown content.
 func rewriteImagePathsForReadme(content string) string {
-	// Regex to find markdown image links: ![alt text](path)
-	re := regexp.MustCompile(`!\[([^\]]*)\]\(([^\)]*)\)`)
-
-	return re.ReplaceAllStringFunc(content, func(match string) string {
-		parts := re.FindStringSubmatch(match)
+	// First handle markdown image syntax: ![alt text](path)
+	markdownRe := regexp.MustCompile(`!\[([^\]]*)\]\(([^\)]*)\)`)
+	content = markdownRe.ReplaceAllStringFunc(content, func(match string) string {
+		parts := markdownRe.FindStringSubmatch(match)
 		if len(parts) < 3 {
-			return match // Should not happen with a valid regex match
+			return match
 		}
 		altText := parts[1]
 		path := parts[2]
@@ -148,9 +147,46 @@ func rewriteImagePathsForReadme(content string) string {
 			return match
 		}
 
-		// For relative paths, prepend "docs/"
-		// Use forward slashes for consistency in markdown
+		// Handle ./images/ paths - convert to docs/images/
+		if strings.HasPrefix(path, "./images/") {
+			newPath := "docs/images/" + strings.TrimPrefix(path, "./images/")
+			return fmt.Sprintf("![%s](%s)", altText, newPath)
+		}
+
+		// For other relative paths, prepend "docs/"
 		newPath := "docs/" + path
 		return fmt.Sprintf("![%s](%s)", altText, newPath)
 	})
+
+	// Then handle HTML img tags: <img src="path" ...>
+	htmlRe := regexp.MustCompile(`<img\s+([^>]*\s)?src="([^"]+)"([^>]*)>`)
+	content = htmlRe.ReplaceAllStringFunc(content, func(match string) string {
+		parts := htmlRe.FindStringSubmatch(match)
+		if len(parts) < 4 {
+			return match
+		}
+		beforeSrc := parts[1]
+		if beforeSrc == "" {
+			beforeSrc = ""
+		}
+		path := parts[2]
+		afterSrc := parts[3]
+
+		// If path is absolute, an external URL, or already starts with docs/, do nothing
+		if strings.HasPrefix(path, "http") || strings.HasPrefix(path, "/") || strings.HasPrefix(path, "docs/") {
+			return match
+		}
+
+		// Handle ./images/ paths - convert to docs/images/
+		if strings.HasPrefix(path, "./images/") {
+			newPath := "docs/images/" + strings.TrimPrefix(path, "./images/")
+			return fmt.Sprintf(`<img %ssrc="%s"%s>`, beforeSrc, newPath, afterSrc)
+		}
+
+		// For other relative paths, prepend "docs/"
+		newPath := "docs/" + path
+		return fmt.Sprintf(`<img %ssrc="%s"%s>`, beforeSrc, newPath, afterSrc)
+	})
+
+	return content
 }
