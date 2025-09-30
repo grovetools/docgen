@@ -129,6 +129,17 @@ func (a *Aggregator) Aggregate(outputDir string) error {
 			}
 		}
 
+		// Copy images directory if it exists
+		imagesSrcPath := filepath.Join(wsPath, "docs", "images")
+		if _, err := os.Stat(imagesSrcPath); err == nil {
+			imagesDestPath := filepath.Join(distDest, "images")
+			a.logger.Infof("Copying images for %s from %s to %s", wsName, imagesSrcPath, imagesDestPath)
+			if err := copyDir(imagesSrcPath, imagesDestPath); err != nil {
+				a.logger.WithError(err).Errorf("Failed to copy images directory for %s", wsName)
+				// Log error but continue
+			}
+		}
+
 		sort.Slice(cfg.Sections, func(i, j int) bool {
 			return cfg.Sections[i].Order < cfg.Sections[j].Order
 		})

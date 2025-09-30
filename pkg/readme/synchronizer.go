@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 
 	"github.com/mattsolo1/grove-docgen/pkg/config"
@@ -111,9 +112,12 @@ func (s *Synchronizer) Sync(packageDir string) error {
 	if startIdx == -1 || endIdx == -1 {
 		s.logger.Warnf("Could not find markers %s and %s in template. Skipping content injection.", startMarker, endMarker)
 	} else {
+		// Rewrite relative image paths for the README context
+		rewrittenSource := rewriteImagePathsForReadme(string(sourceContent))
+		
 		prefix := composedContent[:startIdx+len(startMarker)]
 		suffix := composedContent[endIdx:]
-		composedContent = prefix + "\n\n" + strings.TrimSpace(string(sourceContent)) + "\n\n" + suffix
+		composedContent = prefix + "\n\n" + strings.TrimSpace(rewrittenSource) + "\n\n" + suffix
 	}
 
 	// Write the final README.md
@@ -124,4 +128,29 @@ func (s *Synchronizer) Sync(packageDir string) error {
 
 	s.logger.Infof("✓ Successfully synchronized %s", outputPath)
 	return nil
+}
+
+// rewriteImagePathsForReadme prepends 'docs/' to relative image paths in markdown content.
+func rewriteImagePathsForReadme(content string) string {
+	// Regex to find markdown image links: ![alt text](path)
+	re := regexp.MustCompile(`!\[([^\]]*)\]\(([^\)]*)\)`)
+
+	return re.ReplaceAllStringFunc(content, func(match string) string {
+		parts := re.FindStringSubmatch(match)
+		if len(parts) < 3 {
+			return match // Should not happen with a valid regex match
+		}
+		altText := parts[1]
+		path := parts[2]
+
+		// If path is absolute, an external URL, or already starts with docs/, do nothing
+		if strings.HasPrefix(path, "http") || strings.HasPrefix(path, "/") || strings.HasPrefix(path, "docs/") {
+			return match
+		}
+
+		// For relative paths, prepend "docs/"
+		// Use forward slashes for consistency in markdown
+		newPath := "docs/" + path
+		return fmt.Sprintf("![%s](%s)", altText, newPath)
+	})
 }
