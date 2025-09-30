@@ -82,6 +82,8 @@ build-all:
 generate-docs: build
 	@echo "Generating docgen documentation using docgen..."
 	@$(BIN_DIR)/$(BINARY_NAME) generate
+	@echo "Synchronizing README.md..."
+	@$(BIN_DIR)/$(BINARY_NAME) sync-readme
 
 help:
 	@echo "Available targets:"

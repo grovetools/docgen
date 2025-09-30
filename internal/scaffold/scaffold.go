@@ -59,7 +59,17 @@ func InitWithOptions(projectType string, opts InitOptions, logger *logrus.Logger
 	}
 	logger.Infof("✓ Created configuration file: %s", filepath.Join("docs", "docgen.config.yml"))
 
-	// 4. Create rules file if specified
+	// 4. Copy README.md.tpl to docs directory
+	readmeTplSrc := filepath.Join("templates", projectType, "docs", "README.md.tpl")
+	readmeTplDest := filepath.Join(docsDir, "README.md.tpl")
+	if _, err := os.Stat(readmeTplDest); os.IsNotExist(err) {
+		if err := copyFileFromFS(readmeTplSrc, readmeTplDest); err != nil {
+			return fmt.Errorf("failed to copy README.md.tpl: %w", err)
+		}
+		logger.Infof("✓ Created README template: %s", filepath.Join("docs", "README.md.tpl"))
+	}
+
+	// 5. Create rules file if specified
 	if opts.RulesFile != "" {
 		rulesPath := filepath.Join(docsDir, opts.RulesFile)
 		// Only create if it doesn't exist
@@ -76,7 +86,7 @@ func InitWithOptions(projectType string, opts InitOptions, logger *logrus.Logger
 		}
 	}
 
-	// 5. Copy prompt files
+	// 6. Copy prompt files
 	promptsSrcDir := filepath.Join("templates", projectType, "prompts")
 	entries, err := templatesFS.ReadDir(promptsSrcDir)
 	if err != nil {
@@ -99,12 +109,9 @@ func InitWithOptions(projectType string, opts InitOptions, logger *logrus.Logger
 	logger.Info("   Next steps: 1. Edit docs/docgen.config.yml to match your project.")
 	if opts.RulesFile != "" {
 		logger.Infof("               2. Review and customize the rules in docs/%s.", opts.RulesFile)
-		logger.Info("               3. Review and customize the prompts in docs/prompts/.")
-		logger.Info("               4. Run 'docgen generate' to create your documentation.")
-	} else {
-		logger.Info("               2. Review and customize the prompts in docs/prompts/.")
-		logger.Info("               3. Run 'docgen generate' to create your documentation.")
 	}
+	logger.Info("               3. Review and customize the prompts in docs/prompts/.")
+	logger.Info("               4. Run 'make generate-docs' to create documentation and sync your README.")
 
 	return nil
 }

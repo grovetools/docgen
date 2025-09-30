@@ -18,6 +18,7 @@ type DocgenConfig struct {
 	Category    string          `yaml:"category"`
 	Settings    SettingsConfig  `yaml:"settings,omitempty"`
 	Sections    []SectionConfig `yaml:"sections"`
+	Readme      *ReadmeConfig   `yaml:"readme,omitempty"`
 }
 
 // GenerationConfig holds LLM generation parameters
@@ -49,6 +50,13 @@ type SectionConfig struct {
 	JSONKey          string `yaml:"json_key,omitempty"` // Key for structured JSON output
 	Model            string `yaml:"model,omitempty"`    // Per-section model override
 	GenerationConfig `yaml:",inline"`                    // Per-section generation parameter overrides
+}
+
+// ReadmeConfig defines the settings for synchronizing the README.md.
+type ReadmeConfig struct {
+	Template      string `yaml:"template"`       // Path to the README template, relative to package root.
+	Output        string `yaml:"output"`         // Path to the output README file, relative to package root.
+	SourceSection string `yaml:"source_section"` // The 'name' of the section to inject into the template.
 }
 
 // Load attempts to load a docgen.config.yml file from a given directory's docs/ subdirectory.

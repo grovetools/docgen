@@ -3,6 +3,10 @@ enabled: true
 title: "My Library"
 description: "A brief description of this library."
 category: "Libraries"
+readme:
+  template: docs/README.md.tpl
+  output: README.md
+  source_section: introduction
 settings:
   model: "gemini-1.5-flash-latest"
   regeneration_mode: "scratch"

@@ -181,6 +181,31 @@
         },
         "additionalProperties": false
       }
+    },
+    "readme": {
+      "type": "object",
+      "description": "Configuration for synchronizing the project README.md from documentation.",
+      "properties": {
+        "template": {
+          "type": "string",
+          "description": "Path to the README template file (relative to package root).",
+          "default": "docs/README.md.tpl",
+          "examples": ["docs/README.md.tpl", "docs/templates/README.template.md"]
+        },
+        "output": {
+          "type": "string",
+          "description": "Path to the output README file (relative to package root).",
+          "default": "README.md",
+          "examples": ["README.md"]
+        },
+        "source_section": {
+          "type": "string",
+          "description": "The 'name' of the documentation section to inject into the template.",
+          "default": "introduction",
+          "examples": ["introduction", "core-concepts"]
+        }
+      },
+      "required": ["template", "output", "source_section"]
     }
   },
   "additionalProperties": false,

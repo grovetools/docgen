@@ -1,72 +1,54 @@
-# grove-docgen
+# Grove Docgen
 
-LLM-powered, workspace-aware documentation generator for Grove ecosystem projects.
+AI-powered documentation generator for Grove ecosystem projects
 
-## Features
+## Overview
 
-- Automatically discovers packages in a Grove workspace
-- Uses LLMs to generate documentation from code context
-- Aggregates documentation into a structured, frontend-agnostic format
-- Configurable per-package documentation generation
+<!-- DOCGEN:INTRODUCTION:START -->
+
+# Introduction to grove-docgen
+
+`grove-docgen` is an LLM-powered, workspace-aware documentation generator designed for the Grove ecosystem. It automates the creation of documentation by analyzing source code and applying technical writing principles. Its purpose is to solve the persistent challenge of keeping documentation comprehensive, accurate, and synchronized with an evolving codebase.
+
+## The "Documentation as Code" Philosophy
+
+Traditional documentation workflows often fail because documentation is treated as an artifact separate from the code it describes. This separation leads to staleness and neglect. `grove-docgen` addresses this by adopting a "Documentation from Code" philosophy, where the entire generation process is defined by configuration and prompt files that live alongside the source code.
+
+## How It Works: An AI-Assisted Workflow
+
+The `docgen generate` command orchestrates a multi-step process to create documentation for a package directly within its directory:
+
+1.  **Configuration Loading:** It reads a `docs/docgen.config.yml` file to understand the project's metadata and the specific sections of documentation to generate (e.g., Introduction, Core Concepts, Best Practices).
+2.  **Context Gathering:** It leverages Grove's context-aware tool, `cx`, to scan the codebase. Based on rules defined in a `docs.rules` file, `cx` gathers the most relevant code snippets, file structures, and other artifacts to create a rich, code-aware context.
+3.  **LLM-Powered Generation:** For each section, `docgen` combines a user-written prompt with the context gathered by `cx` and sends it to an LLM, such as Google's Gemini. The LLM analyzes the code context and the prompt's instructions to write the documentation section in Markdown.
+4.  **Output and Aggregation:** The generated Markdown files are written to the project's `docs` directory. The companion `docgen aggregate` command can then discover all `docgen`-enabled packages in a workspace, collect their documentation, and assemble it into a unified output with a `manifest.json` for consumption by a frontend site.
+
+## Key Differentiators
+
+`grove-docgen` stands apart from traditional documentation tools and generic AI assistants in several ways:
+
+-   **Deep Code Awareness:** By integrating with `cx`, `docgen` provides the LLM with a highly relevant and curated context from the source code. This results in documentation that is technically precise and grounded in the actual implementation, rather than generic explanations.
+-   **Structured and Repeatable:** The entire process is driven by version-controlled configuration, eliminating manual steps and ensuring that documentation is consistent and reproducible.
+-   **Iterative Refinement:** `grove-docgen` supports a "reference" mode for regeneration. Instead of starting from scratch, it can provide the existing documentation to the LLM as context, instructing it to refine, update, or expand upon the current version. This makes maintaining documentation as the code evolves a manageable process.
+
+<!-- DOCGEN:INTRODUCTION:END -->
 
 ## Installation
 
 ```bash
-grove install docgen
+grove install grove-docgen
 ```
 
-## Usage
-
-### Generate documentation for a single package
+## Quick Start
 
 ```bash
-# In a package directory with docs/docgen.config.yml
-docgen generate
+# Initialize docgen in your project
+docgen init library
+
+# Generate documentation
+make generate-docs
 ```
 
-### Aggregate documentation for entire workspace
+## License
 
-```bash
-# From anywhere in the Grove workspace
-docgen aggregate --output-dir=./dist
-```
-
-## Configuration
-
-Create a `docs/docgen.config.yml` in your package:
-
-```yaml
-enabled: true
-title: "My Package"
-description: "A package that does amazing things"
-category: "Tools"
-sections:
-  - name: "overview"
-    title: "Overview"
-    order: 1
-    prompt: "prompts/overview.md"
-    output: "overview.md"
-  - name: "api"
-    title: "API Reference" 
-    order: 2
-    prompt: "prompts/api.md"
-    output: "api.md"
-```
-
-## Development
-
-### Building
-
-```bash
-make build
-```
-
-### Testing
-
-```bash
-make test
-```
-
-## Contributing
-
-This is a private repository. Please ensure all contributions follow the Grove ecosystem conventions.
+MIT
