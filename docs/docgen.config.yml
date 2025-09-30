@@ -4,8 +4,6 @@ title: "Grove Docgen"
 description: "AI-powered documentation generator for Grove ecosystem projects"
 category: "Developer Tools"
 settings:
-  model: "gemini-2.5-pro"
-  regeneration_mode: "scratch"
   system_prompt: "default"
   rules_file: "docs.rules"
   
