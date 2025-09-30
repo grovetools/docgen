@@ -8,7 +8,6 @@ readme:
   template: docs/README.md.tpl
   output: README.md
   source_section: overview
-  strip_lines: 2
 settings:
   system_prompt: "default"
   rules_file: "docs.rules"

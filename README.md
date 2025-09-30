@@ -1,5 +1,7 @@
 <!-- DOCGEN:OVERVIEW:START -->
 
+# Grove Docgen
+
 `grove-docgen` is an LLM-powered, workspace-aware documentation generator. It automates the creation of technical documentation by combining a project's source code with user-defined prompts, providing a structured and repeatable workflow for keeping documentation in sync with development.
 
 By defining documentation as a series of configurable sections, `grove-docgen` allows you to maintain full control over the structure, tone, and content of the output.
@@ -52,9 +54,9 @@ See the [documentation](docs/) for detailed usage instructions:
 <!-- DOCGEN:TOC:START -->
 
 See the [documentation](docs/) for detailed usage instructions:
-- [Overview](docs/01-overview.md) - `grove-docgen` is an LLM-powered, workspace-aware documentation generator. It...
-- [Examples](docs/02-examples.md) - This guide provides practical examples of how to use `grove-docgen` in common...
-- [Configuration](docs/03-configuration.md) - The `docs/docgen.config.yml` file is the central control panel for `grove-doc...
-- [Command Reference](docs/04-command-reference.md) - This document provides a comprehensive reference for all `docgen` commands, o...
+- [Overview](docs/01-overview.md)
+- [Examples](docs/02-examples.md)
+- [Configuration](docs/03-configuration.md)
+- [Command Reference](docs/04-command-reference.md)
 
 <!-- DOCGEN:TOC:END -->
