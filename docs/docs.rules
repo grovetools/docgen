@@ -1,8 +1,1 @@
-# Grove Docgen Documentation Context Rules
-
-# Include all Go source files for implementation details
-**/*.go
-
-# Include some good documentation so far
-../grove-flow/docs
-../grove-context/docs
+*.go

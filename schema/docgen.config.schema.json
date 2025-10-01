@@ -155,6 +155,13 @@
               "gemini-2.0-flash-exp"
             ]
           },
+          "agg_strip_lines": {
+            "type": "integer",
+            "description": "Number of lines to strip from the top of this section's content during aggregation. Useful for removing headers that might not be appropriate in aggregated context.",
+            "minimum": 0,
+            "default": 0,
+            "examples": [1, 2, 3]
+          },
           "temperature": {
             "type": "number",
             "description": "Temperature override for this section. Lower for more deterministic output.",

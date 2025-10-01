@@ -14,15 +14,15 @@ Initializes a new documentation generation configuration for the current project
 -   **Description**: Creates a `docs/` directory with a default `docgen.config.yml` file and a set of starter prompt files in `docs/prompts/`. This command sets up the necessary structure to begin generating documentation. It will not overwrite existing files.
 -   **Flags**:
 
-| Flag                     | Description                                                              | Default   |
-| ------------------------ | ------------------------------------------------------------------------ | --------- |
-| `--type`                 | The type of project to initialize. Currently, only `library` is supported. | `library` |
-| `--model`                | The default LLM model to use for generation (e.g., `gemini-2.5-pro`).    | (none)    |
-| `--regeneration-mode`    | The regeneration mode: `scratch` or `reference`.                         | (none)    |
-| `--rules-file`           | The name of the rules file for context generation (e.g., `docs.rules`).  | (none)    |
-| `--structured-output-file` | The path for the structured JSON output file.                            | (none)    |
-| `--system-prompt`        | The system prompt to use: `default` or a path to a custom file.          | (none)    |
-| `--output-dir`           | The output directory for generated documentation.                        | (none)    |
+| Flag | Description | Default |
+| :--- | :--- | :--- |
+| `--type` | The type of project to initialize. Currently, only `library` is supported. | `library` |
+| `--model` | The default LLM model to use for generation (e.g., `gemini-1.5-flash-latest`). | (none) |
+| `--regeneration-mode` | The regeneration mode: `scratch` or `reference`. | (none) |
+| `--rules-file` | The name of the rules file for context generation (e.g., `docs.rules`). | (none) |
+| `--structured-output-file` | The path for the structured JSON output file. | (none) |
+| `--system-prompt` | The system prompt to use: `default` or a path to a custom file. | (none) |
+| `--output-dir` | The output directory for generated documentation. | (none) |
 
 -   **Examples**:
     ```bash
@@ -43,9 +43,9 @@ Generates documentation for the current package based on its configuration.
 -   **Description**: Reads the `docs/docgen.config.yml` file, builds the necessary context using `grove-context`, calls an LLM for each configured section, and writes the generated Markdown files to the specified output directory.
 -   **Flags**:
 
-| Flag        | Shorthand | Description                                           |
-| ----------- | --------- | ----------------------------------------------------- |
-| `--section` | `-s`      | Generate only the specified sections by name. Can be used multiple times. |
+| Flag | Shorthand | Description |
+| :--- | :--- | :--- |
+| `--section` | `-s` | Generate only the specified sections by name. Can be used multiple times. |
 
 -   **Examples**:
     ```bash
@@ -63,15 +63,15 @@ Generates documentation for the current package based on its configuration.
 
 ### docgen aggregate
 
-Discovers all `docgen`-enabled packages in a workspace, generates their documentation, and aggregates the results into a single output directory.
+Discovers all `docgen`-enabled packages in a workspace and aggregates their documentation into a single output directory.
 
 -   **Usage**: `docgen aggregate [flags]`
--   **Description**: This command is designed for monorepos. It scans the workspace for packages with an enabled `docgen.config.yml`, runs the generation process for each, and copies the final documentation into a unified directory. It also creates a `manifest.json` file that describes all the collected documentation, which is useful for static site generators.
+-   **Description**: This command is designed for monorepos. It scans the workspace for packages with an enabled `docgen.config.yml`, copies their final documentation into a unified directory, and creates a `manifest.json` file that describes all the collected documentation, which is useful for static site generators.
 -   **Flags**:
 
-| Flag           | Shorthand | Description                                        | Default |
-| -------------- | --------- | -------------------------------------------------- | ------- |
-| `--output-dir` | `-o`      | The directory to save the aggregated documentation. | `dist`  |
+| Flag | Shorthand | Description | Default |
+| :--- | :--- | :--- | :--- |
+| `--output-dir` | `-o` | The directory to save the aggregated documentation. | `dist` |
 
 -   **Examples**:
     ```bash
@@ -80,6 +80,29 @@ Discovers all `docgen`-enabled packages in a workspace, generates their document
 
     # Specify a different output directory
     docgen aggregate --output-dir ./public/docs
+    ```
+
+---
+
+### docgen sync-readme
+
+Generates the `README.md` from a template and a source documentation file.
+
+-   **Usage**: `docgen sync-readme [flags]`
+-   **Description**: Synchronizes the project's `README.md` based on the `readme` configuration in `docs/docgen.config.yml`. It reads a template file, injects a specified documentation section into it, and writes the result to the output `README.md` file.
+-   **Flags**:
+
+| Flag | Description |
+| :--- | :--- |
+| `--generate-source` | Generate the source documentation section before syncing the README. |
+
+-   **Examples**:
+    ```bash
+    # Sync the README using the existing documentation
+    docgen sync-readme
+
+    # Regenerate the overview section first, then sync the README
+    docgen sync-readme --generate-source
     ```
 
 ---
@@ -97,9 +120,9 @@ Creates a `grove-flow` plan for interactively customizing and generating documen
 -   **Prerequisites**: The `flow` command must be installed and available in your `PATH`.
 -   **Flags**:
 
-| Flag            | Shorthand | Description                                           | Default |
-| --------------- | --------- | ----------------------------------------------------- | ------- |
-| `--recipe-type` | `-r`      | The recipe to use: `agent` for an interactive AI agent, or `prompts` for a structured prompt-based flow. | `agent` |
+| Flag | Shorthand | Description | Default |
+| :--- | :--- | :--- | :--- |
+| `--recipe-type` | `-r` | The recipe to use: `agent` for an interactive AI agent, or `prompts` for a structured prompt-based flow. | `agent` |
 
 -   **Examples**:
     ```bash
@@ -158,8 +181,8 @@ Prints the version information for the `docgen` binary.
 -   **Description**: Displays the version, commit hash, and build date of the installed `docgen` command.
 -   **Flags**:
 
-| Flag     | Description                             |
-| -------- | --------------------------------------- |
+| Flag | Description |
+| :--- | :--- |
 | `--json` | Output the version information in JSON format. |
 
 -   **Examples**:

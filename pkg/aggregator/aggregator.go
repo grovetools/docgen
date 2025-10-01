@@ -122,7 +122,10 @@ func (a *Aggregator) Aggregate(outputDir string) error {
 					continue
 				}
 				
-				if err := os.WriteFile(destFile, srcData, 0644); err != nil {
+				// Apply agg_strip_lines if configured for this section
+				processedData := a.applyStripLines(srcData, section.AggStripLines, wsName, section.Output)
+				
+				if err := os.WriteFile(destFile, processedData, 0644); err != nil {
 					a.logger.WithError(err).Errorf("Failed to write %s", destFile)
 					continue
 				}
@@ -239,6 +242,26 @@ func (a *Aggregator) getRepoURL(wsPath string) string {
 	url = strings.TrimSuffix(url, ".git")
 	
 	return url
+}
+
+// applyStripLines removes specified number of lines from the beginning of content during aggregation
+func (a *Aggregator) applyStripLines(content []byte, aggStripLines int, packageName, sectionOutput string) []byte {
+	if aggStripLines <= 0 {
+		return content
+	}
+	
+	lines := strings.Split(string(content), "\n")
+	if len(lines) > aggStripLines {
+		// Join the remaining lines after stripping
+		stripped := strings.Join(lines[aggStripLines:], "\n")
+		a.logger.Debugf("Stripped %d lines from %s/%s during aggregation", aggStripLines, packageName, sectionOutput)
+		return []byte(stripped)
+	} else {
+		// If file has fewer lines than agg_strip_lines, result is empty
+		a.logger.Warnf("Source file %s/%s has fewer lines (%d) than agg_strip_lines setting (%d)", 
+			packageName, sectionOutput, len(lines), aggStripLines)
+		return []byte("")
+	}
 }
 
 func copyDir(src, dst string) error {

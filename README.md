@@ -2,29 +2,36 @@
 
 # Grove Docgen
 
-`grove-docgen` is an LLM-powered, workspace-aware documentation generator. It automates the creation of technical documentation by combining a project's source code with user-defined prompts, providing a structured and repeatable workflow for keeping documentation in sync with development.
-
-By defining documentation as a series of configurable sections, `grove-docgen` allows you to maintain full control over the structure, tone, and content of the output.
+`grove-docgen` is a command-line tool that generates technical documentation from a project's source code using LLMs and user-defined prompts. It provides a structured workflow for creating and maintaining documentation by defining it as a series of configurable sections.
 
 <!-- placeholder for animated gif -->
 
 ### Key Features
 
-*   **Section-Based Architecture**: Define your documentation structure in a `docgen.config.yml` file. Each section is configured with its own prompt, output file, and LLM settings, allowing for granular control over the final output.
-*   **Customizable Prompts**: Use the `docgen init` command to scaffold a set of starter prompts. You have full ownership of these prompts, enabling you to engineer them to match your project's specific needs and desired documentation style.
-*   **Context-Aware Generation**: Leverages `grove-context` to automatically build a comprehensive understanding of your codebase based on a `.grove/rules` file. This ensures the LLM has the necessary context to generate accurate and relevant documentation.
-*   **Interactive Customization**: The `docgen customize` command integrates with `grove-flow` to create a multi-step plan for generating your documentation. This interactive workflow uses AI agents to help you refine the structure and content before final generation.
-*   **Multi-Model Support**: Configure different LLM models for different tasks. You can set a global default model or override it for specific sections, allowing you to use the best tool for each job (e.g., a powerful model for overviews and a faster model for simple sections).
-*   **Workspace Aggregation**: The `docgen aggregate` command discovers all `docgen`-enabled packages within a Grove workspace, generates their documentation, and aggregates the results into a single, unified output directory with a `manifest.json`.
+*   **Section-Based Architecture**: Defines documentation structure in a `docgen.config.yml` file. Each section is configured with its own prompt, output file, and LLM settings.
+*   **Customizable Prompts**: The `docgen init` command scaffolds a set of starter prompts in `docs/prompts/`. These files can be modified to fit the project's specific needs and documentation style.
+*   **Context-Aware Generation**: Uses `grove-context` to build file-based context from a `.grove/rules` file, providing the LLM with relevant source code to generate accurate documentation.
+*   **Interactive Customization**: The `docgen customize` command creates a `grove-flow` plan, enabling an interactive, agent-assisted workflow to refine documentation structure and content before generation.
+*   **Multi-Model Support**: A global default LLM model can be set in the configuration, with the option to override it for specific sections, allowing different models to be used for different tasks.
+*   **Workspace Aggregation**: The `docgen aggregate` command discovers all `docgen`-enabled packages within a workspace, generates their documentation, and collects the results into a single output directory with a `manifest.json`.
+*   **README Synchronization**: The `docgen sync-readme` command generates a project `README.md` from a template, injecting content from a specified documentation section to keep the overview consistent.
+
+## How It Works
+
+The documentation generation process follows a repeatable pipeline:
+1.  `grove-docgen` reads the `docs/docgen.config.yml` file to identify the defined documentation sections.
+2.  For each section, it calls `grove-context` (`cx`) to generate a file-based context based on the patterns in the configured `rules_file`.
+3.  It reads the content of the section's corresponding prompt file from the `docs/prompts/` directory.
+4.  It sends the generated context and the prompt to the configured LLM using the `grove llm request` command.
+5.  The LLM's response is processed and written to the section's specified output markdown file.
 
 ## Ecosystem Integration
 
-`grove-docgen` is a key component of the Grove ecosystem, designed to work seamlessly with other developer tools.
+`grove-docgen` functions as a component of the Grove tool suite and executes other tools in the ecosystem as subprocesses.
 
-*   **`grove-context` (`cx`)**: Serves as the foundational context provider. Before generating any documentation, `docgen` uses `cx` to gather relevant source code and files, ensuring the LLM has a deep and accurate understanding of the project.
-*   **`grove-flow`**: The `docgen customize` command uses `grove-flow` to create and manage an interactive, plan-based workflow. This turns documentation generation into a guided, agent-assisted process.
-*   **`grove-gemini` and `grove-openai`**: The underlying `grove llm request` facade is used to execute the calls to the configured LLM providers, handling the API interactions required to generate the documentation content.
-By integrating these tools, `grove-docgen` provides a powerful, end-to-end solution for creating and maintaining high-quality technical documentation.
+*   **`grove-context` (`cx`)**: Provides the file-based context for all LLM requests, ensuring the model has an accurate understanding of the project's source code.
+*   **`grove-flow`**: The `docgen customize` command uses `grove-flow` to create and manage an interactive, plan-based workflow, turning documentation generation into a guided, agent-assisted process.
+*   **`grove-gemini` and `grove-openai`**: The `grove llm request` command is used to execute the calls to the configured LLM providers, handling the API interactions required to generate the documentation content.
 
 ## Installation
 

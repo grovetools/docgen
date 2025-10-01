@@ -4,7 +4,7 @@ The `docs/docgen.config.yml` file is the central control panel for `grove-docgen
 
 ## File Structure Overview
 
-A typical `docgen.config.yml` file is organized into root-level metadata, a `settings` block for global configuration, and a `sections` array defining each document to be generated.
+A typical `docgen.config.yml` file is organized into root-level metadata, a `settings` block for global configuration, a `sections` array defining each document to be generated, and a `readme` block for synchronizing the main `README.md`.
 
 ```yaml
 # yaml-language-server: $schema=https://raw.githubusercontent.com/mattsolo1/grove-docgen/main/schema/docgen.config.schema.json
@@ -42,11 +42,19 @@ sections:
     
     # Per-section override for generation parameters
     max_output_tokens: 4096
+
+# Configuration for synchronizing the project's main README.md.
+readme:
+  generate_toc: true
+  template: docs/README.md.tpl
+  output: README.md
+  source_section: overview
+  strip_lines: 2
 ```
 
 ## Root-Level Fields
 
-These fields define the overall properties of your documentation package, primarily used when aggregating documentation from multiple projects.
+These fields define the overall properties of your documentation package, primarily used by the `docgen aggregate` command.
 
 | Field         | Type    | Description                                                                                             |
 | :------------ | :------ | :------------------------------------------------------------------------------------------------------ |
@@ -57,7 +65,7 @@ These fields define the overall properties of your documentation package, primar
 
 ## The `settings` Section
 
-This section contains global configurations that apply to all documentation sections.
+This section contains global configurations that apply to all documentation sections unless overridden at the section level.
 
 | Field                    | Type   | Description                                                                                                                                                                                          |
 | :----------------------- | :----- | :--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -109,6 +117,18 @@ sections:
     max_output_tokens: 8192
 ```
 
+## The `readme` Section
+
+This section configures the `docgen sync-readme` command, which generates the project's main `README.md` from a template.
+
+| Field           | Type    | Description                                                                                                |
+| :-------------- | :------ | :--------------------------------------------------------------------------------------------------------- |
+| `template`      | string  | Path to the README template file (e.g., `docs/README.md.tpl`).                                             |
+| `output`        | string  | Path to the final output `README.md` file.                                                                 |
+| `source_section`| string  | The `name` of the section from the `sections` array whose content will be injected into the template.        |
+| `strip_lines`   | integer | (Optional) Number of lines to remove from the top of the `source_section` content before injection.        |
+| `generate_toc`  | boolean | (Optional) If `true`, a table of contents linking to all documentation files will be injected.             |
+
 ## Advanced Topics
 
 ### Context Management with `rules_file`
@@ -122,3 +142,10 @@ The `docgen.config.yml` file can be validated against a JSON schema. Including t
 ```yaml
 # yaml-language-server: $schema=https://raw.githubusercontent.com/mattsolo1/grove-docgen/main/schema/docgen.config.schema.json
 ```
+
+### Configuration Inheritance
+
+Settings are applied with a clear order of precedence, allowing for fine-grained control:
+1.  **Section-level**: A `model` or generation parameter (e.g., `temperature`) set directly within a `sections` item has the highest priority.
+2.  **Global `settings`**: If not defined at the section level, the value from the main `settings` block is used.
+3.  **Application Defaults**: If a setting is not found in the configuration, a hardcoded default within `grove-docgen` may be used.

@@ -49,6 +49,7 @@ type SectionConfig struct {
 	Output           string `yaml:"output"`             // Output markdown file
 	JSONKey          string `yaml:"json_key,omitempty"` // Key for structured JSON output
 	Model            string `yaml:"model,omitempty"`    // Per-section model override
+	AggStripLines    int    `yaml:"agg_strip_lines,omitempty"` // Number of lines to strip from the top of the content during aggregation
 	GenerationConfig `yaml:",inline"`                    // Per-section generation parameter overrides
 }
 
