@@ -1,3 +1,93 @@
+## v0.1.0 (2025-10-01)
+
+This release introduces a major new feature for synchronizing `README.md` files from documentation source and templates. The new `sync-readme` command (2f2950e) automates the process of keeping project READMEs up-to-date by injecting content from generated documentation. This workflow supports stripping header lines to avoid duplication (9495569), automatic table of contents generation (ff6af83), and path rewriting for both Markdown and HTML image tags to ensure they render correctly on sites like GitHub (0a69818, 57a8822). A fix was also included to prevent broken images from appearing in the generated TOC (e4cc9e5).
+
+A new `agg_strip_lines` configuration option has been added, allowing for the removal of a specified number of lines from a section's content during the documentation aggregation process (a7643d2). The `regen-json` command has been improved; its parser now dynamically adapts to the section names defined in `docgen.config.yml` instead of relying on hardcoded values, fixing a major bug where it would generate empty files (6deaf54). The documentation content and structure has also been extensively refactored for clarity and consistency across the ecosystem (700f504, 816adf8, c045a4b).
+
+### Features
+
+- Add `sync-readme` command to generate README.md from templates and documentation source (2f2950e)
+- Add `strip_lines` option for README synchronization to prevent duplicate headings (9495569)
+- Add `agg_strip_lines` config option for per-section content stripping during aggregation (a7643d2)
+- Add image support for copying `docs/images` during aggregation and rewriting paths (0a69818)
+- Update the default system prompt for documentation generation (cc98a41)
+- Update documentation prompts for clarity and focus (137a876)
+
+### Bug Fixes
+
+- Make `regen-json` parser dynamically adapt to section names in `docgen.config.yml` (6deaf54)
+- Handle HTML `<img>` tags in `sync-readme` path rewriting (57a8822)
+- Remove broken image descriptions from table of contents generation (e4cc9e5)
+- Update CI workflow to use `branches: [ none ]` for disabling workflows (5d5087c)
+- Clean up formatting in the `README.md.tpl` template (44da94d)
+
+### Refactoring
+
+- Standardize `docgen.config.yml` key order and default settings (390168a)
+
+### Documentation
+
+- Update docgen configuration and add table of contents support to README template (ff6af83)
+- Simplify documentation structure to four essential sections (700f504)
+- Rename "Introduction" sections to "Overview" for consistency (816adf8)
+- Simplify installation instructions to point to the main Grove guide (9be70a2)
+- Update docgen config and overview prompt (f79adc1)
+
+### Chore
+
+- Standardize documentation filenames to `DD-name.md` convention (c045a4b)
+- Temporarily disable CI workflow (0760764)
+
+### CI
+
+- Remove redundant tests from release workflow (6fc0cbc)
+
+### File Changes
+
+```
+ .github/workflows/ci.yml                           |   4 +-
+ .github/workflows/release.yml                      |   3 +-
+ CHANGELOG.md                                       |   2 +-
+ Makefile                                           |   2 +
+ README.md                                          |  94 +++----
+ cmd/recipe.go                                      |   7 +
+ cmd/root.go                                        |   1 +
+ cmd/sync_readme.go                                 |  66 +++++
+ docs/01-overview.md                                |  46 ++++
+ docs/02-examples.md                                | 183 +++++++++++++
+ docs/03-configuration.md                           | 151 +++++++++++
+ docs/04-command-reference.md                       | 195 +++++++++++++
+ docs/README.md.tpl                                 |   6 +
+ docs/cli-reference.md                              | 271 -------------------
+ docs/configuration.md                              | 270 ------------------
+ docs/docgen.config.yml                             |  66 +++--
+ docs/docs.rules                                    |  33 +--
+ docs/getting-started.md                            | 195 -------------
+ docs/introduction.md                               |  24 --
+ docs/prompts/01-overview.md                        |  31 +++
+ docs/prompts/02-examples.md                        |  23 ++
+ docs/prompts/03-configuration.md                   |  62 +++++
+ .../{cli-reference.md => 04-command-reference.md}  |   0
+ docs/prompts/configuration.md                      |  50 ----
+ docs/prompts/getting-started.md                    |  38 ---
+ docs/prompts/introduction.md                       |  21 --
+ docs/prompts/usage-patterns.md                     |  52 ----
+ docs/usage-patterns.md                             | 200 --------------
+ internal/scaffold/scaffold.go                      |  21 +-
+ .../scaffold/templates/library/docgen.config.yml   |   7 +
+ .../scaffold/templates/library/docs/README.md.tpl  |  26 ++
+ pkg/aggregator/aggregator.go                       |  36 ++-
+ pkg/config/config.go                               |  11 +
+ pkg/docs/docs.json                                 | 118 ++++++++
+ pkg/generator/system_prompt.go                     |  95 ++++---
+ pkg/parser/parser.go                               | 173 +++++-------
+ pkg/readme/synchronizer.go                         | 301 +++++++++++++++++++++
+ pkg/recipes/builtin.go                             |   5 +-
+ .../builtin/add-readme-template/01-implement.md    | 211 +++++++++++++++
+ schema/docgen.config.schema.json                   |  45 +++
+ 40 files changed, 1745 insertions(+), 1400 deletions(-)
+```
+
 ## v1.0.0 (2025-09-26)
 
 This release introduces `grove-docgen`, an LLM-powered, workspace-aware documentation generator for the Grove ecosystem. The tool includes new commands to streamline the documentation process, such as `docgen init` for scaffolding new projects with configurable templates (d929db2, 68664db), `docgen regen-json` for updating structured output without calling LLMs (502b05a), and `docgen generate` for creating documentation for a single package (1c648e6).
