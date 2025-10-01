@@ -1,7 +1,7 @@
 github.com/aymanbagabas/go-osc52/v2 v2.0.1 h1:HwpRHbFMcZLEVr42D4p7XBqjyuxQH5SMiErDT4WkJ2k=
 github.com/aymanbagabas/go-osc52/v2 v2.0.1/go.mod h1:uYgXzlJ7ZpABp8OJ+exZzJJhRNQ2ASbcXHWsFqH8hp8=
-github.com/charmbracelet/colorprofile v0.2.3-0.20250311203215-f60798e515dc h1:4pZI35227imm7yK2bGPcfpFEmuY1gc2YSTShr4iJBfs=
-github.com/charmbracelet/colorprofile v0.2.3-0.20250311203215-f60798e515dc/go.mod h1:X4/0JoqgTIPSFcRA/P6INZzIuyqdFY5rm8tb41s9okk=
+github.com/charmbracelet/colorprofile v0.3.2 h1:9J27WdztfJQVAQKX2WOlSSRB+5gaKqqITmrvb1uTIiI=
+github.com/charmbracelet/colorprofile v0.3.2/go.mod h1:mTD5XzNeWHj8oqHb+S1bssQb7vIHbepiebQ2kPKVKbI=
 github.com/charmbracelet/lipgloss v1.1.0 h1:vYXsiLHVkK7fp74RkV7b2kq9+zDLoEU4MZoFqR/noCY=
 github.com/charmbracelet/lipgloss v1.1.0/go.mod h1:/6Q8FR2o+kj8rz4Dq0zQc3vYf7X+B0binUUBwA0aL30=
 github.com/charmbracelet/x/ansi v0.10.1 h1:rL3Koar5XvX0pHGfovN03f5cxLbCF2YvLeyz7D2jVDQ=
@@ -33,10 +33,10 @@ github.com/mattn/go-isatty v0.0.20 h1:xfD0iDuEKnDkl03q4limB+vH+GxLEtL/jb4xVJSWWE
 github.com/mattn/go-isatty v0.0.20/go.mod h1:W+V8PltTTMOvKvAeJH7IuucS94S2C6jfK/D7dTCTo3Y=
 github.com/mattn/go-runewidth v0.0.16 h1:E5ScNMtiwvlvB5paMFdw9p4kSQzbXFikJ5SQO6TULQc=
 github.com/mattn/go-runewidth v0.0.16/go.mod h1:Jdepj2loyihRzMpdS35Xk/zdY8IAYHsh153qUoGf23w=
-github.com/mattsolo1/grove-core v0.3.0 h1:3VGh5AYF8cG1yKYYIlQK3A8Zy8KJk60va4Z1lyO6bq8=
-github.com/mattsolo1/grove-core v0.3.0/go.mod h1:nZbX5yqE9rUgvqxt5N5bz8tfL5QWEtYnjNdp5AOvO20=
-github.com/mattsolo1/grove-meta v0.3.0 h1:DxlVK5ZShIKHARRASAm+2Q/FubE3ZSa+vd56PV9HuDI=
-github.com/mattsolo1/grove-meta v0.3.0/go.mod h1:4zn0zv0RikHdfWDfqF82xnBGlstQXEmnNktfbz7v8Jg=
+github.com/mattsolo1/grove-core v0.4.0 h1:3Ggg/njGye9QFhf0j3F7oMMf/naaYKBV8zwfwvDxJz8=
+github.com/mattsolo1/grove-core v0.4.0/go.mod h1:+densY71b+POikhRVYwOY3tt+MAeu2OXs3/KQzQfuq8=
+github.com/mattsolo1/grove-meta v0.5.0 h1:MofR5hwKAEsoUnXLFSz2YVQKmcaxzqbU7Jo+nuXNs0M=
+github.com/mattsolo1/grove-meta v0.5.0/go.mod h1:lzodpxc/ItEQx9ok9M4XPuUxK08pIDupbWrHnwVta78=
 github.com/mitchellh/mapstructure v1.5.0 h1:jeMsZIYE/09sWLaz43PL7Gy6RuMjD2eJVyuac5Z2hdY=
 github.com/mitchellh/mapstructure v1.5.0/go.mod h1:bFUtVrKA4DC2yAKiSyO/QUcy7e+RRV2QTWOzhPopBRo=
 github.com/muesli/termenv v0.16.0 h1:S5AlUN9dENB57rsbnkPyfdGuWIlkmzJjbFf0Tf5FWUc=
