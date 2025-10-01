@@ -31,30 +31,22 @@ type MarkdownSection struct {
 
 // ParsedDocs represents the complete parsed documentation
 type ParsedDocs struct {
-	Introduction  string      `json:"introduction,omitempty"`
-	CoreConcepts  []Concept   `json:"core_concepts,omitempty"`
-	UsagePatterns []Pattern   `json:"usage_patterns,omitempty"`
-	BestPractices []Practice  `json:"best_practices,omitempty"`
+	Sections map[string]interface{} `json:"sections"`
 }
 
-// Concept represents a core concept
-type Concept struct {
-	Name        string `json:"name"`
-	Description string `json:"description"`
-	Example     string `json:"example"`
+// Section represents a parsed documentation section
+type Section struct {
+	Title       string       `json:"title"`
+	Content     string       `json:"content"`
+	Subsections []Subsection `json:"subsections,omitempty"`
+	CodeBlocks  []string     `json:"code_blocks,omitempty"`
 }
 
-// Pattern represents a usage pattern
-type Pattern struct {
-	Name        string `json:"name"`
-	Description string `json:"description"`
-	Example     string `json:"example"`
-}
-
-// Practice represents a best practice
-type Practice struct {
-	Title string `json:"title"`
-	Text  string `json:"text"`
+// Subsection represents a subsection within a documentation section
+type Subsection struct {
+	Title      string   `json:"title"`
+	Content    string   `json:"content"`
+	CodeBlocks []string `json:"code_blocks,omitempty"`
 }
 
 // GenerateJSON reads markdown files and generates structured JSON
@@ -66,9 +58,11 @@ func (p *Parser) GenerateJSON(packageDir string, cfg *config.DocgenConfig) error
 
 	p.logger.Info("Generating structured JSON from markdown files...")
 	
-	docs := &ParsedDocs{}
+	docs := &ParsedDocs{
+		Sections: make(map[string]interface{}),
+	}
 	
-	// Process each section based on its type
+	// Process each section dynamically
 	for _, section := range cfg.Sections {
 		mdPath := filepath.Join(packageDir, "docs", section.Output)
 		
@@ -84,24 +78,17 @@ func (p *Parser) GenerateJSON(packageDir string, cfg *config.DocgenConfig) error
 			continue
 		}
 		
-		// Parse based on section name or JSONKey
-		key := section.JSONKey
-		if key == "" {
-			key = section.Name
+		// Use section name as key
+		key := section.Name
+		if section.JSONKey != "" {
+			key = section.JSONKey
 		}
 		
-		switch key {
-		case "introduction":
-			docs.Introduction = p.parseIntroduction(string(content))
-		case "core-concepts", "core_concepts":
-			docs.CoreConcepts = p.parseConcepts(string(content))
-		case "usage-patterns", "usage_patterns":
-			docs.UsagePatterns = p.parsePatterns(string(content))
-		case "best-practices", "best_practices":
-			docs.BestPractices = p.parsePractices(string(content))
-		default:
-			p.logger.Warnf("Unknown section type: %s", key)
-		}
+		// Parse the markdown content into structured data
+		parsedSection := p.parseSection(string(content), section.Title)
+		docs.Sections[key] = parsedSection
+		
+		p.logger.Debugf("Parsed section '%s' with %d subsections", key, len(parsedSection.Subsections))
 	}
 	
 	// Write JSON output
@@ -125,89 +112,73 @@ func (p *Parser) GenerateJSON(packageDir string, cfg *config.DocgenConfig) error
 	return nil
 }
 
-// parseIntroduction extracts the introduction text from markdown
-func (p *Parser) parseIntroduction(content string) string {
-	// Remove the first heading if present
-	lines := strings.Split(content, "\n")
-	var result []string
+// parseSection parses a markdown section into structured data
+func (p *Parser) parseSection(content string, sectionTitle string) Section {
+	// Split into subsections based on ## headings
+	markdownSections := p.splitIntoSections(content, "##")
 	
+	section := Section{
+		Title: sectionTitle,
+	}
+	
+	// Extract main content (everything before first ## heading)
+	var mainContent []string
+	var codeBlocks []string
+	var inCodeBlock bool
+	var currentCodeBlock []string
+	
+	lines := strings.Split(content, "\n")
 	for _, line := range lines {
-		// Skip the main heading
+		// Stop at first ## heading
+		if strings.HasPrefix(line, "## ") {
+			break
+		}
+		
+		// Skip the main # heading
 		if strings.HasPrefix(line, "# ") {
 			continue
 		}
-		result = append(result, line)
-	}
-	
-	return strings.TrimSpace(strings.Join(result, "\n"))
-}
-
-// parseConcepts extracts concepts from markdown sections
-func (p *Parser) parseConcepts(content string) []Concept {
-	sections := p.splitIntoSections(content, "###")
-	var concepts []Concept
-	
-	for _, section := range sections {
-		if section.Title == "" {
+		
+		// Handle code blocks
+		if strings.HasPrefix(line, "```") {
+			if inCodeBlock {
+				// End of code block
+				codeBlocks = append(codeBlocks, strings.Join(currentCodeBlock, "\n"))
+				currentCodeBlock = nil
+				inCodeBlock = false
+			} else {
+				// Start of code block
+				inCodeBlock = true
+				currentCodeBlock = []string{}
+			}
 			continue
 		}
 		
-		concept := Concept{
-			Name:        section.Title,
-			Description: section.Content,
-			Example:     strings.Join(section.CodeBlocks, "\n"),
+		if inCodeBlock {
+			currentCodeBlock = append(currentCodeBlock, line)
+		} else {
+			mainContent = append(mainContent, line)
 		}
-		concepts = append(concepts, concept)
 	}
 	
-	return concepts
-}
-
-// parsePatterns extracts patterns from markdown sections
-func (p *Parser) parsePatterns(content string) []Pattern {
-	sections := p.splitIntoSections(content, "##")
-	var patterns []Pattern
+	section.Content = strings.TrimSpace(strings.Join(mainContent, "\n"))
+	section.CodeBlocks = codeBlocks
 	
-	for _, section := range sections {
-		if section.Title == "" {
+	// Parse subsections
+	for _, mdSection := range markdownSections {
+		if mdSection.Title == "" {
 			continue
 		}
 		
-		pattern := Pattern{
-			Name:        section.Title,
-			Description: section.Content,
-			Example:     strings.Join(section.CodeBlocks, "\n"),
+		subsection := Subsection{
+			Title:      mdSection.Title,
+			Content:    mdSection.Content,
+			CodeBlocks: mdSection.CodeBlocks,
 		}
-		patterns = append(patterns, pattern)
+		section.Subsections = append(section.Subsections, subsection)
 	}
 	
-	return patterns
-}
-
-// parsePractices extracts practices from markdown sections
-func (p *Parser) parsePractices(content string) []Practice {
-	sections := p.splitIntoSections(content, "##")
-	var practices []Practice
-	
-	for _, section := range sections {
-		if section.Title == "" {
-			continue
-		}
-		
-		// Combine content and code blocks for practices
-		text := section.Content
-		if len(section.CodeBlocks) > 0 {
-			text = text + "\n\n" + strings.Join(section.CodeBlocks, "\n\n")
-		}
-		
-		practice := Practice{
-			Title: section.Title,
-			Text:  text,
-		}
-		practices = append(practices, practice)
-	}
-	
-	return practices
+	return section
 }
 
 // splitIntoSections splits markdown content into sections based on heading level
