@@ -1,21 +1,20 @@
 # yaml-language-server: $schema=https://raw.githubusercontent.com/mattsolo1/grove-docgen/main/schema/docgen.config.schema.json
-enabled: true
 title: "Grove Docgen"
 description: "AI-powered documentation generator for Grove ecosystem projects"
 category: "Developer Tools"
+enabled: true
+settings:
+  output_dir: docs
+  rules_file: docs.rules
+  structured_output_file: pkg/docs/docs.json
+  system_prompt: default
+  model: gemini-2.5-pro
+  regeneration_mode: reference
 readme:
   generate_toc: true
   template: docs/README.md.tpl
   output: README.md
   source_section: overview
-settings:
-  system_prompt: "default"
-  rules_file: "docs.rules"
-  
-  # Global generation parameters
-  max_output_tokens: 6000
-  temperature: 0.4  # Balanced for technical documentation
-
 sections:
   - name: "overview"
     title: "Overview"
