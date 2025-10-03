@@ -56,7 +56,16 @@ jobs:
         # stopping at the next version tag or end of file.
         awk '/^## ${{ github.ref_name }}/{flag=1; next} /^## v/{flag=0} flag' CHANGELOG.md > release-notes.md
         echo "Extracted notes:" ; cat release-notes.md
-    
+
+    - name: Determine if pre-release
+      id: is_prerelease
+      run: |
+        if [[ "${{ github.ref_name }}" == *-* ]]; then
+          echo "is_prerelease=true" >> $GITHUB_OUTPUT
+        else
+          echo "is_prerelease=false" >> $GITHUB_OUTPUT
+        fi
+
     - name: Create release
       uses: softprops/action-gh-release@v2
       with:
@@ -66,3 +75,4 @@ jobs:
           dist/docgen-linux-amd64
           dist/docgen-linux-arm64
         body_path: release-notes.md
+        prerelease: ${{ steps.is_prerelease.outputs.is_prerelease }}
