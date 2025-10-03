@@ -3,7 +3,7 @@ module github.com/mattsolo1/grove-docgen
 go 1.24.4
 
 require (
-	github.com/mattsolo1/grove-core v0.4.0
+	github.com/mattsolo1/grove-core v0.4.1-nightly.516efdf
 	github.com/mattsolo1/grove-meta v0.5.0
 	github.com/sirupsen/logrus v1.9.3
 	github.com/spf13/cobra v1.9.1
