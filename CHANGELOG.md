@@ -1,3 +1,5 @@
+## v1.1.1-nightly.5b5626e (2025-10-03)
+
 ## v0.1.0 (2025-10-01)
 
 This release introduces a major new feature for synchronizing `README.md` files from documentation source and templates. The new `sync-readme` command (2f2950e) automates the process of keeping project READMEs up-to-date by injecting content from generated documentation. This workflow supports stripping header lines to avoid duplication (9495569), automatic table of contents generation (ff6af83), and path rewriting for both Markdown and HTML image tags to ensure they render correctly on sites like GitHub (0a69818, 57a8822). A fix was also included to prevent broken images from appearing in the generated TOC (e4cc9e5).
