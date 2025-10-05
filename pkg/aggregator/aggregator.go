@@ -31,6 +31,8 @@ func (a *Aggregator) Aggregate(outputDir string) error {
 		return fmt.Errorf("could not find ecosystem root: %w", err)
 	}
 
+	a.logger.Infof("Found ecosystem root at: %s", rootDir)
+
 	// Load the ecosystem config to get workspace paths
 	groveYmlPath := filepath.Join(rootDir, "grove.yml")
 	cfg, err := config.Load(groveYmlPath)
@@ -38,13 +40,30 @@ func (a *Aggregator) Aggregate(outputDir string) error {
 		return fmt.Errorf("could not load ecosystem config: %w", err)
 	}
 
-	// Get workspace paths from config
+	a.logger.Infof("Loaded ecosystem config with %d workspace patterns", len(cfg.Workspaces))
+
+	// Get workspace paths from config (expand glob patterns)
 	var workspaces []string
-	for _, wsRelPath := range cfg.Workspaces {
-		wsPath := filepath.Join(rootDir, wsRelPath)
-		a.logger.Debugf("Found workspace at %s", wsPath)
-		workspaces = append(workspaces, wsPath)
+	for _, wsPattern := range cfg.Workspaces {
+		pattern := filepath.Join(rootDir, wsPattern)
+		a.logger.Infof("Expanding workspace pattern: %s", wsPattern)
+
+		matches, err := filepath.Glob(pattern)
+		if err != nil {
+			a.logger.Warnf("Failed to expand pattern %s: %v", wsPattern, err)
+			continue
+		}
+
+		for _, match := range matches {
+			// Only include directories
+			if info, err := os.Stat(match); err == nil && info.IsDir() {
+				a.logger.Infof("  Found workspace: %s", match)
+				workspaces = append(workspaces, match)
+			}
+		}
 	}
+
+	a.logger.Infof("Total workspaces to process: %d", len(workspaces))
 
 	m := &manifest.Manifest{
 		Packages: []manifest.PackageManifest{},
