@@ -10,9 +10,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/mattsolo1/grove-docgen/pkg/config"
+	"github.com/mattsolo1/grove-core/config"
+	"github.com/mattsolo1/grove-core/pkg/workspace"
+	docgenConfig "github.com/mattsolo1/grove-docgen/pkg/config"
 	"github.com/mattsolo1/grove-docgen/pkg/manifest"
-	"github.com/mattsolo1/grove-meta/pkg/workspace"
 	"github.com/sirupsen/logrus"
 )
 
@@ -25,14 +26,24 @@ func New(logger *logrus.Logger) *Aggregator {
 }
 
 func (a *Aggregator) Aggregate(outputDir string) error {
-	rootDir, err := workspace.FindRoot("")
+	rootDir, err := workspace.FindEcosystemRoot("")
 	if err != nil {
-		return fmt.Errorf("could not find workspace root: %w", err)
+		return fmt.Errorf("could not find ecosystem root: %w", err)
 	}
 
-	workspaces, err := workspace.Discover(rootDir)
+	// Load the ecosystem config to get workspace paths
+	groveYmlPath := filepath.Join(rootDir, "grove.yml")
+	cfg, err := config.Load(groveYmlPath)
 	if err != nil {
-		return fmt.Errorf("could not discover workspaces: %w", err)
+		return fmt.Errorf("could not load ecosystem config: %w", err)
+	}
+
+	// Get workspace paths from config
+	var workspaces []string
+	for _, wsRelPath := range cfg.Workspaces {
+		wsPath := filepath.Join(rootDir, wsRelPath)
+		a.logger.Debugf("Found workspace at %s", wsPath)
+		workspaces = append(workspaces, wsPath)
 	}
 
 	m := &manifest.Manifest{
@@ -43,7 +54,7 @@ func (a *Aggregator) Aggregate(outputDir string) error {
 
 	for _, wsPath := range workspaces {
 		wsName := filepath.Base(wsPath)
-		cfg, err := config.Load(wsPath)
+		docCfg, err := docgenConfig.Load(wsPath)
 		if err != nil {
 			if os.IsNotExist(err) {
 				a.logger.Debugf("Skipping %s: no docgen.config.yml found", wsName)
@@ -53,7 +64,7 @@ func (a *Aggregator) Aggregate(outputDir string) error {
 			continue
 		}
 
-		if !cfg.Enabled {
+		if !docCfg.Enabled {
 			a.logger.Infof("Skipping %s: documentation is disabled in config", wsName)
 			continue
 		}
@@ -66,9 +77,9 @@ func (a *Aggregator) Aggregate(outputDir string) error {
 		// Add to manifest
 		pkgManifest := manifest.PackageManifest{
 			Name:        wsName,
-			Title:       cfg.Title,
-			Description: cfg.Description,
-			Category:    cfg.Category,
+			Title:       docCfg.Title,
+			Description: docCfg.Description,
+			Category:    docCfg.Category,
 			DocsPath:    fmt.Sprintf("./%s", wsName),
 			Version:     version,
 			RepoURL:     repoURL,
@@ -83,7 +94,7 @@ func (a *Aggregator) Aggregate(outputDir string) error {
 		}
 		
 		// Copy output files or use prompt files as placeholders
-		for _, section := range cfg.Sections {
+		for _, section := range docCfg.Sections {
 			srcFile := filepath.Join(wsPath, "docs", section.Output)
 			destFile := filepath.Join(distDest, section.Output)
 			
@@ -143,11 +154,11 @@ func (a *Aggregator) Aggregate(outputDir string) error {
 			}
 		}
 
-		sort.Slice(cfg.Sections, func(i, j int) bool {
-			return cfg.Sections[i].Order < cfg.Sections[j].Order
+		sort.Slice(docCfg.Sections, func(i, j int) bool {
+			return docCfg.Sections[i].Order < docCfg.Sections[j].Order
 		})
 
-		for _, sec := range cfg.Sections {
+		for _, sec := range docCfg.Sections {
 			pkgManifest.Sections = append(pkgManifest.Sections, manifest.SectionManifest{
 				Title: sec.Title,
 				Path:  fmt.Sprintf("./%s/%s", wsName, sec.Output),
