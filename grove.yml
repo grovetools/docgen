@@ -4,3 +4,6 @@ type: go
 binary:
   name: docgen
   path: ./bin/docgen
+
+context:
+  default_rules_path: .cx/dev-no-tests.rules
