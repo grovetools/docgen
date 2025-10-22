@@ -19,6 +19,7 @@ func init() {
 	rootCmd.AddCommand(newCustomizeCmd())
 	rootCmd.AddCommand(newRecipeCmd())
 	rootCmd.AddCommand(newSyncReadmeCmd())
+	rootCmd.AddCommand(newSchemaCmd())
 }
 
 func Execute() error {

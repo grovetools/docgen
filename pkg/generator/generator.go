@@ -10,6 +10,7 @@ import (
 
 	"github.com/mattsolo1/grove-docgen/pkg/config"
 	"github.com/mattsolo1/grove-docgen/pkg/parser"
+	"github.com/mattsolo1/grove-docgen/pkg/schema"
 	"github.com/sirupsen/logrus"
 )
 
@@ -82,7 +83,7 @@ func (g *Generator) generateInPlace(packageDir string, opts GenerateOptions) err
 
 	// 3. Build context using `cx`
 	g.logger.Info("Building context with 'cx generate'...")
-	if err := g.buildContext(packageDir); err != nil {
+	if err := g.BuildContext(packageDir); err != nil {
 		return fmt.Errorf("failed to build context: %w", err)
 	}
 
@@ -140,6 +141,13 @@ func (g *Generator) generateInPlace(packageDir string, opts GenerateOptions) err
 	
 	// 5. Generate each section
 	for _, section := range sectionsToGenerate {
+		// Handle different generation types
+		if section.Type == "schema_to_md" {
+			if err := g.generateFromSchema(packageDir, section, cfg); err != nil {
+				g.logger.WithError(err).Errorf("Schema to Markdown generation failed for section '%s'", section.Name)
+			}
+			continue
+		}
 		g.logger.Infof("Generating section: %s", section.Name)
 
 		promptPath := filepath.Join(packageDir, "docs", section.Prompt)
@@ -179,7 +187,7 @@ func (g *Generator) generateInPlace(packageDir string, opts GenerateOptions) err
 		// Merge generation configs (global + section overrides)
 		genConfig := config.MergeGenerationConfig(cfg.Settings.GenerationConfig, section.GenerationConfig)
 
-		output, err := g.callLLM(finalPrompt, model, genConfig, packageDir)
+		output, err := g.CallLLM(finalPrompt, model, genConfig, packageDir)
 		if err != nil {
 			g.logger.WithError(err).Errorf("LLM call failed for section '%s'", section.Name)
 			continue // Continue to the next section even if one fails
@@ -200,6 +208,67 @@ func (g *Generator) generateInPlace(packageDir string, opts GenerateOptions) err
 		g.logger.Infof("Successfully wrote section '%s' to %s", section.Name, outputPath)
 	}
 
+	return nil
+}
+
+const SchemaToMarkdownSystemPrompt = `You are a technical writer tasked with creating documentation from a JSON schema.
+Convert the following plain text description of a JSON schema into a user-friendly Markdown document.
+
+**Instructions:**
+- Create a clear, well-structured document.
+- Use headings for logical sections.
+- Use Markdown tables to list properties, including their type, description, and default value.
+- For nested objects, use sub-headings and separate tables.
+- Do not include any preamble or explanation about your process. Your output should be only the final Markdown document.
+---
+`
+
+func (g *Generator) generateFromSchema(packageDir string, section config.SectionConfig, cfg *config.DocgenConfig) error {
+	g.logger.Infof("Generating section from schema: %s", section.Name)
+
+	if section.Source == "" {
+		return fmt.Errorf("section type 'schema_to_md' requires a 'source' file")
+	}
+
+	schemaPath := filepath.Join(packageDir, section.Source)
+	parser, err := schema.NewParser(schemaPath)
+	if err != nil {
+		return fmt.Errorf("failed to initialize schema parser: %w", err)
+	}
+
+	schemaText, err := parser.RenderAsText()
+	if err != nil {
+		return fmt.Errorf("failed to render schema as text: %w", err)
+	}
+
+	finalPrompt := SchemaToMarkdownSystemPrompt + schemaText
+
+	// Determine model to use (section override or global)
+	model := cfg.Settings.Model
+	if section.Model != "" {
+		model = section.Model
+	}
+
+	genConfig := config.MergeGenerationConfig(cfg.Settings.GenerationConfig, section.GenerationConfig)
+
+	output, err := g.CallLLM(finalPrompt, model, genConfig, packageDir)
+	if err != nil {
+		return fmt.Errorf("LLM call failed for schema section '%s': %w", section.Name, err)
+	}
+
+	// Determine output directory
+	outputDir := cfg.Settings.OutputDir
+	if outputDir == "" {
+		outputDir = "docs"
+	}
+	outputPath := filepath.Join(packageDir, outputDir, section.Output)
+	if err := os.MkdirAll(filepath.Dir(outputPath), 0755); err != nil {
+		return fmt.Errorf("failed to create output directory for schema doc: %w", err)
+	}
+	if err := os.WriteFile(outputPath, []byte(output), 0644); err != nil {
+		return fmt.Errorf("failed to write schema doc output: %w", err)
+	}
+	g.logger.Infof("Successfully wrote schema doc section '%s' to %s", section.Name, outputPath)
 	return nil
 }
 
@@ -228,7 +297,8 @@ func (g *Generator) setupRulesFile(packageDir, rulesFile string) error {
 	return nil
 }
 
-func (g *Generator) buildContext(packageDir string) error {
+// BuildContext runs cx generate to prepare context for LLM calls
+func (g *Generator) BuildContext(packageDir string) error {
 	// Use 'grove cx generate' for workspace-awareness
 	cmd := exec.Command("grove", "cx", "generate")
 	cmd.Dir = packageDir
@@ -238,10 +308,11 @@ func (g *Generator) buildContext(packageDir string) error {
 	return cmd.Run()
 }
 
-func (g *Generator) callLLM(promptContent, model string, genConfig config.GenerationConfig, workDir string) (string, error) {
-	// Use provided model or default to gemini-1.5-flash-latest
+// CallLLM makes an LLM request with the given prompt and configuration
+func (g *Generator) CallLLM(promptContent, model string, genConfig config.GenerationConfig, workDir string) (string, error) {
+	// Use provided model or default to gemini-2.0-flash
 	if model == "" {
-		model = "gemini-1.5-flash-latest"
+		model = "gemini-2.0-flash"
 	}
 
 	// Create a temporary file for the prompt
