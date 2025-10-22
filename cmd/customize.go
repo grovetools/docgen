@@ -114,7 +114,7 @@ Examples:
 			log.Debugf("Running: flow %v", args)
 			
 			// Execute the flow command
-			flowCmd := exec.Command("flow", args...)
+			flowCmd := exec.Command("grove", append([]string{"flow"}, args...)...)
 			flowCmd.Stdout = os.Stdout
 			flowCmd.Stderr = os.Stderr
 			flowCmd.Stdin = os.Stdin

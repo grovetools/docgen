@@ -229,8 +229,8 @@ func (g *Generator) setupRulesFile(packageDir, rulesFile string) error {
 }
 
 func (g *Generator) buildContext(packageDir string) error {
-	// cx generate uses the .grove/rules file if it exists, relative to the CWD.
-	cmd := exec.Command("cx", "generate")
+	// Use 'grove cx generate' for workspace-awareness
+	cmd := exec.Command("grove", "cx", "generate")
 	cmd.Dir = packageDir
 	// Discard output to avoid contaminating the LLM response
 	cmd.Stdout = io.Discard
