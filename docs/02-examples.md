@@ -1,183 +1,311 @@
-# Examples 
+Here are three practical examples for using `grove-docgen`, demonstrating increasing complexity from a basic setup to advanced configuration and full ecosystem integration.
 
-This guide provides practical examples of using `grove-docgen` in common development workflows, from initializing a new project to using `grove-flow` for interactive documentation generation.
+### Example 1: Basic Setup
 
-## Example 1: Basic Project Setup
+This example covers initializing `grove-docgen` in a new project and generating a simple set of documentation.
 
-This example covers the fundamental workflow for a new project: initializing the configuration, customizing a prompt, and generating the documentation.
+#### Configuration (`docs/docgen.config.yml`)
 
-Assume you have a Go project and want to generate its initial documentation.
+First, run `docgen init` to create the initial configuration and prompt files. The resulting `docgen.config.yml` will look similar to this:
 
-#### 1. Initialize `docgen`
-
-Run the `docgen init` command in the project root. This command scaffolds the necessary configuration and prompt files.
-
-```bash
-docgen init --model gemini-2.5-pro --rules-file docs.rules
+```yaml
+# yaml-language-server: $schema=https://raw.githubusercontent.com/mattsolo1/grove-docgen/main/schema/docgen.config.schema.json
+enabled: true
+title: My Go Library
+description: A brief description of what this library does.
+category: Libraries
+settings:
+  model: gemini-1.5-flash-latest
+  output_dir: docs
+sections:
+  - name: introduction
+    title: Introduction
+    order: 10
+    prompt: prompts/introduction.md
+    output: introduction.md
+  - name: usage
+    title: Usage
+    order: 20
+    prompt: prompts/usage.md
+    output: usage.md
 ```
 
-This creates the following structure:
+#### Sample Prompts
 
-```
-my-go-app/
-├── docs/
-│   ├── docgen.config.yml  # Main configuration
-│   ├── docs.rules         # Context rules for 'grove-context'
-│   └── prompts/
-│       ├── 01-overview.md
-│       ├── 02-examples.md
-│       └── ... (other prompt templates)
-└── ... (your source code)
-```
+The `docgen init` command creates starter prompts.
 
-The `docs/docgen.config.yml` file is pre-filled with sections for an overview, examples, and more, all configured to use the model and rules file specified.
-
-#### 2. Customize a Prompt
-
-The generated files in `docs/prompts/` are templates that can be modified. Edit the overview prompt to be more specific to the project.
-
-Open `docs/prompts/01-overview.md` and add details about the project's features and purpose.
-
-**`docs/prompts/01-overview.md` (modified):**
+**`docs/prompts/introduction.md`:**
 ```markdown
-# Documentation Task: Project Overview
-
-You are a technical writer. Write a single-page overview for the `my-go-app` tool.
-
-## Task
-Based on the provided codebase context, create an overview that describes these specific features:
-- A caching layer.
-- A configuration file format.
-- Integration with Prometheus for metrics.
+Based on the provided project context, write a concise introduction to this project. Explain its primary purpose and the problem it solves.
 ```
 
-#### 3. Define the Context
-
-Edit the `docs/docs.rules` file to specify which source code files are relevant for generating the documentation. `grove-context` will use these rules.
-
-**`docs/docs.rules`:**
-```gitignore
-# Include all Go files, but exclude tests
-**/*.go
-!**/*_test.go
-
-# Include the main README
-README.md
+**`docs/prompts/usage.md`:**
+```markdown
+Based on the provided project context, generate a basic usage guide. Include a simple code example demonstrating how to use the core functionality.
 ```
 
-#### 4. Generate the Documentation
+#### Commands
 
-Run the `docgen generate` command. It reads the configuration, uses `grove-context` to build the context from the rules, and calls the LLM for each section defined in `docgen.config.yml`.
+1.  **Initialize Configuration:**
+    ```sh
+    docgen init
+    ```
+2.  **Generate Documentation:**
+    ```sh
+    docgen generate
+    ```
+    This command reads `docs/docgen.config.yml`, builds project context by running `grove cx generate` internally, sends each prompt to the LLM, and saves the results.
 
-```bash
-docgen generate
+#### Expected Output Structure
+
+After running the commands, your project will have the following structure:
+
+```
+.
+├── docs/
+│   ├── docgen.config.yml
+│   ├── introduction.md      # Generated documentation
+│   ├── usage.md             # Generated documentation
+│   └── prompts/
+│       ├── introduction.md
+│       └── usage.md
+└── go.mod
 ```
 
-**Expected Output:**
+### Example 2: Advanced Configuration
 
-The command generates Markdown files in the `docs/` directory, one for each section.
+This example demonstrates a more complex setup, including README synchronization, structured JSON output, and documentation generated from a JSON schema.
+
+#### Configuration (`docs/docgen.config.yml`)
+
+This configuration adds a `readme` section, a `structured_output_file`, custom context rules, and a section for generating documentation from a schema.
+
+```yaml
+# yaml-language-server: $schema=https://raw.githubusercontent.com/mattsolo1/grove-docgen/main/schema/docgen.config.schema.json
+enabled: true
+title: Advanced CLI Tool
+description: A CLI tool with advanced features and a well-defined configuration schema.
+category: Tools
+settings:
+  model: gemini-1.5-pro-latest
+  rules_file: docs.rules
+  structured_output_file: docs/generated.json
+  output_dir: docs/generated
+readme:
+  template: docs/README.md.tpl
+  output: README.md
+  source_section: introduction
+  strip_lines: 1 # Strips the H1 title from the source file
+sections:
+  - name: introduction
+    title: Introduction
+    order: 10
+    prompt: prompts/introduction.md
+    output: introduction.md
+    json_key: overview
+  - name: installation
+    title: Installation
+    order: 20
+    prompt: prompts/installation.md
+    output: installation.md
+  - name: configuration
+    title: Configuration Reference
+    order: 30
+    type: schema_to_md
+    source: schema/config.schema.json
+    output: configuration.md
+    model: gemini-1.5-flash-latest # Use a faster model for this structured task
+```
+
+#### Supporting Files
+
+*   **`docs/docs.rules` (Context Rules):**
+    ```
+    # Include all source code
+    **/*.go
+    # Exclude tests
+    !**/*_test.go
+    # Include the schema file
+    schema/config.schema.json
+    ```
+*   **`schema/config.schema.json` (Source Schema):**
+    ```json
+    {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "Tool Configuration",
+      "description": "Configuration for the Advanced CLI Tool.",
+      "type": "object",
+      "properties": {
+        "port": {
+          "type": "integer",
+          "description": "The network port to listen on."
+        },
+        "log_level": {
+          "type": "string",
+          "enum": ["debug", "info", "warn", "error"]
+        }
+      }
+    }
+    ```
+*   **`docs/README.md.tpl` (README Template):**
+    ```markdown
+    # {{ .Title }}
+
+    {{ .Description }}
+
+    <!-- DOCGEN:INTRODUCTION:START -->
+    <!-- Content will be injected here -->
+    <!-- DOCGEN:INTRODUCTION:END -->
+
+    ## More Information
+
+    See the full documentation in the `docs/generated` directory.
+    ```
+
+#### Commands
+
+1.  **Generate all documentation sections:**
+    ```sh
+    docgen generate
+    ```
+2.  **Synchronize the README:**
+    ```sh
+    docgen sync-readme
+    ```
+3.  **(Optional) Regenerate JSON from Markdown:** If you manually edit the Markdown files, you can update the JSON without calling the LLM again.
+    ```sh
+    docgen regen-json
+    ```
+
+#### Expected Output Structure
+
+The process generates documentation, a structured JSON file, and updates the root `README.md`.
 
 ```
-my-go-app/
-└── docs/
-    ├── 01-overview.md         # Generated documentation
-    ├── 02-examples.md         # Generated documentation
-    ├── ...
-    ├── docgen.config.yml
-    ├── docs.rules
-    └── prompts/
+.
+├── README.md                # Generated from template
+├── docs/
+│   ├── docgen.config.yml
+│   ├── docs.rules
+│   ├── README.md.tpl
+│   ├── generated.json         # Structured JSON output
+│   └── generated/
+│       ├── introduction.md
+│       ├── installation.md
+│       └── configuration.md   # Generated from schema
+└── schema/
+    └── config.schema.json
+```
+
+### Example 3: Grove Ecosystem Integration
+
+This example shows how `grove-docgen` operates in a monorepo (or "ecosystem") with multiple packages, aggregating all documentation into a central directory for a website.
+
+#### Project Structure
+
+```
+.
+├── grove.yml
+├── Makefile
+├── dist/                  # Aggregated output appears here
+└── packages/
+    ├── tool-a/
+    │   ├── docs/
+    │   │   └── docgen.config.yml
+    │   └── ...
+    └── lib-b/
+        ├── docs/
+        │   └── docgen.config.yml
         └── ...
 ```
 
-This process produces a documentation set based on the source code and custom prompts.
+#### Configuration
 
-## Example 2: Advanced Configuration for a Complex Project
+*   **`grove.yml` (Ecosystem Root):**
+    ```yaml
+    workspaces:
+      - "packages/*"
+    ```
+*   **`packages/tool-a/docs/docgen.config.yml`:**
+    ```yaml
+    enabled: true
+    title: Tool A
+    description: The first tool in the ecosystem.
+    category: Tools
+    # ... sections ...
+    ```
+*   **`packages/lib-b/docs/docgen.config.yml`:**
+    ```yaml
+    enabled: true
+    title: Library B
+    description: A shared library used by other tools.
+    category: Libraries
+    # ... sections ...
+    ```
+*   **`Makefile` (Ecosystem Root):**
+    ```makefile
+    .PHONY: docs
 
-This example demonstrates features for a larger project, such as using different models, controlling regeneration, and generating structured data.
+    docs: generate-docs aggregate-docs
 
-#### 1. Configure Advanced Settings
+    generate-docs:
+    	@echo "Generating documentation for all packages..."
+    	grove ws foreach --no-private -- exec docgen generate
 
-Modify `docgen.config.yml` for more granular control.
+    aggregate-docs:
+    	@echo "Aggregating all documentation..."
+    	docgen aggregate -o dist
+    ```
 
--   **Section-Specific Model**: Use a different model for the overview than for the command reference.
--   **Reference Mode**: Use `regeneration_mode: reference` to have the LLM improve existing documentation rather than writing it from scratch.
--   **Structured Output**: Configure `structured_output_file` to generate a JSON file alongside the Markdown for programmatic use.
+#### Commands
 
-**`docs/docgen.config.yml` (snippet):**
-```yaml
-# yaml-language-server: $schema=...
-title: "My Advanced Tool"
-description: "..."
-enabled: true
-settings:
-  model: gemini-2.0-flash  # Default to a fast model
-  regeneration_mode: reference
-  rules_file: docs.rules
-  structured_output_file: pkg/docs/docs.json
-sections:
-  - name: overview
-    order: 1
-    output: 01-overview.md
-    prompt: prompts/01-overview.md
-    title: Overview
-    model: gemini-2.5-pro # Override with a different model for this section
-  - name: command-reference
-    order: 2
-    output: 02-command-reference.md
-    prompt: prompts/02-command-reference.md
-    title: Command Reference
-    json_key: command_reference # Key for the structured JSON output
+From the ecosystem root, a single command can generate and aggregate all documentation.
+
+```sh
+make docs
 ```
 
-#### 2. Generate a Single Section
+This workflow performs two main actions:
+1.  `grove ws foreach ... exec docgen generate`: Runs `docgen generate` inside each package defined in `grove.yml`. This leverages `grove-context` to build context relevant to each specific package.
+2.  `docgen aggregate -o dist`: Scans all workspace packages, finds the generated documentation for those with `enabled: true`, copies the artifacts into the `dist` directory, and creates a `manifest.json`.
 
-To regenerate only one part of the documentation, use the `--section` flag.
+#### Expected Output Structure
 
-```bash
-docgen generate --section overview
+The `dist` directory contains all documentation, organized by package, with a manifest file that a static site generator can use to build navigation.
+
+```
+./dist/
+├── manifest.json
+├── tool-a/
+│   ├── introduction.md
+│   └── usage.md
+└── lib-b/
+    ├── introduction.md
+    └── api-reference.md
 ```
 
-This re-runs the LLM call only for the "overview" section.
-
-#### 3. Regenerate the Structured JSON
-
-After generating the Markdown, the structured JSON output can be updated without calling the LLM again. The `regen-json` command parses existing Markdown files and builds the JSON file.
-
-```bash
-docgen regen-json
+**`dist/manifest.json` (Excerpt):**
+```json
+{
+  "packages": [
+    {
+      "name": "tool-a",
+      "title": "Tool A",
+      "description": "The first tool in the ecosystem.",
+      "category": "Tools",
+      "docs_path": "./tool-a",
+      "version": "v1.2.0",
+      "sections": [
+        { "title": "Introduction", "path": "./tool-a/introduction.md" },
+        { "title": "Usage", "path": "./tool-a/usage.md" }
+      ]
+    },
+    {
+      "name": "lib-b",
+      "title": "Library B",
+      // ...
+    }
+  ],
+  "generated_at": "..."
+}
 ```
-
-This creates or updates `pkg/docs/docs.json` based on the content of the generated documentation, providing a machine-readable version of the docs.
-
-## Example 3: Interactive Customization with Grove Flow
-
-For projects where the documentation structure is not yet defined, `grove-docgen` integrates with `grove-flow` to interactively build the documentation plan with an AI agent.
-
-#### 1. Create a Customization Plan
-
-The `docgen customize` command creates a `grove-flow` plan, which is a series of steps for an AI agent to follow.
-
-```bash
-docgen customize --recipe-type agent
-```
-
-This command inspects `docgen.config.yml` and creates a new plan in the `plans/` directory. The plan contains jobs for an AI agent to:
-1.  Review the project's source code.
-2.  Discuss the documentation structure.
-3.  Refine the prompt files for each section.
-4.  Run the `docgen generate` command to produce the documentation.
-
-#### 2. Run the Interactive Plan
-
-Start the workflow with `flow run`.
-
-```bash
-# The plan name will be printed by the 'customize' command
-flow run plans/docgen-customize-agent-my-go-app
-```
-
-This command launches an interactive `tmux` session where an AI agent begins executing the plan.
-
-#### 3. Collaborate with the Agent
-
-Inside the `tmux` session, you can provide instructions to the agent and review its work. This human-in-the-loop process allows for guiding the AI to create a documentation plan tailored to the project. Once the process is complete, the agent executes the final generation step.
