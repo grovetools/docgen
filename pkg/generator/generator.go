@@ -333,8 +333,8 @@ func (g *Generator) CallLLM(promptContent, model string, genConfig config.Genera
 	args := []string{
 		"llm",
 		"request",
-		"--model", model,
 		"--file", promptFile.Name(),
+		"--model", model,
 		"--yes",
 	}
 
@@ -353,10 +353,9 @@ func (g *Generator) CallLLM(promptContent, model string, genConfig config.Genera
 	}
 
 	cmd := exec.Command("grove", args...)
-	cmd.Dir = workDir // Run in the isolated clone directory
-	// Let stderr go to console for debug output, capture only stdout
+	cmd.Dir = workDir
 	cmd.Stderr = os.Stderr
-	
+
 	output, err := cmd.Output()
 	if err != nil {
 		return "", fmt.Errorf("grove llm request failed: %w", err)
