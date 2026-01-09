@@ -1,16 +1,20 @@
 package schema_enricher
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 
+	grovelogging "github.com/mattsolo1/grove-core/logging"
 	"github.com/mattsolo1/grove-docgen/pkg/config"
 	"github.com/mattsolo1/grove-docgen/pkg/generator"
 	"github.com/sirupsen/logrus"
 )
+
+var ulog = grovelogging.NewUnifiedLogger("grove-docgen.enricher")
 
 // Enricher handles the process of enriching a JSON schema.
 type Enricher struct {
@@ -100,13 +104,18 @@ func (e *Enricher) Enrich(projectDir, schemaPath string, inPlace bool) error {
 		return fmt.Errorf("failed to marshal updated schema: %w", err)
 	}
 
+	ctx := context.Background()
 	if inPlace {
 		if err := os.WriteFile(schemaPath, updatedData, 0644); err != nil {
 			return fmt.Errorf("failed to write updated schema file: %w", err)
 		}
 		e.logger.Infof("Successfully enriched schema in-place: %s", schemaPath)
 	} else {
-		fmt.Println(string(updatedData))
+		ulog.Info("Enriched schema output").
+			Field("schema_path", schemaPath).
+			PrettyOnly().
+			Pretty(string(updatedData)).
+			Log(ctx)
 	}
 
 	return nil

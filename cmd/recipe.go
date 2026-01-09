@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 
@@ -26,6 +27,7 @@ func newRecipePrintCmd() *cobra.Command {
 		Short: "Print available recipes in JSON format",
 		Long:  "Print all available documentation recipes in a format suitable for grove-flow integration",
 		RunE: func(cmd *cobra.Command, args []string) error {
+			ctx := context.Background()
 			collection := make(recipes.RecipeCollection)
 
 			// Load the docgen-customize-agent recipe
@@ -54,7 +56,12 @@ func newRecipePrintCmd() *cobra.Command {
 			if err != nil {
 				return fmt.Errorf("failed to marshal recipes to JSON: %w", err)
 			}
-			fmt.Println(string(jsonData))
+
+			ulog.Info("Recipe collection").
+				Field("recipe_count", len(collection)).
+				PrettyOnly().
+				Pretty(string(jsonData)).
+				Log(ctx)
 
 			return nil
 		},

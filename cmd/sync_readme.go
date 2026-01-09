@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"context"
 	"fmt"
 	"os"
 
@@ -22,6 +23,7 @@ This command reads a template file (e.g., README.md.tpl), injects a specified do
 
 It provides a single source of truth for your project's overview, keeping the README in sync with your formal documentation.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
+			ctx := context.Background()
 			cwd, err := os.Getwd()
 			if err != nil {
 				return fmt.Errorf("failed to get current working directory: %w", err)
@@ -36,7 +38,9 @@ It provides a single source of truth for your project's overview, keeping the RE
 					return fmt.Errorf("cannot use --generate-source without a configured 'readme.source_section'")
 				}
 
-				prettyLog.InfoPretty(fmt.Sprintf("Generating source section '%s' before sync...", cfg.Readme.SourceSection))
+				ulog.Info("Generating source section before sync").
+					Field("section", cfg.Readme.SourceSection).
+					Log(ctx)
 				gen := generator.New(getLogger())
 				opts := generator.GenerateOptions{
 					Sections: []string{cfg.Readme.SourceSection},
@@ -47,15 +51,14 @@ It provides a single source of truth for your project's overview, keeping the RE
 			}
 
 			sync := readme.New(getLogger())
-			
-			// Use pretty logging for user-friendly output
-			prettyLog.InfoPretty("Synchronizing README from template and documentation...")
+
+			ulog.Info("Synchronizing README from template and documentation").Log(ctx)
 			err = sync.Sync(cwd)
 			if err != nil {
 				return err
 			}
-			
-			prettyLog.Success("✓ README.md synchronized successfully")
+
+			ulog.Success("README.md synchronized successfully").Log(ctx)
 			return nil
 		},
 	}
