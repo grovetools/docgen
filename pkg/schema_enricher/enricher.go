@@ -1,7 +1,6 @@
 package schema_enricher
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -104,7 +103,7 @@ func (e *Enricher) Enrich(projectDir, schemaPath string, inPlace bool) error {
 		return fmt.Errorf("failed to marshal updated schema: %w", err)
 	}
 
-	ctx := context.Background()
+	
 	if inPlace {
 		if err := os.WriteFile(schemaPath, updatedData, 0644); err != nil {
 			return fmt.Errorf("failed to write updated schema file: %w", err)
@@ -115,7 +114,7 @@ func (e *Enricher) Enrich(projectDir, schemaPath string, inPlace bool) error {
 			Field("schema_path", schemaPath).
 			PrettyOnly().
 			Pretty(string(updatedData)).
-			Log(ctx)
+			Emit()
 	}
 
 	return nil

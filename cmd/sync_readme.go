@@ -1,7 +1,6 @@
 package cmd
 
 import (
-	"context"
 	"fmt"
 	"os"
 
@@ -23,7 +22,7 @@ This command reads a template file (e.g., README.md.tpl), injects a specified do
 
 It provides a single source of truth for your project's overview, keeping the README in sync with your formal documentation.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			ctx := context.Background()
+			
 			cwd, err := os.Getwd()
 			if err != nil {
 				return fmt.Errorf("failed to get current working directory: %w", err)
@@ -40,7 +39,7 @@ It provides a single source of truth for your project's overview, keeping the RE
 
 				ulog.Info("Generating source section before sync").
 					Field("section", cfg.Readme.SourceSection).
-					Log(ctx)
+					Emit()
 				gen := generator.New(getLogger())
 				opts := generator.GenerateOptions{
 					Sections: []string{cfg.Readme.SourceSection},
@@ -52,13 +51,13 @@ It provides a single source of truth for your project's overview, keeping the RE
 
 			sync := readme.New(getLogger())
 
-			ulog.Info("Synchronizing README from template and documentation").Log(ctx)
+			ulog.Info("Synchronizing README from template and documentation").Emit()
 			err = sync.Sync(cwd)
 			if err != nil {
 				return err
 			}
 
-			ulog.Success("README.md synchronized successfully").Log(ctx)
+			ulog.Success("README.md synchronized successfully").Emit()
 			return nil
 		},
 	}

@@ -1,7 +1,6 @@
 package cmd
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
 	"io/fs"
@@ -45,7 +44,7 @@ Examples:
   docgen customize --recipe-type prompts  # Create plan with prompts recipe
   flow run                                # Run the plan after creation`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			ctx := context.Background()
+			
 
 			// Check if this is the print-recipes subcommand
 			if len(args) > 0 && args[0] == "print-recipes" {
@@ -62,8 +61,8 @@ Examples:
 			if err != nil {
 				ulog.Error("Failed to load docgen.config.yml").
 					Err(err).
-					Log(ctx)
-				ulog.Info("Please run 'docgen init' first to create the configuration file").Log(ctx)
+					Emit()
+				ulog.Info("Please run 'docgen init' first to create the configuration file").Emit()
 				return err
 			}
 
@@ -77,8 +76,8 @@ Examples:
 			default:
 				ulog.Error("Invalid recipe type").
 					Field("recipe_type", recipeType).
-					Log(ctx)
-				ulog.Info("Valid options are: agent, prompts").Log(ctx)
+					Emit()
+				ulog.Info("Valid options are: agent, prompts").Emit()
 				return fmt.Errorf("invalid recipe type: %s", recipeType)
 			}
 			
@@ -117,7 +116,7 @@ Examples:
 			ulog.Info("Creating customization plan").
 				Field("plan_name", planName).
 				Field("recipe_type", recipeType).
-				Log(ctx)
+				Emit()
 			log.Debugf("Running: flow %v", args)
 
 			// Execute the flow command
@@ -134,23 +133,23 @@ Examples:
 				Field("plan_name", planName).
 				Field("recipe_type", recipeType).
 				Field("location", fmt.Sprintf("plans/%s", planName)).
-				Log(ctx)
+				Emit()
 
 			ulog.Info("Next steps").
 				PrettyOnly().
 				Pretty("\nNext steps:\n  1. Run 'flow run' to start the customization process").
-				Log(ctx)
+				Emit()
 
 			if recipeType == "agent" {
 				ulog.Info("Agent customization").
 					PrettyOnly().
 					Pretty("  2. The agent will interactively help you customize and generate documentation").
-					Log(ctx)
+					Emit()
 			} else {
 				ulog.Info("Prompts customization").
 					PrettyOnly().
 					Pretty("  2. Follow the prompts to customize your documentation structure\n  3. The generation job will create documentation based on your customizations").
-					Log(ctx)
+					Emit()
 			}
 
 			return nil
@@ -185,7 +184,7 @@ func loadDocgenConfig(dir string) (*config.DocgenConfig, error) {
 
 // printRecipes prints all available recipes in JSON format (for grove-flow integration)
 func printRecipes() error {
-	ctx := context.Background()
+	
 	collection := make(recipes.RecipeCollection)
 
 	// Load the docgen-customize-agent recipe
@@ -212,7 +211,7 @@ func printRecipes() error {
 		Field("recipe_count", len(collection)).
 		PrettyOnly().
 		Pretty(string(jsonData)).
-		Log(ctx)
+		Emit()
 
 	return nil
 }

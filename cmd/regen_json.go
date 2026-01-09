@@ -1,7 +1,6 @@
 package cmd
 
 import (
-	"context"
 	"fmt"
 	"os"
 
@@ -18,7 +17,7 @@ func newRegenJSONCmd() *cobra.Command {
 
 This command does not call any LLMs or modify the markdown files. It's a quick way to update the JSON output if the parsing logic changes or if you have manually edited the markdown files.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			ctx := context.Background()
+			
 			cwd, err := os.Getwd()
 			if err != nil {
 				return err
@@ -33,7 +32,7 @@ This command does not call any LLMs or modify the markdown files. It's a quick w
 			}
 
 			if cfg.Settings.StructuredOutputFile == "" {
-				ulog.Info("No 'structured_output_file' configured. Nothing to do.").Log(ctx)
+				ulog.Info("No 'structured_output_file' configured. Nothing to do.").Emit()
 				return nil
 			}
 
