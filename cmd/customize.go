@@ -9,6 +9,8 @@ import (
 	"path/filepath"
 	"strings"
 
+	coreConfig "github.com/mattsolo1/grove-core/config"
+	"github.com/mattsolo1/grove-core/pkg/workspace"
 	"github.com/mattsolo1/grove-docgen/pkg/config"
 	"github.com/mattsolo1/grove-docgen/pkg/recipes"
 	"github.com/spf13/cobra"
@@ -98,7 +100,7 @@ Examples:
 			} else {
 				args = append(args, "--recipe-vars", "model=gemini-1.5-flash-latest")
 			}
-			
+
 			if cfg.Settings.RulesFile != "" {
 				// The rules file is relative to docs/, so prepend docs/ for the full path
 				rulesPath := filepath.Join("docs", cfg.Settings.RulesFile)
@@ -106,11 +108,22 @@ Examples:
 			} else {
 				args = append(args, "--recipe-vars", "rules_file=docs/docs.rules")
 			}
-			
+
 			if cfg.Settings.OutputDir != "" {
 				args = append(args, "--recipe-vars", fmt.Sprintf("output_dir=%s", cfg.Settings.OutputDir))
 			} else {
 				args = append(args, "--recipe-vars", "output_dir=docs")
+			}
+
+			// Resolve and add prompts directory from notebook
+			if node, err := workspace.GetProjectByPath(cwd); err == nil {
+				if coreCfg, err := coreConfig.LoadDefault(); err == nil {
+					locator := workspace.NewNotebookLocator(coreCfg)
+					if promptsDir, err := locator.GetDocgenPromptsDir(node); err == nil {
+						args = append(args, "--recipe-vars", fmt.Sprintf("prompts_dir=%s", promptsDir))
+						log.Debugf("Using prompts directory from notebook: %s", promptsDir)
+					}
+				}
 			}
 			
 			ulog.Info("Creating customization plan").

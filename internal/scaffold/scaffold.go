@@ -106,6 +106,10 @@ func InitWithOptions(projectType string, opts InitOptions, logger *logrus.Logger
 	}
 
 	logger.Info("✅ Docgen initialized successfully.")
+	logger.Info("✓ Created docs/prompts/ with starter prompts")
+	logger.Info("")
+	logger.Info("💡 If you use grove-notebook, run 'docgen migrate-prompts' to move prompts to your notebook")
+	logger.Info("")
 	logger.Info("   Next steps: 1. Edit docs/docgen.config.yml to match your project.")
 	if opts.RulesFile != "" {
 		logger.Infof("               2. Review and customize the rules in docs/%s.", opts.RulesFile)

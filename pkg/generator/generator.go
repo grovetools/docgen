@@ -1,6 +1,7 @@
 package generator
 
 import (
+	"bytes"
 	"fmt"
 	"io"
 	"os"
@@ -8,6 +9,8 @@ import (
 	"path/filepath"
 	"strings"
 
+	coreConfig "github.com/mattsolo1/grove-core/config"
+	"github.com/mattsolo1/grove-core/pkg/workspace"
 	"github.com/mattsolo1/grove-docgen/pkg/config"
 	"github.com/mattsolo1/grove-docgen/pkg/parser"
 	"github.com/mattsolo1/grove-docgen/pkg/schema"
@@ -62,6 +65,62 @@ func (g *Generator) GenerateWithOptions(packageDir string, opts GenerateOptions)
 	}
 
 	return nil
+}
+
+// resolvePromptContent finds and reads a prompt file, trying notebook location first.
+// It follows this resolution order:
+// 1. Tries to resolve the workspace and get the notebook prompts directory
+// 2. Looks for the prompt in the notebook directory (using basename only)
+// 3. Falls back to the legacy path in docs/prompts/
+// Returns the prompt content or an error if not found in either location.
+func (g *Generator) resolvePromptContent(packageDir, promptFile string) ([]byte, error) {
+	// Extract basename only - ignore any directory prefix for backward compatibility
+	promptBaseName := filepath.Base(promptFile)
+
+	// 1. Try to get workspace node for the package directory
+	node, err := workspace.GetProjectByPath(packageDir)
+	if err != nil {
+		// Fallback: Can't resolve workspace, use legacy path
+		g.logger.Warnf("Could not resolve workspace for %s. Falling back to legacy prompt path.", packageDir)
+		legacyPath := filepath.Join(packageDir, "docs", promptFile)
+		return os.ReadFile(legacyPath)
+	}
+
+	// 2. Try notebook path first
+	cfg, err := coreConfig.LoadDefault()
+	if err == nil {
+		locator := workspace.NewNotebookLocator(cfg)
+		notebookPromptsDir, err := locator.GetDocgenPromptsDir(node)
+
+		if err == nil {
+			notebookPath := filepath.Join(notebookPromptsDir, promptBaseName)
+			if data, err := os.ReadFile(notebookPath); err == nil {
+				g.logger.Debugf("Loaded prompt '%s' from notebook: %s", promptBaseName, notebookPath)
+				return data, nil
+			}
+		}
+	}
+
+	// 3. Fallback to legacy path
+	legacyPath := filepath.Join(packageDir, "docs", promptFile)
+	g.logger.Debugf("Prompt not found in notebook, trying legacy path: %s", legacyPath)
+	data, err := os.ReadFile(legacyPath)
+	if err != nil {
+		// Enhanced error message showing both paths attempted
+		notebookPromptsDir := "unable to resolve"
+		if cfg, cfgErr := coreConfig.LoadDefault(); cfgErr == nil {
+			locator := workspace.NewNotebookLocator(cfg)
+			if dir, dirErr := locator.GetDocgenPromptsDir(node); dirErr == nil {
+				notebookPromptsDir = dir
+			}
+		}
+		return nil, fmt.Errorf(
+			"prompt '%s' not found in notebook (%s) or legacy location (%s)",
+			promptBaseName, notebookPromptsDir, legacyPath,
+		)
+	}
+
+	return data, nil
 }
 
 // generateInPlace runs the core doc generation logic within a given directory.
@@ -150,10 +209,10 @@ func (g *Generator) generateInPlace(packageDir string, opts GenerateOptions) err
 		}
 		g.logger.Infof("Generating section: %s", section.Name)
 
-		promptPath := filepath.Join(packageDir, "docs", section.Prompt)
-		promptContent, err := os.ReadFile(promptPath)
+		// Use the new prompt resolution method that checks notebook first
+		promptContent, err := g.resolvePromptContent(packageDir, section.Prompt)
 		if err != nil {
-			return fmt.Errorf("failed to read prompt file %s: %w", promptPath, err)
+			return fmt.Errorf("could not resolve prompt for section '%s': %w", section.Name, err)
 		}
 
 		// Build the final prompt with system prompt prepended if available
@@ -354,17 +413,45 @@ func (g *Generator) CallLLM(promptContent, model string, genConfig config.Genera
 
 	cmd := exec.Command("grove", args...)
 	cmd.Dir = workDir
-	cmd.Stderr = os.Stderr
 
-	output, err := cmd.Output()
+	// Capture both stdout and stderr
+	var stdout, stderr bytes.Buffer
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+
+	err = cmd.Run()
 	if err != nil {
+		// Log the stderr for debugging
+		g.logger.Debugf("LLM stderr: %s", stderr.String())
 		return "", fmt.Errorf("grove llm request failed: %w", err)
 	}
-	
+
+	// Try stdout first, which should now have the content
+	// (after fixing gemapi to output to stdout)
+	output := stdout.Bytes()
+	if len(output) == 0 {
+		// Fallback to stderr for backward compatibility
+		// (in case older version of grove llm is being used)
+		output = stderr.Bytes()
+
+		// If we're using stderr, we need to extract just the content
+		// The stderr contains logs + token usage box + actual content
+		// Find the last occurrence of the token usage box closing
+		stderrStr := string(output)
+
+		// Look for the end of the token usage box: "╰──────────────────────────────────╯"
+		boxEnd := strings.LastIndex(stderrStr, "╰──────────────────────────────────╯")
+		if boxEnd != -1 {
+			// Content starts after the box
+			content := stderrStr[boxEnd+len("╰──────────────────────────────────╯"):]
+			output = []byte(strings.TrimSpace(content))
+		}
+	}
+
 	// Clean up the output
 	response := string(output)
 	response = strings.TrimSpace(response)
-	
+
 	// Remove markdown code fences if present
 	if strings.HasPrefix(response, "```markdown") || strings.HasPrefix(response, "```md") {
 		lines := strings.Split(response, "\n")
@@ -377,10 +464,10 @@ func (g *Generator) CallLLM(promptContent, model string, genConfig config.Genera
 			response = strings.Join(lines[1:len(lines)-1], "\n")
 		}
 	}
-	
+
 	// Clean up any remaining issues
 	// The response should be clean markdown at this point
-	
+
 	return response, nil
 }
 

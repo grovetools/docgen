@@ -20,6 +20,7 @@ func init() {
 	rootCmd.AddCommand(newRecipeCmd())
 	rootCmd.AddCommand(newSyncReadmeCmd())
 	rootCmd.AddCommand(newSchemaCmd())
+	rootCmd.AddCommand(newMigratePromptsCmd())
 }
 
 func Execute() error {

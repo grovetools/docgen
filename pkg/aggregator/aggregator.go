@@ -116,30 +116,24 @@ func (a *Aggregator) Aggregate(outputDir string) error {
 		for _, section := range docCfg.Sections {
 			srcFile := filepath.Join(wsPath, "docs", section.Output)
 			destFile := filepath.Join(distDest, section.Output)
-			
+
 			// Check if the actual documentation file exists
 			if _, err := os.Stat(srcFile); os.IsNotExist(err) {
 				// Try to use the prompt file as a placeholder
-				promptFile := filepath.Join(wsPath, "docs", "prompts", section.Prompt)
-				if _, promptErr := os.Stat(promptFile); promptErr == nil {
+				// Resolve prompt using notebook location first
+				promptData, promptErr := a.resolvePromptForWorkspace(wsPath, section.Prompt)
+				if promptErr == nil {
 					a.logger.Infof("Using prompt file as placeholder for %s/%s", wsName, section.Output)
-					
-					// Read the prompt file
-					promptData, err := os.ReadFile(promptFile)
-					if err != nil {
-						a.logger.WithError(err).Errorf("Failed to read prompt %s", promptFile)
-						continue
-					}
-					
+
 					// Add a header to indicate this is a placeholder
 					placeholder := fmt.Sprintf("# %s\n\n*Note: This is a placeholder generated from the prompt file. Full documentation is pending.*\n\n---\n\n%s", section.Title, string(promptData))
-					
+
 					if err := os.WriteFile(destFile, []byte(placeholder), 0644); err != nil {
 						a.logger.WithError(err).Errorf("Failed to write placeholder %s", destFile)
 						continue
 					}
 				} else {
-					a.logger.Warnf("No documentation or prompt found for %s/%s", wsName, section.Output)
+					a.logger.Warnf("No documentation or prompt found for %s/%s: %v", wsName, section.Output, promptErr)
 					continue
 				}
 			} else {
@@ -272,6 +266,42 @@ func (a *Aggregator) getRepoURL(wsPath string) string {
 	url = strings.TrimSuffix(url, ".git")
 	
 	return url
+}
+
+// resolvePromptForWorkspace finds and reads a prompt file for a given workspace,
+// trying notebook location first, then falling back to legacy location.
+func (a *Aggregator) resolvePromptForWorkspace(wsPath, promptFile string) ([]byte, error) {
+	// Extract basename only for backward compatibility
+	promptBaseName := filepath.Base(promptFile)
+
+	// 1. Try to get workspace node
+	node, err := workspace.GetProjectByPath(wsPath)
+	if err != nil {
+		// Fallback: Can't resolve workspace, use legacy path
+		a.logger.Debugf("Could not resolve workspace for %s, trying legacy path", wsPath)
+		legacyPath := filepath.Join(wsPath, "docs", "prompts", promptFile)
+		return os.ReadFile(legacyPath)
+	}
+
+	// 2. Try notebook path first
+	cfg, err := config.LoadDefault()
+	if err == nil {
+		locator := workspace.NewNotebookLocator(cfg)
+		notebookPromptsDir, err := locator.GetDocgenPromptsDir(node)
+
+		if err == nil {
+			notebookPath := filepath.Join(notebookPromptsDir, promptBaseName)
+			if data, err := os.ReadFile(notebookPath); err == nil {
+				a.logger.Debugf("Loaded prompt '%s' from notebook: %s", promptBaseName, notebookPath)
+				return data, nil
+			}
+		}
+	}
+
+	// 3. Fallback to legacy path
+	legacyPath := filepath.Join(wsPath, "docs", "prompts", promptFile)
+	a.logger.Debugf("Prompt not found in notebook, trying legacy path: %s", legacyPath)
+	return os.ReadFile(legacyPath)
 }
 
 // applyStripLines removes specified number of lines from the beginning of content during aggregation
