@@ -1,47 +1,43 @@
-# yaml-language-server: $schema=https://raw.githubusercontent.com/mattsolo1/grove-docgen/main/schema/docgen.config.schema.json
-title: "Grove Docgen"
-description: "AI-powered documentation generator for Grove ecosystem projects"
-category: "Developer Tools"
 enabled: true
+title: Grove Docgen
+description: AI-powered documentation generator for Grove ecosystem projects
+category: Developer Tools
 settings:
-  output_dir: docs
-  rules_file: docs.rules
-  structured_output_file: pkg/docs/docs.json
-  system_prompt: default
-  model: gemini-2.5-pro
-  regeneration_mode: reference
-readme:
-  generate_toc: true
-  template: docs/README.md.tpl
-  output: README.md
-  source_section: overview
+    model: gemini-2.5-pro
+    regeneration_mode: reference
+    rules_file: docs.rules
+    structured_output_file: pkg/docs/docs.json
+    system_prompt: default
+    output_dir: docs
 sections:
-  - name: "overview"
-    title: "Overview"
-    order: 1
-    prompt: "prompts/01-overview.md"
-    output: "01-overview.md"
-    max_output_tokens: 4000
-    temperature: 0.3
-    
-  - name: "examples"
-    title: "Examples"
-    order: 2
-    prompt: "prompts/02-examples.md"
-    output: "02-examples.md"
-    temperature: 0.2
-    
-  - name: "configuration"
-    title: "Configuration"
-    order: 3
-    prompt: "prompts/03-configuration.md"
-    output: "03-configuration.md"
-    max_output_tokens: 6000
-    temperature: 0.1
-    
-  - name: "command-reference"
-    title: "Command Reference"
-    order: 4
-    prompt: "prompts/04-command-reference.md"
-    output: "04-command-reference.md"
-    temperature: 0.1
+    - name: overview
+      title: Overview
+      order: 1
+      prompt: 01-overview.md
+      output: 01-overview.md
+      temperature: 0.3
+      max_output_tokens: 4000
+    - name: examples
+      title: Examples
+      order: 2
+      prompt: 02-examples.md
+      output: 02-examples.md
+      temperature: 0.2
+    - name: configuration
+      title: Configuration
+      order: 3
+      prompt: 03-configuration.md
+      output: 03-configuration.md
+      temperature: 0.1
+      max_output_tokens: 6000
+    - name: command-reference
+      title: Command Reference
+      order: 4
+      prompt: 04-command-reference.md
+      output: 04-command-reference.md
+      temperature: 0.1
+readme:
+    template: docs/README.md.tpl
+    output: README.md
+    source_section: overview
+    generate_toc: true
