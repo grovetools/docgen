@@ -5,12 +5,12 @@ import (
 	"fmt"
 	"io/fs"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 
 	coreConfig "github.com/mattsolo1/grove-core/config"
 	"github.com/mattsolo1/grove-core/pkg/workspace"
+	"github.com/mattsolo1/grove-core/util/delegation"
 	"github.com/mattsolo1/grove-docgen/pkg/config"
 	"github.com/mattsolo1/grove-docgen/pkg/recipes"
 	"github.com/spf13/cobra"
@@ -133,7 +133,8 @@ Examples:
 			log.Debugf("Running: flow %v", args)
 
 			// Execute the flow command
-			flowCmd := exec.Command("grove", append([]string{"flow"}, args...)...)
+			cmdArgs := append([]string{"flow"}, args...)
+			flowCmd := delegation.Command(cmdArgs[0], cmdArgs[1:]...)
 			flowCmd.Stdout = os.Stdout
 			flowCmd.Stderr = os.Stderr
 			flowCmd.Stdin = os.Stdin

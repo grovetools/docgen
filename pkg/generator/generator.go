@@ -5,12 +5,12 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 
 	coreConfig "github.com/mattsolo1/grove-core/config"
 	"github.com/mattsolo1/grove-core/pkg/workspace"
+	"github.com/mattsolo1/grove-core/util/delegation"
 	"github.com/mattsolo1/grove-docgen/pkg/config"
 	"github.com/mattsolo1/grove-docgen/pkg/parser"
 	"github.com/mattsolo1/grove-docgen/pkg/schema"
@@ -359,7 +359,7 @@ func (g *Generator) setupRulesFile(packageDir, rulesFile string) error {
 // BuildContext runs cx generate to prepare context for LLM calls
 func (g *Generator) BuildContext(packageDir string) error {
 	// Use 'grove cx generate' for workspace-awareness
-	cmd := exec.Command("grove", "cx", "generate")
+	cmd := delegation.Command("cx", "generate")
 	cmd.Dir = packageDir
 	// Discard output to avoid contaminating the LLM response
 	cmd.Stdout = io.Discard
@@ -411,7 +411,7 @@ func (g *Generator) CallLLM(promptContent, model string, genConfig config.Genera
 		args = append(args, "--max-output-tokens", fmt.Sprintf("%d", *genConfig.MaxOutputTokens))
 	}
 
-	cmd := exec.Command("grove", args...)
+	cmd := delegation.Command(args[0], args[1:]...)
 	cmd.Dir = workDir
 
 	// Capture both stdout and stderr
