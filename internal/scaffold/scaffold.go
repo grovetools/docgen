@@ -57,7 +57,7 @@ func InitWithOptions(projectType string, opts InitOptions, logger *logrus.Logger
 	if err := copyAndCustomizeConfig(configSrcPath, configDest, opts); err != nil {
 		return err
 	}
-	logger.Infof("✓ Created configuration file: %s", filepath.Join("docs", "docgen.config.yml"))
+	logger.Infof("* Created configuration file: %s", filepath.Join("docs", "docgen.config.yml"))
 
 	// 4. Copy README.md.tpl to docs directory
 	readmeTplSrc := filepath.Join("templates", projectType, "docs", "README.md.tpl")
@@ -66,7 +66,7 @@ func InitWithOptions(projectType string, opts InitOptions, logger *logrus.Logger
 		if err := copyFileFromFS(readmeTplSrc, readmeTplDest); err != nil {
 			return fmt.Errorf("failed to copy README.md.tpl: %w", err)
 		}
-		logger.Infof("✓ Created README template: %s", filepath.Join("docs", "README.md.tpl"))
+		logger.Infof("* Created README template: %s", filepath.Join("docs", "README.md.tpl"))
 	}
 
 	// 5. Create rules file if specified
@@ -80,9 +80,9 @@ func InitWithOptions(projectType string, opts InitOptions, logger *logrus.Logger
 			if err := os.WriteFile(rulesPath, []byte(rulesContent), 0644); err != nil {
 				return fmt.Errorf("failed to create rules file: %w", err)
 			}
-			logger.Infof("✓ Created rules file: %s", filepath.Join("docs", opts.RulesFile))
+			logger.Infof("* Created rules file: %s", filepath.Join("docs", opts.RulesFile))
 		} else if err == nil {
-			logger.Infof("✓ Rules file already exists: %s", filepath.Join("docs", opts.RulesFile))
+			logger.Infof("* Rules file already exists: %s", filepath.Join("docs", opts.RulesFile))
 		}
 	}
 
@@ -101,14 +101,14 @@ func InitWithOptions(projectType string, opts InitOptions, logger *logrus.Logger
 			if err := copyFileFromFS(src, dest); err != nil {
 				return err
 			}
-			logger.Infof("✓ Created prompt file: %s", filepath.Join("docs", "prompts", entry.Name()))
+			logger.Infof("* Created prompt file: %s", filepath.Join("docs", "prompts", entry.Name()))
 		}
 	}
 
-	logger.Info("✅ Docgen initialized successfully.")
-	logger.Info("✓ Created docs/prompts/ with starter prompts")
+	logger.Info(" Docgen initialized successfully.")
+	logger.Info("* Created docs/prompts/ with starter prompts")
 	logger.Info("")
-	logger.Info("💡 If you use grove-notebook, run 'docgen migrate-prompts' to move prompts to your notebook")
+	logger.Info("Tip: If you use grove-notebook, run 'docgen migrate-prompts' to move prompts to your notebook")
 	logger.Info("")
 	logger.Info("   Next steps: 1. Edit docs/docgen.config.yml to match your project.")
 	if opts.RulesFile != "" {
