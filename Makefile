@@ -2,7 +2,7 @@
 
 BINARY_NAME=docgen
 BIN_DIR=bin
-VERSION_PKG=github.com/mattsolo1/grove-core/version
+VERSION_PKG=github.com/grovetools/core/version
 
 # --- Versioning ---
 GIT_COMMIT ?= $(shell git rev-parse --short HEAD)
