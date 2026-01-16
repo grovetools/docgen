@@ -5,9 +5,9 @@ import (
 	"os"
 	"path/filepath"
 
-	coreConfig "github.com/mattsolo1/grove-core/config"
-	"github.com/mattsolo1/grove-core/pkg/workspace"
-	"github.com/mattsolo1/grove-docgen/pkg/config"
+	coreConfig "github.com/grovetools/core/config"
+	"github.com/grovetools/core/pkg/workspace"
+	"github.com/grovetools/docgen/pkg/config"
 	"github.com/spf13/cobra"
 	"gopkg.in/yaml.v3"
 )

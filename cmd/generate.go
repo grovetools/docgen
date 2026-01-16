@@ -3,7 +3,7 @@ package cmd
 import (
 	"os"
 
-	"github.com/mattsolo1/grove-docgen/pkg/generator"
+	"github.com/grovetools/docgen/pkg/generator"
 	"github.com/spf13/cobra"
 )
 

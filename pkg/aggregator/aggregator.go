@@ -10,10 +10,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/mattsolo1/grove-core/config"
-	"github.com/mattsolo1/grove-core/pkg/workspace"
-	docgenConfig "github.com/mattsolo1/grove-docgen/pkg/config"
-	"github.com/mattsolo1/grove-docgen/pkg/manifest"
+	"github.com/grovetools/core/config"
+	"github.com/grovetools/core/pkg/workspace"
+	docgenConfig "github.com/grovetools/docgen/pkg/config"
+	"github.com/grovetools/docgen/pkg/manifest"
 	"github.com/sirupsen/logrus"
 )
 

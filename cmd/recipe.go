@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/mattsolo1/grove-docgen/pkg/recipes"
+	"github.com/grovetools/docgen/pkg/recipes"
 	"github.com/spf13/cobra"
 )
 

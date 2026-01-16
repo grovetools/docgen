@@ -1,7 +1,7 @@
 package cmd
 
 import (
-	"github.com/mattsolo1/grove-docgen/pkg/aggregator"
+	"github.com/grovetools/docgen/pkg/aggregator"
 	"github.com/spf13/cobra"
 )
 

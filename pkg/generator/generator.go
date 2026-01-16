@@ -8,12 +8,12 @@ import (
 	"path/filepath"
 	"strings"
 
-	coreConfig "github.com/mattsolo1/grove-core/config"
-	"github.com/mattsolo1/grove-core/pkg/workspace"
-	"github.com/mattsolo1/grove-core/util/delegation"
-	"github.com/mattsolo1/grove-docgen/pkg/config"
-	"github.com/mattsolo1/grove-docgen/pkg/parser"
-	"github.com/mattsolo1/grove-docgen/pkg/schema"
+	coreConfig "github.com/grovetools/core/config"
+	"github.com/grovetools/core/pkg/workspace"
+	"github.com/grovetools/core/util/delegation"
+	"github.com/grovetools/docgen/pkg/config"
+	"github.com/grovetools/docgen/pkg/parser"
+	"github.com/grovetools/docgen/pkg/schema"
 	"github.com/sirupsen/logrus"
 )
 

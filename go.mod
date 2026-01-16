@@ -1,9 +1,9 @@
-module github.com/mattsolo1/grove-docgen
+module github.com/grovetools/docgen
 
 go 1.24.4
 
 require (
-	github.com/mattsolo1/grove-core v0.5.0
+	github.com/grovetools/core v0.0.1
 	github.com/sirupsen/logrus v1.9.3
 	github.com/spf13/cobra v1.9.1
 	gopkg.in/yaml.v3 v3.0.1

@@ -3,7 +3,7 @@ package main
 import (
 	"os"
 
-	"github.com/mattsolo1/grove-docgen/cmd"
+	"github.com/grovetools/docgen/cmd"
 )
 
 func main() {

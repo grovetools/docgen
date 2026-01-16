@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/mattsolo1/grove-docgen/pkg/schema_enricher"
+	"github.com/grovetools/docgen/pkg/schema_enricher"
 	"github.com/spf13/cobra"
 )
 

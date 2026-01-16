@@ -3,7 +3,7 @@ package cmd
 import (
 	"fmt"
 
-	"github.com/mattsolo1/grove-docgen/internal/scaffold"
+	"github.com/grovetools/docgen/internal/scaffold"
 	"github.com/spf13/cobra"
 )
 

@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/mattsolo1/grove-docgen/pkg/config"
-	"github.com/mattsolo1/grove-docgen/pkg/parser"
+	"github.com/grovetools/docgen/pkg/config"
+	"github.com/grovetools/docgen/pkg/parser"
 	"github.com/spf13/cobra"
 )
 

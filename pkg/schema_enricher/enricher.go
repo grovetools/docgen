@@ -7,9 +7,9 @@ import (
 	"path/filepath"
 	"strings"
 
-	grovelogging "github.com/mattsolo1/grove-core/logging"
-	"github.com/mattsolo1/grove-docgen/pkg/config"
-	"github.com/mattsolo1/grove-docgen/pkg/generator"
+	grovelogging "github.com/grovetools/core/logging"
+	"github.com/grovetools/docgen/pkg/config"
+	"github.com/grovetools/docgen/pkg/generator"
 	"github.com/sirupsen/logrus"
 )
 

@@ -8,7 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/mattsolo1/grove-docgen/pkg/config"
+	"github.com/grovetools/docgen/pkg/config"
 	"github.com/sirupsen/logrus"
 )
 
