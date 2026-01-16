@@ -1,5 +1,5 @@
 enabled: true
-title: Grove Docgen
+title: docgen
 description: AI-powered documentation generator for Grove ecosystem projects
 category: Developer Tools
 settings:
