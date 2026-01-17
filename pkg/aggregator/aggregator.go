@@ -167,6 +167,28 @@ func (a *Aggregator) Aggregate(outputDir string) error {
 			}
 		}
 
+		// Copy asciicasts directory if it exists
+		asciicastsSrcPath := filepath.Join(wsPath, "docs", "asciicasts")
+		if _, err := os.Stat(asciicastsSrcPath); err == nil {
+			asciicastsDestPath := filepath.Join(distDest, "asciicasts")
+			a.logger.Infof("Copying asciicasts for %s from %s to %s", wsName, asciicastsSrcPath, asciicastsDestPath)
+			if err := copyDir(asciicastsSrcPath, asciicastsDestPath); err != nil {
+				a.logger.WithError(err).Errorf("Failed to copy asciicasts directory for %s", wsName)
+				// Log error but continue
+			}
+		}
+
+		// Copy videos directory if it exists
+		videosSrcPath := filepath.Join(wsPath, "docs", "videos")
+		if _, err := os.Stat(videosSrcPath); err == nil {
+			videosDestPath := filepath.Join(distDest, "videos")
+			a.logger.Infof("Copying videos for %s from %s to %s", wsName, videosSrcPath, videosDestPath)
+			if err := copyDir(videosSrcPath, videosDestPath); err != nil {
+				a.logger.WithError(err).Errorf("Failed to copy videos directory for %s", wsName)
+				// Log error but continue
+			}
+		}
+
 		sort.Slice(docCfg.Sections, func(i, j int) bool {
 			return docCfg.Sections[i].Order < docCfg.Sections[j].Order
 		})
