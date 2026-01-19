@@ -136,8 +136,10 @@ func (g *Generator) generateInPlace(packageDir string, opts GenerateOptions) err
 	// 2. Determine output base directory based on config location
 	var outputBaseDir string
 
-	// Check if config was loaded from notebook by checking if path contains ".grove/notebooks" or ".notebook"
-	if strings.Contains(configPath, ".grove/notebooks") || strings.Contains(configPath, "/.notebook/") {
+	// Check if config was loaded from notebook by checking if config path is outside the repo
+	// (notebook configs won't be under packageDir)
+	isNotebookMode := !strings.HasPrefix(configPath, packageDir)
+	if isNotebookMode {
 		// Output to notebook's docgen/docs/ directory
 		docgenDir := filepath.Dir(configPath) // configPath is docgenDir/docgen.config.yml
 		outputBaseDir = filepath.Join(docgenDir, "docs")
