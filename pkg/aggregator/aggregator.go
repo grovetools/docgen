@@ -110,19 +110,10 @@ func (a *Aggregator) Aggregate(outputDir string, mode string) error {
 			RepoURL:     repoURL,
 		}
 
-		// Copy generated files and build section manifest
-		// Copy only the markdown output files specified in the config, not everything in docs/
-		distDest := filepath.Join(outputDir, wsName)
-		if err := os.MkdirAll(distDest, 0755); err != nil {
-			a.logger.WithError(err).Errorf("Failed to create output directory for %s", wsName)
-			continue
-		}
-		
 		// Resolve docs directory (notebook or repo)
 		docsDir := a.resolveDocsDirForWorkspace(wsPath)
 
-		// Copy output files or use prompt files as placeholders
-		// Filter sections based on mode
+		// Filter sections based on mode BEFORE creating output directory
 		var sectionsToAggregate []docgenConfig.SectionConfig
 		for _, section := range docCfg.Sections {
 			status := section.GetStatus()
@@ -140,6 +131,15 @@ func (a *Aggregator) Aggregate(outputDir string, mode string) error {
 		// Skip this package entirely if no sections are available after filtering
 		if len(sectionsToAggregate) == 0 {
 			a.logger.Infof("Skipping package %s: no sections available in %s mode", wsName, mode)
+			continue
+		}
+
+		// Copy generated files and build section manifest
+		// Copy only the markdown output files specified in the config, not everything in docs/
+		// Create output directory only if we have sections to copy
+		distDest := filepath.Join(outputDir, wsName)
+		if err := os.MkdirAll(distDest, 0755); err != nil {
+			a.logger.WithError(err).Errorf("Failed to create output directory for %s", wsName)
 			continue
 		}
 
