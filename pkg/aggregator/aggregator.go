@@ -137,6 +137,12 @@ func (a *Aggregator) Aggregate(outputDir string, mode string) error {
 			sectionsToAggregate = append(sectionsToAggregate, section)
 		}
 
+		// Skip this package entirely if no sections are available after filtering
+		if len(sectionsToAggregate) == 0 {
+			a.logger.Infof("Skipping package %s: no sections available in %s mode", wsName, mode)
+			continue
+		}
+
 		for _, section := range sectionsToAggregate {
 			srcFile := filepath.Join(docsDir, section.Output)
 			destFile := filepath.Join(distDest, section.Output)
