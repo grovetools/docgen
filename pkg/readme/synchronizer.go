@@ -23,7 +23,7 @@ func New(logger *logrus.Logger) *Synchronizer {
 
 // Sync performs the README synchronization for a given package directory.
 func (s *Synchronizer) Sync(packageDir string) error {
-	cfg, err := config.Load(packageDir)
+	cfg, configPath, err := config.LoadWithNotebook(packageDir)
 	if err != nil {
 		if os.IsNotExist(err) {
 			s.logger.Debugf("Skipping README sync: no docgen.config.yml found in %s", packageDir)
@@ -56,11 +56,24 @@ func (s *Synchronizer) Sync(packageDir string) error {
 	}
 
 	// Check if the source documentation file exists
-	outputDir := cfg.Settings.OutputDir
-	if outputDir == "" {
-		outputDir = "docs"
+	// If config is in notebook, look for docs in notebook's docgen/docs/
+	// Otherwise look in package directory
+	var sourceDocPath string
+	if strings.Contains(configPath, ".grove/notebooks") || strings.Contains(configPath, "/.notebook/") {
+		// Notebook mode: docs are in docgen/docs/
+		configDir := filepath.Dir(configPath)
+		sourceDocPath = filepath.Join(configDir, "docs", sourceSectionConfig.Output)
+		s.logger.Debugf("Looking for source doc in notebook: %s", sourceDocPath)
+	} else {
+		// Repo mode: docs are in configured output_dir
+		outputDir := cfg.Settings.OutputDir
+		if outputDir == "" {
+			outputDir = "docs"
+		}
+		sourceDocPath = filepath.Join(packageDir, outputDir, sourceSectionConfig.Output)
+		s.logger.Debugf("Looking for source doc in repo: %s", sourceDocPath)
 	}
-	sourceDocPath := filepath.Join(packageDir, outputDir, sourceSectionConfig.Output)
+
 	if _, err := os.Stat(sourceDocPath); os.IsNotExist(err) {
 		return fmt.Errorf("source documentation file not found: %s. Run 'docgen generate --section %s' first", sourceDocPath, cfg.Readme.SourceSection)
 	}
@@ -85,7 +98,22 @@ func (s *Synchronizer) Sync(packageDir string) error {
 	}
 
 	// Read template content
-	templatePath := filepath.Join(packageDir, cfg.Readme.Template)
+	// If template path starts with docgen/, resolve from config location (notebook)
+	// Otherwise resolve from package directory (legacy)
+	var templatePath string
+	if strings.HasPrefix(cfg.Readme.Template, "docgen/") {
+		// Template is in notebook's docgen directory
+		configDir := filepath.Dir(configPath)
+		// Remove "docgen/" prefix since we're already in the config dir (which is docgen/)
+		templateRelPath := strings.TrimPrefix(cfg.Readme.Template, "docgen/")
+		templatePath = filepath.Join(configDir, templateRelPath)
+		s.logger.Debugf("Resolving template from notebook: %s", templatePath)
+	} else {
+		// Legacy: template in package directory
+		templatePath = filepath.Join(packageDir, cfg.Readme.Template)
+		s.logger.Debugf("Resolving template from package: %s", templatePath)
+	}
+
 	templateContentBytes, err := os.ReadFile(templatePath)
 	if err != nil {
 		return fmt.Errorf("failed to read README template file %s: %w", templatePath, err)
