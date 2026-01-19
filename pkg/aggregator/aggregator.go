@@ -118,9 +118,9 @@ func (a *Aggregator) Aggregate(outputDir string, mode string) error {
 		for _, section := range docCfg.Sections {
 			status := section.GetStatus()
 
-			// In prod mode, only include production sections
+			// In prod mode, include dev and production sections (exclude draft)
 			// In dev mode, include all sections
-			if mode == "prod" && status != docgenConfig.StatusProduction {
+			if mode == "prod" && status == docgenConfig.StatusDraft {
 				a.logger.Debugf("Skipping %s/%s (status: %s, mode: %s)", wsName, section.Output, status, mode)
 				continue
 			}
