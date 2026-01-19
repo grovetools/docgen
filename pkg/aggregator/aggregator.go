@@ -156,9 +156,9 @@ func (a *Aggregator) Aggregate(outputDir string) error {
 			}
 		}
 
-		// Copy images directory if it exists
-		imagesSrcPath := filepath.Join(wsPath, "docs", "images")
-		if _, err := os.Stat(imagesSrcPath); err == nil {
+		// Copy images directory - try notebook location first, then docs/
+		imagesSrcPath := a.resolveAssetsDirForWorkspace(wsPath, "images")
+		if imagesSrcPath != "" {
 			imagesDestPath := filepath.Join(distDest, "images")
 			a.logger.Infof("Copying images for %s from %s to %s", wsName, imagesSrcPath, imagesDestPath)
 			if err := copyDir(imagesSrcPath, imagesDestPath); err != nil {
@@ -167,9 +167,9 @@ func (a *Aggregator) Aggregate(outputDir string) error {
 			}
 		}
 
-		// Copy asciicasts directory if it exists
-		asciicastsSrcPath := filepath.Join(wsPath, "docs", "asciicasts")
-		if _, err := os.Stat(asciicastsSrcPath); err == nil {
+		// Copy asciicasts directory - try notebook location first, then docs/
+		asciicastsSrcPath := a.resolveAssetsDirForWorkspace(wsPath, "asciicasts")
+		if asciicastsSrcPath != "" {
 			asciicastsDestPath := filepath.Join(distDest, "asciicasts")
 			a.logger.Infof("Copying asciicasts for %s from %s to %s", wsName, asciicastsSrcPath, asciicastsDestPath)
 			if err := copyDir(asciicastsSrcPath, asciicastsDestPath); err != nil {
@@ -178,9 +178,9 @@ func (a *Aggregator) Aggregate(outputDir string) error {
 			}
 		}
 
-		// Copy videos directory if it exists
-		videosSrcPath := filepath.Join(wsPath, "docs", "videos")
-		if _, err := os.Stat(videosSrcPath); err == nil {
+		// Copy videos directory - try notebook location first, then docs/
+		videosSrcPath := a.resolveAssetsDirForWorkspace(wsPath, "videos")
+		if videosSrcPath != "" {
 			videosDestPath := filepath.Join(distDest, "videos")
 			a.logger.Infof("Copying videos for %s from %s to %s", wsName, videosSrcPath, videosDestPath)
 			if err := copyDir(videosSrcPath, videosDestPath); err != nil {
@@ -288,6 +288,50 @@ func (a *Aggregator) getRepoURL(wsPath string) string {
 	url = strings.TrimSuffix(url, ".git")
 	
 	return url
+}
+
+// resolveAssetsDirForWorkspace finds the assets directory for a given workspace,
+// trying notebook location first, then falling back to docs/ directory.
+// Returns empty string if the directory doesn't exist in either location.
+func (a *Aggregator) resolveAssetsDirForWorkspace(wsPath, assetType string) string {
+	// 1. Try to get workspace node
+	node, err := workspace.GetProjectByPath(wsPath)
+	if err != nil {
+		// Fallback: Can't resolve workspace, use legacy path
+		a.logger.Debugf("Could not resolve workspace for %s, trying docs/ path", wsPath)
+		legacyPath := filepath.Join(wsPath, "docs", assetType)
+		if _, err := os.Stat(legacyPath); err == nil {
+			return legacyPath
+		}
+		return ""
+	}
+
+	// 2. Try notebook path first
+	cfg, err := config.LoadDefault()
+	if err == nil {
+		locator := workspace.NewNotebookLocator(cfg)
+		promptsDir, err := locator.GetDocgenPromptsDir(node)
+
+		if err == nil {
+			// GetDocgenPromptsDir returns the prompts subdirectory (docgen/prompts)
+			// Assets live at the parent level (docgen/images, docgen/asciicasts, etc.)
+			docgenDir := filepath.Dir(promptsDir)
+			notebookPath := filepath.Join(docgenDir, assetType)
+			if _, err := os.Stat(notebookPath); err == nil {
+				a.logger.Debugf("Found %s directory in notebook: %s", assetType, notebookPath)
+				return notebookPath
+			}
+		}
+	}
+
+	// 3. Fallback to legacy docs/ path
+	legacyPath := filepath.Join(wsPath, "docs", assetType)
+	if _, err := os.Stat(legacyPath); err == nil {
+		a.logger.Debugf("Found %s directory in docs/: %s", assetType, legacyPath)
+		return legacyPath
+	}
+
+	return ""
 }
 
 // resolvePromptForWorkspace finds and reads a prompt file for a given workspace,
