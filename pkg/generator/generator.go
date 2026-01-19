@@ -127,10 +127,29 @@ func (g *Generator) resolvePromptContent(packageDir, promptFile string) ([]byte,
 func (g *Generator) generateInPlace(packageDir string, opts GenerateOptions) error {
 	g.logger.Infof("Generating documentation in: %s", packageDir)
 
-	// 1. Load config from the package directory
-	cfg, err := config.Load(packageDir)
+	// 1. Load config from the package directory (tries notebook first, then repo)
+	cfg, configPath, err := config.LoadWithNotebook(packageDir)
 	if err != nil {
 		return fmt.Errorf("failed to load docgen config: %w", err)
+	}
+
+	// 2. Determine output base directory based on config location
+	var outputBaseDir string
+
+	// Check if config was loaded from notebook by checking if path contains ".grove/notebooks" or ".notebook"
+	if strings.Contains(configPath, ".grove/notebooks") || strings.Contains(configPath, "/.notebook/") {
+		// Output to notebook's docgen/docs/ directory
+		docgenDir := filepath.Dir(configPath) // configPath is docgenDir/docgen.config.yml
+		outputBaseDir = filepath.Join(docgenDir, "docs")
+		g.logger.Infof("Using notebook mode: config from %s, outputting to %s", configPath, outputBaseDir)
+	} else {
+		// Output to repo's configured output_dir (default: docs/)
+		if cfg.Settings.OutputDir != "" {
+			outputBaseDir = filepath.Join(packageDir, cfg.Settings.OutputDir)
+		} else {
+			outputBaseDir = filepath.Join(packageDir, "docs")
+		}
+		g.logger.Infof("Using repo mode: config from %s, outputting to %s", configPath, outputBaseDir)
 	}
 
 	// 2. Setup rules file if specified
@@ -202,7 +221,7 @@ func (g *Generator) generateInPlace(packageDir string, opts GenerateOptions) err
 	for _, section := range sectionsToGenerate {
 		// Handle different generation types
 		if section.Type == "schema_to_md" {
-			if err := g.generateFromSchema(packageDir, section, cfg); err != nil {
+			if err := g.generateFromSchema(packageDir, section, cfg, outputBaseDir); err != nil {
 				g.logger.WithError(err).Errorf("Schema to Markdown generation failed for section '%s'", section.Name)
 			}
 			continue
@@ -223,12 +242,7 @@ func (g *Generator) generateInPlace(packageDir string, opts GenerateOptions) err
 
 		// Handle reference mode
 		if cfg.Settings.RegenerationMode == "reference" {
-			// Determine the output path based on OutputDir setting
-			outputDir := cfg.Settings.OutputDir
-			if outputDir == "" {
-				outputDir = "docs"
-			}
-			existingOutputPath := filepath.Join(packageDir, outputDir, section.Output)
+			existingOutputPath := filepath.Join(outputBaseDir, section.Output)
 			if existingDocs, err := os.ReadFile(existingOutputPath); err == nil {
 				g.logger.Debugf("Injecting reference content from %s", existingOutputPath)
 				finalPrompt = "For your reference, here is the previous version of the documentation:\n\n<reference_docs>\n" +
@@ -252,12 +266,8 @@ func (g *Generator) generateInPlace(packageDir string, opts GenerateOptions) err
 			continue // Continue to the next section even if one fails
 		}
 
-		// 6. Write output to the configured output directory
-		outputDir := cfg.Settings.OutputDir
-		if outputDir == "" {
-			outputDir = "docs"
-		}
-		outputPath := filepath.Join(packageDir, outputDir, section.Output)
+		// 6. Write output to the determined output directory
+		outputPath := filepath.Join(outputBaseDir, section.Output)
 		if err := os.MkdirAll(filepath.Dir(outputPath), 0755); err != nil {
 			return fmt.Errorf("failed to create output directory: %w", err)
 		}
@@ -282,7 +292,7 @@ Convert the following plain text description of a JSON schema into a user-friend
 ---
 `
 
-func (g *Generator) generateFromSchema(packageDir string, section config.SectionConfig, cfg *config.DocgenConfig) error {
+func (g *Generator) generateFromSchema(packageDir string, section config.SectionConfig, cfg *config.DocgenConfig, outputBaseDir string) error {
 	g.logger.Infof("Generating section from schema: %s", section.Name)
 
 	if section.Source == "" {
@@ -315,12 +325,8 @@ func (g *Generator) generateFromSchema(packageDir string, section config.Section
 		return fmt.Errorf("LLM call failed for schema section '%s': %w", section.Name, err)
 	}
 
-	// Determine output directory
-	outputDir := cfg.Settings.OutputDir
-	if outputDir == "" {
-		outputDir = "docs"
-	}
-	outputPath := filepath.Join(packageDir, outputDir, section.Output)
+	// Write to the determined output directory
+	outputPath := filepath.Join(outputBaseDir, section.Output)
 	if err := os.MkdirAll(filepath.Dir(outputPath), 0755); err != nil {
 		return fmt.Errorf("failed to create output directory for schema doc: %w", err)
 	}

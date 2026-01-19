@@ -21,6 +21,8 @@ func init() {
 	rootCmd.AddCommand(newSyncReadmeCmd())
 	rootCmd.AddCommand(newSchemaCmd())
 	rootCmd.AddCommand(newMigratePromptsCmd())
+	rootCmd.AddCommand(newMigrateConfigCmd())
+	rootCmd.AddCommand(newSyncCmd())
 }
 
 func Execute() error {

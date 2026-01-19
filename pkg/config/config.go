@@ -5,6 +5,8 @@ import (
 	"os"
 	"path/filepath"
 
+	coreConfig "github.com/grovetools/core/config"
+	"github.com/grovetools/core/pkg/workspace"
 	"gopkg.in/yaml.v3"
 )
 
@@ -66,22 +68,59 @@ type ReadmeConfig struct {
 
 // Load attempts to load a docgen.config.yml file from a given directory's docs/ subdirectory.
 func Load(dir string) (*DocgenConfig, error) {
-	configPath := filepath.Join(dir, "docs", ConfigFileName)
-	if _, err := os.Stat(configPath); os.IsNotExist(err) {
-		return nil, os.ErrNotExist
+	cfg, _, err := LoadWithNotebook(dir)
+	return cfg, err
+}
+
+// LoadWithNotebook tries to load docgen config from notebook location first, then falls back to repo docs/.
+// Returns the config, the path where it was found, and any error.
+// The returned path indicates whether we're in "notebook mode" or "repo mode".
+func LoadWithNotebook(repoDir string) (*DocgenConfig, string, error) {
+	// 1. Try to resolve workspace node for repoDir
+	node, err := workspace.GetProjectByPath(repoDir)
+	if err == nil {
+		// 2. Try notebook config path
+		cfg, cfgErr := coreConfig.LoadDefault()
+		if cfgErr == nil {
+			locator := workspace.NewNotebookLocator(cfg)
+			docgenDir, docgenErr := locator.GetDocgenDir(node)
+			if docgenErr == nil {
+				notebookConfigPath := filepath.Join(docgenDir, ConfigFileName)
+				if _, statErr := os.Stat(notebookConfigPath); statErr == nil {
+					// 3. Config exists in notebook, load it
+					data, readErr := os.ReadFile(notebookConfigPath)
+					if readErr != nil {
+						return nil, "", fmt.Errorf("failed to read %s: %w", notebookConfigPath, readErr)
+					}
+
+					var config DocgenConfig
+					if unmarshalErr := yaml.Unmarshal(data, &config); unmarshalErr != nil {
+						return nil, "", fmt.Errorf("failed to parse %s: %w", notebookConfigPath, unmarshalErr)
+					}
+
+					return &config, notebookConfigPath, nil
+				}
+			}
+		}
 	}
 
-	data, err := os.ReadFile(configPath)
+	// 4. Fallback to repo docs/docgen.config.yml
+	repoConfigPath := filepath.Join(repoDir, "docs", ConfigFileName)
+	if _, err := os.Stat(repoConfigPath); os.IsNotExist(err) {
+		return nil, "", os.ErrNotExist
+	}
+
+	data, err := os.ReadFile(repoConfigPath)
 	if err != nil {
-		return nil, fmt.Errorf("failed to read %s: %w", configPath, err)
+		return nil, "", fmt.Errorf("failed to read %s: %w", repoConfigPath, err)
 	}
 
 	var config DocgenConfig
 	if err := yaml.Unmarshal(data, &config); err != nil {
-		return nil, fmt.Errorf("failed to parse %s: %w", configPath, err)
+		return nil, "", fmt.Errorf("failed to parse %s: %w", repoConfigPath, err)
 	}
 
-	return &config, nil
+	return &config, repoConfigPath, nil
 }
 
 // MergeGenerationConfig merges section-specific overrides with global defaults

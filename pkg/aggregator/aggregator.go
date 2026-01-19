@@ -112,9 +112,12 @@ func (a *Aggregator) Aggregate(outputDir string) error {
 			continue
 		}
 		
+		// Resolve docs directory (notebook or repo)
+		docsDir := a.resolveDocsDirForWorkspace(wsPath)
+
 		// Copy output files or use prompt files as placeholders
 		for _, section := range docCfg.Sections {
-			srcFile := filepath.Join(wsPath, "docs", section.Output)
+			srcFile := filepath.Join(docsDir, section.Output)
 			destFile := filepath.Join(distDest, section.Output)
 
 			// Check if the actual documentation file exists
@@ -288,6 +291,39 @@ func (a *Aggregator) getRepoURL(wsPath string) string {
 	url = strings.TrimSuffix(url, ".git")
 	
 	return url
+}
+
+// resolveDocsDirForWorkspace finds the docs directory for a given workspace,
+// trying notebook location first, then falling back to repo docs/ directory.
+// Returns the path to the docs directory to use for reading documentation files.
+func (a *Aggregator) resolveDocsDirForWorkspace(wsPath string) string {
+	// 1. Try to get workspace node
+	node, err := workspace.GetProjectByPath(wsPath)
+	if err != nil {
+		// Fallback: Can't resolve workspace, use repo path
+		a.logger.Debugf("Could not resolve workspace for %s, using repo docs/ path", wsPath)
+		return filepath.Join(wsPath, "docs")
+	}
+
+	// 2. Try notebook path first
+	cfg, err := config.LoadDefault()
+	if err == nil {
+		locator := workspace.NewNotebookLocator(cfg)
+		docgenDir, err := locator.GetDocgenDir(node)
+
+		if err == nil {
+			notebookDocsPath := filepath.Join(docgenDir, "docs")
+			if _, err := os.Stat(notebookDocsPath); err == nil {
+				a.logger.Debugf("Found docs directory in notebook: %s", notebookDocsPath)
+				return notebookDocsPath
+			}
+		}
+	}
+
+	// 3. Fallback to repo docs/ path
+	repoDocsPath := filepath.Join(wsPath, "docs")
+	a.logger.Debugf("Using repo docs directory: %s", repoDocsPath)
+	return repoDocsPath
 }
 
 // resolveAssetsDirForWorkspace finds the assets directory for a given workspace,
