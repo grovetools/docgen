@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	coreConfig "github.com/grovetools/core/config"
+	"github.com/grovetools/core/logging"
 	"github.com/grovetools/core/pkg/workspace"
 	"github.com/grovetools/core/util/delegation"
 	"github.com/grovetools/docgen/pkg/config"
@@ -16,6 +17,8 @@ import (
 	"github.com/grovetools/docgen/pkg/schema"
 	"github.com/sirupsen/logrus"
 )
+
+var ulog = logging.NewUnifiedLogger("grove-docgen")
 
 // Generator handles the documentation generation for a single package.
 type Generator struct {
@@ -144,6 +147,10 @@ func (g *Generator) generateInPlace(packageDir string, opts GenerateOptions) err
 		docgenDir := filepath.Dir(configPath) // configPath is docgenDir/docgen.config.yml
 		outputBaseDir = filepath.Join(docgenDir, "docs")
 		g.logger.Infof("Using notebook mode: config from %s, outputting to %s", configPath, outputBaseDir)
+		ulog.Info("Notebook mode").
+			Field("config", configPath).
+			Field("output", outputBaseDir).
+			Emit()
 	} else {
 		// Output to repo's configured output_dir (default: docs/)
 		if cfg.Settings.OutputDir != "" {
@@ -152,6 +159,10 @@ func (g *Generator) generateInPlace(packageDir string, opts GenerateOptions) err
 			outputBaseDir = filepath.Join(packageDir, "docs")
 		}
 		g.logger.Infof("Using repo mode: config from %s, outputting to %s", configPath, outputBaseDir)
+		ulog.Info("Repo mode").
+			Field("config", configPath).
+			Field("output", outputBaseDir).
+			Emit()
 	}
 
 	// 2. Setup rules file if specified
@@ -277,6 +288,10 @@ func (g *Generator) generateInPlace(packageDir string, opts GenerateOptions) err
 			return fmt.Errorf("failed to write section output: %w", err)
 		}
 		g.logger.Infof("Successfully wrote section '%s' to %s", section.Name, outputPath)
+		ulog.Success("Wrote section").
+			Field("section", section.Name).
+			Field("path", outputPath).
+			Emit()
 	}
 
 	return nil
