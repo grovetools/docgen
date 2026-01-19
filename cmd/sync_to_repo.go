@@ -112,55 +112,57 @@ func runSyncToRepo(cmd *cobra.Command, args []string) error {
 		return nil
 	}
 
+	// 6. Show status summary
+	ulog.Info("Documentation status summary").
+		Field("production", len(filesToSync)).
+		Field("dev", len(skippedDev)).
+		Field("draft", len(skippedDraft)).
+		Emit()
+
+	if len(filesToSync) > 0 {
+		ulog.Success("Files to sync to repository (production)").Emit()
+		for _, file := range filesToSync {
+			ulog.Info("  → " + file).PrettyOnly().Emit()
+		}
+	}
+
+	if len(skippedDev) > 0 {
+		ulog.Info("Dev status (visible on dev website only)").Emit()
+		for _, file := range skippedDev {
+			ulog.Info("  ○ " + file).PrettyOnly().Emit()
+		}
+	}
+
+	if len(skippedDraft) > 0 {
+		ulog.Info("Draft status (notebook only, not synced)").Emit()
+		for _, file := range skippedDraft {
+			ulog.Info("  • " + file).PrettyOnly().Emit()
+		}
+	}
+
 	if len(filesToSync) == 0 {
 		ulog.Info("No production-ready files to sync").Emit()
-		if len(skippedDraft) > 0 {
-			ulog.Info("Skipped draft sections").
-				Field("count", len(skippedDraft)).
-				Emit()
-		}
-		if len(skippedDev) > 0 {
-			ulog.Info("Skipped dev sections").
-				Field("count", len(skippedDev)).
-				Emit()
-		}
+		ulog.Info("Tip: Set status: production in docgen.config.yml to sync files").PrettyOnly().Emit()
 		return nil
 	}
 
-	// 6. Show what will be done
+	// 7. Show sync details
 	ulog.Info("Sync plan").
 		Field("source", sourceDir).
 		Field("target", targetDir).
-		Field("production_files", len(filesToSync)).
 		Emit()
-
-	if len(skippedDraft) > 0 {
-		ulog.Info("Skipping draft sections").
-			Field("count", len(skippedDraft)).
-			Emit()
-	}
-	if len(skippedDev) > 0 {
-		ulog.Info("Skipping dev sections (use aggregator for dev website)").
-			Field("count", len(skippedDev)).
-			Emit()
-	}
 
 	if toRepoDryRun {
 		ulog.Info("DRY RUN: No changes will be made").Emit()
-		for _, file := range filesToSync {
-			ulog.Info("Would copy").
-				Field("file", file).
-				Emit()
-		}
 		return nil
 	}
 
-	// 6. Create target directory
+	// 8. Create target directory
 	if err := os.MkdirAll(targetDir, 0755); err != nil {
 		return fmt.Errorf("could not create target directory: %w", err)
 	}
 
-	// 7. Copy files
+	// 9. Copy files
 	copiedCount := 0
 	for _, file := range filesToSync {
 		srcPath := filepath.Join(sourceDir, file)
@@ -192,7 +194,7 @@ func runSyncToRepo(cmd *cobra.Command, args []string) error {
 		copiedCount++
 	}
 
-	// 8. Success message
+	// 10. Success message
 	ulog.Success("Sync complete!").
 		Field("files_copied", copiedCount).
 		Emit()
