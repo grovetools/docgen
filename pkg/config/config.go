@@ -10,7 +10,14 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-const ConfigFileName = "docgen.config.yml"
+const (
+	ConfigFileName = "docgen.config.yml"
+
+	// Publication status values
+	StatusDraft      = "draft"      // Only in notebook, not synced anywhere
+	StatusDev        = "dev"        // Synced to dev website (from notebook)
+	StatusProduction = "production" // Synced to repo (and prod website)
+)
 
 // DocgenConfig defines the structure for a package's documentation settings.
 type DocgenConfig struct {
@@ -47,6 +54,7 @@ type SectionConfig struct {
 	Name             string `yaml:"name"`
 	Title            string `yaml:"title"`
 	Order            int    `yaml:"order"`
+	Status           string `yaml:"status,omitempty"`   // Publication status: "draft", "dev", "production" (default: "draft")
 	Prompt           string `yaml:"prompt"`             // Path to the LLM prompt file
 	Output           string `yaml:"output"`             // Output markdown file
 	JSONKey          string `yaml:"json_key,omitempty"` // Key for structured JSON output
@@ -55,6 +63,14 @@ type SectionConfig struct {
 	Model            string `yaml:"model,omitempty"`    // Per-section model override
 	AggStripLines    int    `yaml:"agg_strip_lines,omitempty"` // Number of lines to strip from the top of the content during aggregation
 	GenerationConfig `yaml:",inline"`                    // Per-section generation parameter overrides
+}
+
+// GetStatus returns the effective status for a section, defaulting to "draft" if not set.
+func (s *SectionConfig) GetStatus() string {
+	if s.Status == "" {
+		return StatusDraft
+	}
+	return s.Status
 }
 
 // ReadmeConfig defines the settings for synchronizing the README.md.

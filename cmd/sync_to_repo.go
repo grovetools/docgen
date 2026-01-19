@@ -8,12 +8,14 @@ import (
 
 	coreConfig "github.com/grovetools/core/config"
 	"github.com/grovetools/core/pkg/workspace"
+	docgenConfig "github.com/grovetools/docgen/pkg/config"
 	"github.com/spf13/cobra"
 )
 
 var (
-	toRepoDryRun bool
-	toRepoForce  bool
+	toRepoDryRun          bool
+	toRepoForce           bool
+	toRepoIncludeAllDraft bool
 )
 
 func newSyncToRepoCmd() *cobra.Command {
@@ -40,6 +42,7 @@ Examples:
 
 	cmd.Flags().BoolVar(&toRepoDryRun, "dry-run", false, "Show what would be copied without making changes")
 	cmd.Flags().BoolVar(&toRepoForce, "force", false, "Overwrite existing files without prompting")
+	cmd.Flags().BoolVar(&toRepoIncludeAllDraft, "include-draft", false, "Include draft sections (by default only 'production' status sections are synced)")
 
 	return cmd
 }
@@ -72,7 +75,31 @@ func runSyncToRepo(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("could not resolve notebook docgen directory: %w", err)
 	}
 
-	// 3. Source and target directories
+	// 3. Load docgen config to get section status
+	cfg, _, err := docgenConfig.LoadWithNotebook(cwd)
+	if err != nil {
+		return fmt.Errorf("could not load docgen config: %w", err)
+	}
+
+	// 4. Build list of files to sync based on status
+	var filesToSync []string
+	var skippedDraft []string
+	var skippedDev []string
+
+	for _, section := range cfg.Sections {
+		status := section.GetStatus()
+
+		// Only sync "production" status sections (unless --include-draft)
+		if status == docgenConfig.StatusProduction || toRepoIncludeAllDraft {
+			filesToSync = append(filesToSync, section.Output)
+		} else if status == docgenConfig.StatusDraft {
+			skippedDraft = append(skippedDraft, section.Output)
+		} else if status == docgenConfig.StatusDev {
+			skippedDev = append(skippedDev, section.Output)
+		}
+	}
+
+	// 5. Source and target directories
 	sourceDir := filepath.Join(notebookDocgenDir, "docs")
 	targetDir := filepath.Join(cwd, "docs")
 
@@ -85,29 +112,42 @@ func runSyncToRepo(cmd *cobra.Command, args []string) error {
 		return nil
 	}
 
-	// 4. List files to copy
-	files, err := listMarkdownFiles(sourceDir)
-	if err != nil {
-		return fmt.Errorf("could not list files in source directory: %w", err)
-	}
-
-	if len(files) == 0 {
-		ulog.Info("No markdown files found in notebook docs directory").
-			Field("path", sourceDir).
-			Emit()
+	if len(filesToSync) == 0 {
+		ulog.Info("No production-ready files to sync").Emit()
+		if len(skippedDraft) > 0 {
+			ulog.Info("Skipped draft sections").
+				Field("count", len(skippedDraft)).
+				Emit()
+		}
+		if len(skippedDev) > 0 {
+			ulog.Info("Skipped dev sections").
+				Field("count", len(skippedDev)).
+				Emit()
+		}
 		return nil
 	}
 
-	// 5. Show what will be done
+	// 6. Show what will be done
 	ulog.Info("Sync plan").
 		Field("source", sourceDir).
 		Field("target", targetDir).
-		Field("files", len(files)).
+		Field("production_files", len(filesToSync)).
 		Emit()
+
+	if len(skippedDraft) > 0 {
+		ulog.Info("Skipping draft sections").
+			Field("count", len(skippedDraft)).
+			Emit()
+	}
+	if len(skippedDev) > 0 {
+		ulog.Info("Skipping dev sections (use aggregator for dev website)").
+			Field("count", len(skippedDev)).
+			Emit()
+	}
 
 	if toRepoDryRun {
 		ulog.Info("DRY RUN: No changes will be made").Emit()
-		for _, file := range files {
+		for _, file := range filesToSync {
 			ulog.Info("Would copy").
 				Field("file", file).
 				Emit()
@@ -122,7 +162,7 @@ func runSyncToRepo(cmd *cobra.Command, args []string) error {
 
 	// 7. Copy files
 	copiedCount := 0
-	for _, file := range files {
+	for _, file := range filesToSync {
 		srcPath := filepath.Join(sourceDir, file)
 		dstPath := filepath.Join(targetDir, file)
 

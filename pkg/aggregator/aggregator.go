@@ -25,7 +25,13 @@ func New(logger *logrus.Logger) *Aggregator {
 	return &Aggregator{logger: logger}
 }
 
-func (a *Aggregator) Aggregate(outputDir string) error {
+func (a *Aggregator) Aggregate(outputDir string, mode string) error {
+	// Validate mode
+	if mode != "dev" && mode != "prod" {
+		return fmt.Errorf("invalid mode '%s': must be 'dev' or 'prod'", mode)
+	}
+
+	a.logger.Infof("Aggregating documentation in %s mode", mode)
 	rootDir, err := workspace.FindEcosystemRoot("")
 	if err != nil {
 		return fmt.Errorf("could not find ecosystem root: %w", err)
@@ -116,7 +122,22 @@ func (a *Aggregator) Aggregate(outputDir string) error {
 		docsDir := a.resolveDocsDirForWorkspace(wsPath)
 
 		// Copy output files or use prompt files as placeholders
+		// Filter sections based on mode
+		var sectionsToAggregate []docgenConfig.SectionConfig
 		for _, section := range docCfg.Sections {
+			status := section.GetStatus()
+
+			// In prod mode, only include production sections
+			// In dev mode, include all sections
+			if mode == "prod" && status != docgenConfig.StatusProduction {
+				a.logger.Debugf("Skipping %s/%s (status: %s, mode: %s)", wsName, section.Output, status, mode)
+				continue
+			}
+
+			sectionsToAggregate = append(sectionsToAggregate, section)
+		}
+
+		for _, section := range sectionsToAggregate {
 			srcFile := filepath.Join(docsDir, section.Output)
 			destFile := filepath.Join(distDest, section.Output)
 
@@ -192,11 +213,11 @@ func (a *Aggregator) Aggregate(outputDir string) error {
 			}
 		}
 
-		sort.Slice(docCfg.Sections, func(i, j int) bool {
-			return docCfg.Sections[i].Order < docCfg.Sections[j].Order
+		sort.Slice(sectionsToAggregate, func(i, j int) bool {
+			return sectionsToAggregate[i].Order < sectionsToAggregate[j].Order
 		})
 
-		for _, sec := range docCfg.Sections {
+		for _, sec := range sectionsToAggregate {
 			pkgManifest.Sections = append(pkgManifest.Sections, manifest.SectionManifest{
 				Title: sec.Title,
 				Path:  fmt.Sprintf("./%s/%s", wsName, sec.Output),
