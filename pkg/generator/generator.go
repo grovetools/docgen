@@ -339,7 +339,15 @@ func (g *Generator) generateFromSchema(packageDir string, section config.Section
 
 func (g *Generator) setupRulesFile(packageDir, rulesFile string) error {
 	// Read the specified rules file
-	rulesPath := filepath.Join(packageDir, "docs", rulesFile)
+	// If the rules file path starts with .cx/ or is an absolute path, use it directly
+	// Otherwise, look for it in the docs/ directory (legacy behavior)
+	var rulesPath string
+	if strings.HasPrefix(rulesFile, ".cx/") || filepath.IsAbs(rulesFile) {
+		rulesPath = filepath.Join(packageDir, rulesFile)
+	} else {
+		rulesPath = filepath.Join(packageDir, "docs", rulesFile)
+	}
+
 	content, err := os.ReadFile(rulesPath)
 	if err != nil {
 		return fmt.Errorf("failed to read rules file %s: %w", rulesPath, err)
