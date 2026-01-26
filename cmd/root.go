@@ -23,6 +23,7 @@ func init() {
 	rootCmd.AddCommand(newMigratePromptsCmd())
 	rootCmd.AddCommand(newMigrateConfigCmd())
 	rootCmd.AddCommand(newSyncCmd())
+	rootCmd.AddCommand(newWatchCmd())
 }
 
 func Execute() error {
