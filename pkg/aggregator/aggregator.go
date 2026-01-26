@@ -25,6 +25,8 @@ func New(logger *logrus.Logger) *Aggregator {
 	return &Aggregator{logger: logger}
 }
 
+// Aggregate collects documentation from ecosystems specified in the local docgen.config.yml.
+// If no ecosystems are specified, it falls back to the current ecosystem only and warns the user.
 func (a *Aggregator) Aggregate(outputDir string, mode string) error {
 	// Validate mode
 	if mode != "dev" && mode != "prod" {
@@ -32,13 +34,87 @@ func (a *Aggregator) Aggregate(outputDir string, mode string) error {
 	}
 
 	a.logger.Infof("Aggregating documentation in %s mode", mode)
-	rootDir, err := workspace.FindEcosystemRoot("")
-	if err != nil {
-		return fmt.Errorf("could not find ecosystem root: %w", err)
+
+	// Try to load local docgen.config.yml to get ecosystems list
+	// Uses LoadWithNotebook to check notebook location first, then repo
+	cwd, _ := os.Getwd()
+	localCfg, _, _ := docgenConfig.LoadWithNotebook(cwd)
+
+	var ecosystemsToProcess []workspace.Ecosystem
+
+	if localCfg != nil && len(localCfg.Settings.Ecosystems) > 0 {
+		// Use explicitly configured ecosystems
+		a.logger.Infof("Using ecosystems from local config: %v", localCfg.Settings.Ecosystems)
+
+		// Discover all ecosystems to match by name
+		discoveryService := workspace.NewDiscoveryService(a.logger)
+		result, err := discoveryService.DiscoverAll()
+		if err != nil {
+			return fmt.Errorf("could not discover ecosystems: %w", err)
+		}
+
+		// Build a map for lookup
+		ecoByName := make(map[string]workspace.Ecosystem)
+		for _, eco := range result.Ecosystems {
+			ecoByName[eco.Name] = eco
+		}
+
+		// Filter to only requested ecosystems
+		for _, name := range localCfg.Settings.Ecosystems {
+			if eco, ok := ecoByName[name]; ok {
+				ecosystemsToProcess = append(ecosystemsToProcess, eco)
+			} else {
+				a.logger.Warnf("Ecosystem '%s' not found in groves config", name)
+			}
+		}
+
+		if len(ecosystemsToProcess) == 0 {
+			return fmt.Errorf("none of the specified ecosystems were found: %v", localCfg.Settings.Ecosystems)
+		}
+	} else {
+		// No ecosystems specified - fall back to current ecosystem only
+		rootDir, err := workspace.FindEcosystemRoot("")
+		if err != nil {
+			return fmt.Errorf("could not find ecosystem root: %w", err)
+		}
+
+		a.logger.Warnf("No 'ecosystems' specified in docgen.config.yml - using current ecosystem only (%s)", filepath.Base(rootDir))
+		a.logger.Warnf("To aggregate from multiple ecosystems, add 'settings.ecosystems' to your docgen.config.yml")
+
+		ecosystemsToProcess = []workspace.Ecosystem{{Name: filepath.Base(rootDir), Path: rootDir}}
 	}
 
-	a.logger.Infof("Found ecosystem root at: %s", rootDir)
+	a.logger.Infof("Processing %d ecosystem(s)", len(ecosystemsToProcess))
 
+	m := &manifest.Manifest{
+		Packages:        []manifest.PackageManifest{},
+		WebsiteSections: []manifest.WebsiteSection{},
+	}
+
+	// Aggregate from each ecosystem
+	for _, eco := range ecosystemsToProcess {
+		a.logger.Infof("Processing ecosystem: %s (%s)", eco.Name, eco.Path)
+		if err := a.aggregateEcosystem(eco.Path, m, outputDir, mode); err != nil {
+			a.logger.Warnf("Error aggregating ecosystem %s: %v", eco.Name, err)
+			// Continue with other ecosystems
+		}
+	}
+
+	m.GeneratedAt = time.Now()
+
+	// Ensure output directory exists
+	if err := os.MkdirAll(outputDir, 0755); err != nil {
+		return fmt.Errorf("failed to create output directory: %w", err)
+	}
+
+	// Save the manifest
+	manifestPath := filepath.Join(outputDir, "manifest.json")
+	a.logger.Infof("Saving manifest with %d packages and %d website sections", len(m.Packages), len(m.WebsiteSections))
+	return m.Save(manifestPath)
+}
+
+// aggregateEcosystem processes a single ecosystem and adds its docs to the manifest
+func (a *Aggregator) aggregateEcosystem(rootDir string, m *manifest.Manifest, outputDir, mode string) error {
 	// Load the ecosystem config to get workspace paths
 	groveYmlPath := filepath.Join(rootDir, "grove.yml")
 	cfg, err := config.Load(groveYmlPath)
@@ -46,13 +122,12 @@ func (a *Aggregator) Aggregate(outputDir string, mode string) error {
 		return fmt.Errorf("could not load ecosystem config: %w", err)
 	}
 
-	a.logger.Infof("Loaded ecosystem config with %d workspace patterns", len(cfg.Workspaces))
+	a.logger.Debugf("Loaded ecosystem config with %d workspace patterns", len(cfg.Workspaces))
 
 	// Get workspace paths from config (expand glob patterns)
 	var workspaces []string
 	for _, wsPattern := range cfg.Workspaces {
 		pattern := filepath.Join(rootDir, wsPattern)
-		a.logger.Infof("Expanding workspace pattern: %s", wsPattern)
 
 		matches, err := filepath.Glob(pattern)
 		if err != nil {
@@ -63,19 +138,13 @@ func (a *Aggregator) Aggregate(outputDir string, mode string) error {
 		for _, match := range matches {
 			// Only include directories
 			if info, err := os.Stat(match); err == nil && info.IsDir() {
-				a.logger.Infof("  Found workspace: %s", match)
+				a.logger.Debugf("  Found workspace: %s", match)
 				workspaces = append(workspaces, match)
 			}
 		}
 	}
 
-	a.logger.Infof("Total workspaces to process: %d", len(workspaces))
-
-	m := &manifest.Manifest{
-		Packages: []manifest.PackageManifest{},
-	}
-
-	// Removed generator - aggregator should only collect, not generate
+	a.logger.Debugf("Total workspaces in ecosystem: %d", len(workspaces))
 
 	for _, wsPath := range workspaces {
 		wsName := filepath.Base(wsPath)
@@ -94,6 +163,11 @@ func (a *Aggregator) Aggregate(outputDir string, mode string) error {
 			continue
 		}
 
+		// Handle "sections" output mode (for website content like overview, concepts)
+		if docCfg.Settings.OutputMode == "sections" {
+			a.processWebsiteSections(wsPath, docCfg, m, outputDir, mode)
+			continue
+		}
 
 		// Get version and repo URL
 		version := a.getPackageVersion(wsPath)
@@ -255,16 +329,7 @@ func (a *Aggregator) Aggregate(outputDir string, mode string) error {
 		m.Packages = append(m.Packages, pkgManifest)
 	}
 
-	m.GeneratedAt = time.Now()
-
-	// Ensure output directory exists
-	if err := os.MkdirAll(outputDir, 0755); err != nil {
-		return fmt.Errorf("failed to create output directory: %w", err)
-	}
-
-	// Save the manifest
-	manifestPath := filepath.Join(outputDir, "manifest.json")
-	return m.Save(manifestPath)
+	return nil
 }
 
 // getPackageVersion attempts to get the version from git tags or grove.yml
@@ -480,4 +545,219 @@ func copyDir(src, dst string) error {
 		_, err = io.Copy(dstFile, srcFile)
 		return err
 	})
+}
+
+// processWebsiteSections handles documentation with output_mode: sections
+// This is used for website content that maps to multiple Astro content collections
+// (e.g., overview/, concepts/) rather than a single package directory.
+func (a *Aggregator) processWebsiteSections(wsPath string, cfg *docgenConfig.DocgenConfig, m *manifest.Manifest, outputDir, mode string) {
+	wsName := filepath.Base(wsPath)
+	a.logger.Infof("Processing website sections for %s", wsName)
+
+	// Resolve base docgen directory (notebook first, then repo)
+	node, err := workspace.GetProjectByPath(wsPath)
+	if err != nil {
+		a.logger.Warnf("Could not resolve workspace for %s, skipping sections: %v", wsPath, err)
+		return
+	}
+
+	// Determine base path for docs - try notebook first
+	var baseDocgenDir string
+	coreCfg, err := config.LoadDefault()
+	if err == nil {
+		locator := workspace.NewNotebookLocator(coreCfg)
+		if dir, err := locator.GetDocgenDir(node); err == nil && dirExists(dir) {
+			baseDocgenDir = dir
+			a.logger.Debugf("Using notebook docgen dir: %s", baseDocgenDir)
+		}
+	}
+
+	if baseDocgenDir == "" {
+		// Fallback to repo docs/ directory
+		baseDocgenDir = filepath.Join(wsPath, "docs")
+		a.logger.Debugf("Falling back to repo docs dir: %s", baseDocgenDir)
+	}
+
+	for _, sectionCfg := range cfg.Sections {
+		// Use OutputDir or Name as directory name
+		dirName := sectionCfg.OutputDir
+		if dirName == "" {
+			dirName = sectionCfg.Name
+		}
+
+		srcDir := filepath.Join(baseDocgenDir, dirName)
+		if !dirExists(srcDir) {
+			a.logger.Warnf("Source directory for section %s not found at %s", sectionCfg.Name, srcDir)
+			continue
+		}
+
+		destDir := filepath.Join(outputDir, dirName)
+		if err := os.MkdirAll(destDir, 0755); err != nil {
+			a.logger.Errorf("Failed to create dest dir %s: %v", destDir, err)
+			continue
+		}
+
+		websiteSection := manifest.WebsiteSection{
+			Name:  dirName,
+			Title: sectionCfg.Title,
+			Files: []manifest.SectionManifest{},
+		}
+
+		// Copy assets if they exist in the section directory
+		// Assets are stored per-section (e.g., docgen/overview/images/)
+		for _, assetType := range []string{"images", "asciicasts", "videos"} {
+			assetSrc := filepath.Join(srcDir, assetType)
+			if dirExists(assetSrc) {
+				assetDest := filepath.Join(destDir, assetType)
+				if err := copyDir(assetSrc, assetDest); err != nil {
+					a.logger.Warnf("Failed to copy %s for section %s: %v", assetType, dirName, err)
+				} else {
+					a.logger.Debugf("Copied %s for section %s", assetType, dirName)
+				}
+			}
+		}
+
+		// Scan for markdown files
+		files, err := os.ReadDir(srcDir)
+		if err != nil {
+			a.logger.Warnf("Failed to read section dir %s: %v", srcDir, err)
+			continue
+		}
+
+		for _, file := range files {
+			if file.IsDir() || filepath.Ext(file.Name()) != ".md" {
+				continue
+			}
+
+			filePath := filepath.Join(srcDir, file.Name())
+
+			// Parse frontmatter for status
+			status, title, order := parseFrontmatter(filePath)
+
+			// Filter based on mode:
+			// - dev mode: include everything (draft, dev, production)
+			// - prod mode: include dev and production (exclude draft)
+			if mode == "prod" && status == docgenConfig.StatusDraft {
+				a.logger.Debugf("Skipping %s/%s (status: draft, mode: prod)", dirName, file.Name())
+				continue
+			}
+
+			// Copy file
+			destPath := filepath.Join(destDir, file.Name())
+			if err := copyFile(filePath, destPath); err != nil {
+				a.logger.Warnf("Failed to copy %s: %v", file.Name(), err)
+				continue
+			}
+
+			websiteSection.Files = append(websiteSection.Files, manifest.SectionManifest{
+				Name:  file.Name(),
+				Title: title,
+				Order: order,
+				Path:  fmt.Sprintf("./%s/%s", dirName, file.Name()),
+			})
+		}
+
+		// Sort files by order
+		sort.Slice(websiteSection.Files, func(i, j int) bool {
+			return websiteSection.Files[i].Order < websiteSection.Files[j].Order
+		})
+
+		if len(websiteSection.Files) > 0 {
+			m.WebsiteSections = append(m.WebsiteSections, websiteSection)
+			a.logger.Infof("Added website section %s with %d files", dirName, len(websiteSection.Files))
+		}
+	}
+}
+
+// parseFrontmatter extracts status, title, and order from markdown frontmatter
+func parseFrontmatter(path string) (status, title string, order int) {
+	status = docgenConfig.StatusProduction // Default
+	title = ""
+	order = 0
+
+	content, err := os.ReadFile(path)
+	if err != nil {
+		return
+	}
+
+	s := string(content)
+	if !strings.HasPrefix(s, "---\n") {
+		// No frontmatter, try to extract order from filename (e.g., "01-intro.md" -> 1)
+		order = extractOrderFromFilename(filepath.Base(path))
+		return
+	}
+
+	end := strings.Index(s[4:], "\n---")
+	if end == -1 {
+		return
+	}
+
+	frontmatter := s[4 : end+4]
+	lines := strings.Split(frontmatter, "\n")
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+		if strings.HasPrefix(line, "status:") {
+			parts := strings.SplitN(line, ":", 2)
+			if len(parts) == 2 {
+				status = strings.TrimSpace(parts[1])
+				// Remove quotes if present
+				status = strings.Trim(status, "\"'")
+			}
+		} else if strings.HasPrefix(line, "title:") {
+			parts := strings.SplitN(line, ":", 2)
+			if len(parts) == 2 {
+				title = strings.TrimSpace(parts[1])
+				title = strings.Trim(title, "\"'")
+			}
+		} else if strings.HasPrefix(line, "order:") {
+			parts := strings.SplitN(line, ":", 2)
+			if len(parts) == 2 {
+				fmt.Sscanf(strings.TrimSpace(parts[1]), "%d", &order)
+			}
+		}
+	}
+
+	// If no order in frontmatter, try filename
+	if order == 0 {
+		order = extractOrderFromFilename(filepath.Base(path))
+	}
+
+	return
+}
+
+// extractOrderFromFilename extracts order from filenames like "01-intro.md" -> 1
+func extractOrderFromFilename(filename string) int {
+	// Remove extension
+	name := strings.TrimSuffix(filename, filepath.Ext(filename))
+
+	// Try to parse leading number
+	var order int
+	if _, err := fmt.Sscanf(name, "%d-", &order); err == nil {
+		return order
+	}
+	return 0
+}
+
+// copyFile copies a single file from src to dst
+func copyFile(src, dst string) error {
+	srcFile, err := os.Open(src)
+	if err != nil {
+		return err
+	}
+	defer srcFile.Close()
+
+	dstFile, err := os.Create(dst)
+	if err != nil {
+		return err
+	}
+	defer dstFile.Close()
+
+	_, err = io.Copy(dstFile, srcFile)
+	return err
+}
+
+// dirExists checks if a directory exists
+func dirExists(path string) bool {
+	info, err := os.Stat(path)
+	return err == nil && info.IsDir()
 }

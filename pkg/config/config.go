@@ -40,13 +40,15 @@ type GenerationConfig struct {
 
 // SettingsConfig holds generator-wide settings.
 type SettingsConfig struct {
-	Model                string `yaml:"model,omitempty"`
-	RegenerationMode     string `yaml:"regeneration_mode,omitempty"`     // "scratch" or "reference"
-	RulesFile            string `yaml:"rules_file,omitempty"`            // Custom rules file for cx generate
-	StructuredOutputFile string `yaml:"structured_output_file,omitempty"` // Path for JSON output
-	SystemPrompt         string `yaml:"system_prompt,omitempty"`         // Path to system prompt file or "default" to use built-in
-	OutputDir            string `yaml:"output_dir,omitempty"`            // Output directory for generated docs
-	GenerationConfig     `yaml:",inline"`                                  // Global generation parameters
+	Model                string   `yaml:"model,omitempty"`
+	OutputMode           string   `yaml:"output_mode,omitempty"`           // "package" (default) or "sections" for website content
+	Ecosystems           []string `yaml:"ecosystems,omitempty"`            // List of ecosystem names to aggregate from (from global groves config)
+	RegenerationMode     string   `yaml:"regeneration_mode,omitempty"`     // "scratch" or "reference"
+	RulesFile            string   `yaml:"rules_file,omitempty"`            // Custom rules file for cx generate
+	StructuredOutputFile string   `yaml:"structured_output_file,omitempty"` // Path for JSON output
+	SystemPrompt         string   `yaml:"system_prompt,omitempty"`         // Path to system prompt file or "default" to use built-in
+	OutputDir            string   `yaml:"output_dir,omitempty"`            // Output directory for generated docs
+	GenerationConfig     `yaml:",inline"`                                    // Global generation parameters
 }
 
 // SectionConfig defines a single piece of documentation to be generated.
@@ -54,15 +56,16 @@ type SectionConfig struct {
 	Name             string `yaml:"name"`
 	Title            string `yaml:"title"`
 	Order            int    `yaml:"order"`
-	Status           string `yaml:"status,omitempty"`   // Publication status: "draft", "dev", "production" (default: "draft")
-	Prompt           string `yaml:"prompt"`             // Path to the LLM prompt file
-	Output           string `yaml:"output"`             // Output markdown file
-	JSONKey          string `yaml:"json_key,omitempty"` // Key for structured JSON output
-	Type             string `yaml:"type,omitempty"`     // Type of generation, e.g., "schema_to_md"
-	Source           string `yaml:"source,omitempty"`   // Source file for generation, e.g., a schema file
-	Model            string `yaml:"model,omitempty"`    // Per-section model override
+	Status           string `yaml:"status,omitempty"`     // Publication status: "draft", "dev", "production" (default: "draft")
+	Prompt           string `yaml:"prompt"`               // Path to the LLM prompt file
+	Output           string `yaml:"output"`               // Output markdown file
+	OutputDir        string `yaml:"output_dir,omitempty"` // For "sections" mode: output directory name
+	JSONKey          string `yaml:"json_key,omitempty"`   // Key for structured JSON output
+	Type             string `yaml:"type,omitempty"`       // Type of generation, e.g., "schema_to_md"
+	Source           string `yaml:"source,omitempty"`     // Source file for generation, e.g., a schema file
+	Model            string `yaml:"model,omitempty"`      // Per-section model override
 	AggStripLines    int    `yaml:"agg_strip_lines,omitempty"` // Number of lines to strip from the top of the content during aggregation
-	GenerationConfig `yaml:",inline"`                    // Per-section generation parameter overrides
+	GenerationConfig `yaml:",inline"`                      // Per-section generation parameter overrides
 }
 
 // GetStatus returns the effective status for a section, defaulting to "draft" if not set.

@@ -8,8 +8,17 @@ import (
 
 // Manifest represents the complete documentation manifest for all packages
 type Manifest struct {
-	Packages    []PackageManifest `json:"packages"`
-	GeneratedAt time.Time         `json:"generated_at"`
+	Packages        []PackageManifest `json:"packages"`
+	WebsiteSections []WebsiteSection  `json:"website_sections,omitempty"`
+	GeneratedAt     time.Time         `json:"generated_at"`
+}
+
+// WebsiteSection represents a top-level website content section (e.g., overview, concepts)
+// These are distinct from package docs and map to separate Astro content collections.
+type WebsiteSection struct {
+	Name  string            `json:"name"`  // Directory name (e.g., "overview", "concepts")
+	Title string            `json:"title"` // Display title (e.g., "Overview", "Concepts")
+	Files []SectionManifest `json:"files"` // Individual markdown files in this section
 }
 
 // PackageManifest represents documentation manifest for a single package
