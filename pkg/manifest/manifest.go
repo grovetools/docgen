@@ -10,7 +10,30 @@ import (
 type Manifest struct {
 	Packages        []PackageManifest `json:"packages"`
 	WebsiteSections []WebsiteSection  `json:"website_sections,omitempty"`
+	Sidebar         *SidebarConfig    `json:"sidebar,omitempty"`
 	GeneratedAt     time.Time         `json:"generated_at"`
+}
+
+// SidebarConfig defines the sidebar ordering and display configuration for the website.
+type SidebarConfig struct {
+	CategoryOrder           []string                   `json:"category_order,omitempty"`
+	Categories              map[string]SidebarCategory `json:"categories,omitempty"`
+	Packages                map[string]SidebarPackage  `json:"packages,omitempty"`
+	PackageCategoryOverride map[string]string          `json:"package_category_override,omitempty"`
+}
+
+// SidebarCategory defines configuration for a single category in the sidebar.
+type SidebarCategory struct {
+	Icon     string   `json:"icon,omitempty"`
+	Flat     bool     `json:"flat,omitempty"`
+	Packages []string `json:"packages,omitempty"`
+}
+
+// SidebarPackage defines configuration for a single package in the sidebar.
+type SidebarPackage struct {
+	Icon   string `json:"icon,omitempty"`
+	Color  string `json:"color,omitempty"`
+	Status string `json:"status,omitempty"`
 }
 
 // WebsiteSection represents a top-level website content section (e.g., overview, concepts)

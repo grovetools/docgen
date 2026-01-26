@@ -28,6 +28,31 @@ type DocgenConfig struct {
 	Settings    SettingsConfig  `yaml:"settings,omitempty"`
 	Sections    []SectionConfig `yaml:"sections"`
 	Readme      *ReadmeConfig   `yaml:"readme,omitempty"`
+	Sidebar     *SidebarConfig  `yaml:"sidebar,omitempty"` // Website sidebar configuration
+}
+
+// SidebarConfig defines the sidebar ordering and display configuration.
+// This is used by the grove-website to control how packages and categories
+// are displayed in the documentation sidebar.
+type SidebarConfig struct {
+	CategoryOrder           []string                       `yaml:"category_order,omitempty"`            // Order of categories in sidebar
+	Categories              map[string]SidebarCategory     `yaml:"categories,omitempty"`                // Category config (icon, flat, packages order)
+	Packages                map[string]SidebarPackage      `yaml:"packages,omitempty"`                  // Package config (icon, color, status)
+	PackageCategoryOverride map[string]string              `yaml:"package_category_override,omitempty"` // Remap packages to different categories
+}
+
+// SidebarCategory defines configuration for a single category in the sidebar.
+type SidebarCategory struct {
+	Icon     string   `yaml:"icon,omitempty"`     // Nerd font icon
+	Flat     bool     `yaml:"flat,omitempty"`     // If true, show docs flat (no package nesting)
+	Packages []string `yaml:"packages,omitempty"` // Order of packages within this category
+}
+
+// SidebarPackage defines configuration for a single package in the sidebar.
+type SidebarPackage struct {
+	Icon   string `yaml:"icon,omitempty"`   // Nerd font icon
+	Color  string `yaml:"color,omitempty"`  // Color name (green, blue, cyan, etc.)
+	Status string `yaml:"status,omitempty"` // Publication status: draft | dev | production
 }
 
 // GenerationConfig holds LLM generation parameters
@@ -69,6 +94,7 @@ type SectionConfig struct {
 }
 
 // GetStatus returns the effective status for a section, defaulting to "draft" if not set.
+// This means only sections with explicit status: dev or status: production will be included.
 func (s *SectionConfig) GetStatus() string {
 	if s.Status == "" {
 		return StatusDraft

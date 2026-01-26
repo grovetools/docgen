@@ -86,6 +86,18 @@ func (a *Aggregator) Aggregate(outputDir string, mode string) error {
 
 	a.logger.Infof("Processing %d ecosystem(s)", len(ecosystemsToProcess))
 
+	// Build set of allowed packages from sidebar config
+	// Only packages listed in sidebar.categories.*.packages will be aggregated
+	allowedPackages := make(map[string]bool)
+	if localCfg != nil && localCfg.Sidebar != nil && localCfg.Sidebar.Categories != nil {
+		for _, cat := range localCfg.Sidebar.Categories {
+			for _, pkg := range cat.Packages {
+				allowedPackages[pkg] = true
+			}
+		}
+		a.logger.Infof("Filtering to %d allowed packages from sidebar config", len(allowedPackages))
+	}
+
 	m := &manifest.Manifest{
 		Packages:        []manifest.PackageManifest{},
 		WebsiteSections: []manifest.WebsiteSection{},
@@ -94,10 +106,16 @@ func (a *Aggregator) Aggregate(outputDir string, mode string) error {
 	// Aggregate from each ecosystem
 	for _, eco := range ecosystemsToProcess {
 		a.logger.Infof("Processing ecosystem: %s (%s)", eco.Name, eco.Path)
-		if err := a.aggregateEcosystem(eco.Path, m, outputDir, mode); err != nil {
+		if err := a.aggregateEcosystem(eco.Path, m, outputDir, mode, allowedPackages); err != nil {
 			a.logger.Warnf("Error aggregating ecosystem %s: %v", eco.Name, err)
 			// Continue with other ecosystems
 		}
+	}
+
+	// Include sidebar configuration if present in local config
+	if localCfg != nil && localCfg.Sidebar != nil {
+		m.Sidebar = a.buildSidebarManifest(localCfg.Sidebar, mode)
+		a.logger.Infof("Including sidebar configuration from local config")
 	}
 
 	m.GeneratedAt = time.Now()
@@ -113,8 +131,62 @@ func (a *Aggregator) Aggregate(outputDir string, mode string) error {
 	return m.Save(manifestPath)
 }
 
+// buildSidebarManifest creates the manifest sidebar config from the source config,
+// filtering packages by status based on the build mode.
+func (a *Aggregator) buildSidebarManifest(src *docgenConfig.SidebarConfig, mode string) *manifest.SidebarConfig {
+	result := &manifest.SidebarConfig{
+		CategoryOrder:           src.CategoryOrder,
+		PackageCategoryOverride: src.PackageCategoryOverride,
+	}
+
+	// Copy categories with their config
+	if src.Categories != nil {
+		result.Categories = make(map[string]manifest.SidebarCategory)
+		for name, cat := range src.Categories {
+			result.Categories[name] = manifest.SidebarCategory{
+				Icon:     cat.Icon,
+				Flat:     cat.Flat,
+				Packages: cat.Packages,
+			}
+		}
+	}
+
+	// Copy packages, filtering by status
+	if src.Packages != nil {
+		result.Packages = make(map[string]manifest.SidebarPackage)
+		for name, pkg := range src.Packages {
+			status := pkg.Status
+			if status == "" {
+				status = docgenConfig.StatusProduction // Default to production
+			}
+
+			// Filter by status:
+			// - draft: excluded from all builds
+			// - dev: included in dev mode only
+			// - production: included in all builds
+			if status == docgenConfig.StatusDraft {
+				a.logger.Debugf("Excluding package %s from sidebar (status: draft)", name)
+				continue
+			}
+			if mode == "prod" && status == docgenConfig.StatusDev {
+				a.logger.Debugf("Excluding package %s from sidebar (status: dev, mode: prod)", name)
+				continue
+			}
+
+			result.Packages[name] = manifest.SidebarPackage{
+				Icon:   pkg.Icon,
+				Color:  pkg.Color,
+				Status: status,
+			}
+		}
+	}
+
+	return result
+}
+
 // aggregateEcosystem processes a single ecosystem and adds its docs to the manifest
-func (a *Aggregator) aggregateEcosystem(rootDir string, m *manifest.Manifest, outputDir, mode string) error {
+// If allowedPackages is non-empty, only packages in that set will be included.
+func (a *Aggregator) aggregateEcosystem(rootDir string, m *manifest.Manifest, outputDir, mode string, allowedPackages map[string]bool) error {
 	// Load the ecosystem config to get workspace paths
 	groveYmlPath := filepath.Join(rootDir, "grove.yml")
 	cfg, err := config.Load(groveYmlPath)
@@ -163,6 +235,15 @@ func (a *Aggregator) aggregateEcosystem(rootDir string, m *manifest.Manifest, ou
 			continue
 		}
 
+		// Skip packages not in the allowed set (if filtering is enabled)
+		if len(allowedPackages) > 0 && !allowedPackages[wsName] {
+			// Also check if this is a "sections" mode config (website content) - always allow those
+			if docCfg.Settings.OutputMode != "sections" {
+				a.logger.Debugf("Skipping %s: not in allowed packages list", wsName)
+				continue
+			}
+		}
+
 		// Handle "sections" output mode (for website content like overview, concepts)
 		if docCfg.Settings.OutputMode == "sections" {
 			a.processWebsiteSections(wsPath, docCfg, m, outputDir, mode)
@@ -187,15 +268,20 @@ func (a *Aggregator) aggregateEcosystem(rootDir string, m *manifest.Manifest, ou
 		// Resolve docs directory (notebook or repo)
 		docsDir := a.resolveDocsDirForWorkspace(wsPath)
 
-		// Filter sections based on mode BEFORE creating output directory
+		// Filter sections based on status:
+		// - draft: excluded from all builds
+		// - dev: included in dev mode only
+		// - production: included in all builds
 		var sectionsToAggregate []docgenConfig.SectionConfig
 		for _, section := range docCfg.Sections {
 			status := section.GetStatus()
 
-			// In prod mode, include dev and production sections (exclude draft)
-			// In dev mode, include all sections
-			if mode == "prod" && status == docgenConfig.StatusDraft {
-				a.logger.Debugf("Skipping %s/%s (status: %s, mode: %s)", wsName, section.Output, status, mode)
+			if status == docgenConfig.StatusDraft {
+				a.logger.Debugf("Skipping %s/%s (status: draft)", wsName, section.Output)
+				continue
+			}
+			if mode == "prod" && status == docgenConfig.StatusDev {
+				a.logger.Debugf("Skipping %s/%s (status: dev, mode: prod)", wsName, section.Output)
 				continue
 			}
 
@@ -634,11 +720,16 @@ func (a *Aggregator) processWebsiteSections(wsPath string, cfg *docgenConfig.Doc
 			// Parse frontmatter for status
 			status, title, order := parseFrontmatter(filePath)
 
-			// Filter based on mode:
-			// - dev mode: include everything (draft, dev, production)
-			// - prod mode: include dev and production (exclude draft)
-			if mode == "prod" && status == docgenConfig.StatusDraft {
-				a.logger.Debugf("Skipping %s/%s (status: draft, mode: prod)", dirName, file.Name())
+			// Filter by status:
+			// - draft: excluded from all builds
+			// - dev: included in dev mode only
+			// - production: included in all builds
+			if status == docgenConfig.StatusDraft {
+				a.logger.Debugf("Skipping %s/%s (status: draft)", dirName, file.Name())
+				continue
+			}
+			if mode == "prod" && status == docgenConfig.StatusDev {
+				a.logger.Debugf("Skipping %s/%s (status: dev, mode: prod)", dirName, file.Name())
 				continue
 			}
 
