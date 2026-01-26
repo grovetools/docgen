@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"sort"
@@ -273,9 +274,9 @@ func setupWatchForEcosystem(
 	for _, wsPath := range workspaces {
 		wsName := filepath.Base(wsPath)
 
-		// Load docgen config
-		docCfg, err := config.Load(wsPath)
-		if err != nil || !docCfg.Enabled {
+		// Load docgen config - try notebook location first, then repo
+		docCfg, _, err := config.LoadWithNotebook(wsPath)
+		if err != nil || docCfg == nil || !docCfg.Enabled {
 			continue
 		}
 
@@ -338,9 +339,9 @@ func findDocgenDir(filePath string, watchedPkgs map[string]*watchedPackage) stri
 
 // rebuildPackage rebuilds a single package and writes to the website
 func rebuildPackage(pkg *watchedPackage, w *writer.AstroWriter, mode string, localCfg *config.DocgenConfig, quiet bool) error {
-	// Reload config in case it changed
-	docCfg, err := config.Load(pkg.wsPath)
-	if err != nil {
+	// Reload config in case it changed - try notebook location first
+	docCfg, _, err := config.LoadWithNotebook(pkg.wsPath)
+	if err != nil || docCfg == nil {
 		return err
 	}
 
@@ -484,9 +485,22 @@ func rebuildWebsiteSections(pkg *watchedPackage, w *writer.AstroWriter, mode str
 	return nil
 }
 
-// transformWebsiteSection transforms paths for website section content
+// transformWebsiteSection transforms paths and augments frontmatter for website section content
 func transformWebsiteSection(content, sectionName string) string {
 	basePath := "/docs/" + sectionName
+
+	// Map section names to sidebar category names
+	categoryMap := map[string]string{
+		"overview": "Overview",
+		"concepts": "Concepts",
+	}
+	category := categoryMap[sectionName]
+	if category == "" {
+		category = sectionName
+	}
+
+	// Augment frontmatter with category and package fields
+	content = augmentFrontmatter(content, category, "Grove Ecosystem")
 
 	// Rewrite image paths
 	content = strings.ReplaceAll(content, "](./images/", "]("+basePath+"/images/")
@@ -498,6 +512,46 @@ func transformWebsiteSection(content, sectionName string) string {
 	content = strings.ReplaceAll(content, "](./videos/", "]("+basePath+"/videos/")
 
 	return content
+}
+
+// augmentFrontmatter adds category and package fields to existing frontmatter
+// or creates new frontmatter if none exists. Preserves all existing fields.
+func augmentFrontmatter(content, category, pkg string) string {
+	if !strings.HasPrefix(content, "---\n") {
+		// No frontmatter, create new
+		newFrontmatter := fmt.Sprintf("---\ncategory: \"%s\"\npackage: \"%s\"\n---\n\n", category, pkg)
+		return newFrontmatter + content
+	}
+
+	// Find end of frontmatter
+	endIdx := strings.Index(content[4:], "\n---")
+	if endIdx == -1 {
+		return content // Malformed frontmatter, skip
+	}
+
+	existingFrontmatter := content[4 : endIdx+4]
+	restOfContent := content[endIdx+8:] // Skip past "\n---"
+
+	// Check which fields already exist
+	hasCategory := strings.Contains(existingFrontmatter, "category:")
+	hasPackage := strings.Contains(existingFrontmatter, "package:")
+
+	// Build new fields to add
+	var newFields []string
+	if !hasCategory {
+		newFields = append(newFields, fmt.Sprintf("category: \"%s\"", category))
+	}
+	if !hasPackage {
+		newFields = append(newFields, fmt.Sprintf("package: \"%s\"", pkg))
+	}
+
+	// If no new fields needed, return as-is
+	if len(newFields) == 0 {
+		return content
+	}
+
+	// Append new fields to existing frontmatter
+	return "---\n" + existingFrontmatter + "\n" + strings.Join(newFields, "\n") + "\n---" + restOfContent
 }
 
 // parseStatus extracts status from frontmatter
