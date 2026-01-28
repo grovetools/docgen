@@ -636,6 +636,9 @@ func copyDir(src, dst string) error {
 // processWebsiteSections handles documentation with output_mode: sections
 // This is used for website content that maps to multiple Astro content collections
 // (e.g., overview/, concepts/) rather than a single package directory.
+//
+// Each section subdirectory should have its own docgen.config.yml (like a mini-package),
+// mirroring the structure of package docgen directories (docs/, prompts/, images/, etc.)
 func (a *Aggregator) processWebsiteSections(wsPath string, cfg *docgenConfig.DocgenConfig, m *manifest.Manifest, outputDir, mode string) {
 	wsName := filepath.Base(wsPath)
 	a.logger.Infof("Processing website sections for %s", wsName)
@@ -664,87 +667,106 @@ func (a *Aggregator) processWebsiteSections(wsPath string, cfg *docgenConfig.Doc
 		a.logger.Debugf("Falling back to repo docs dir: %s", baseDocgenDir)
 	}
 
-	for _, sectionCfg := range cfg.Sections {
-		// Use OutputDir or Name as directory name
-		dirName := sectionCfg.OutputDir
-		if dirName == "" {
-			dirName = sectionCfg.Name
-		}
+	// Discover section subdirectories that have their own docgen.config.yml
+	entries, err := os.ReadDir(baseDocgenDir)
+	if err != nil {
+		a.logger.Warnf("Failed to read docgen dir %s: %v", baseDocgenDir, err)
+		return
+	}
 
-		srcDir := filepath.Join(baseDocgenDir, dirName)
-		if !dirExists(srcDir) {
-			a.logger.Warnf("Source directory for section %s not found at %s", sectionCfg.Name, srcDir)
+	for _, entry := range entries {
+		if !entry.IsDir() {
 			continue
 		}
 
-		destDir := filepath.Join(outputDir, dirName)
+		sectionName := entry.Name()
+		sectionDir := filepath.Join(baseDocgenDir, sectionName)
+
+		// Check if this subdirectory has its own docgen.config.yml
+		sectionConfigPath := filepath.Join(sectionDir, docgenConfig.ConfigFileName)
+		if _, err := os.Stat(sectionConfigPath); os.IsNotExist(err) {
+			continue // Not a section directory
+		}
+
+		// Load the section's config
+		sectionCfg, err := docgenConfig.LoadFromPath(sectionConfigPath)
+		if err != nil {
+			a.logger.Warnf("Failed to load config for section %s: %v", sectionName, err)
+			continue
+		}
+
+		if !sectionCfg.Enabled {
+			a.logger.Debugf("Skipping section %s: disabled in config", sectionName)
+			continue
+		}
+
+		a.logger.Infof("Processing section: %s (%s)", sectionName, sectionCfg.Title)
+
+		// Create output directory for this section
+		destDir := filepath.Join(outputDir, sectionName)
 		if err := os.MkdirAll(destDir, 0755); err != nil {
 			a.logger.Errorf("Failed to create dest dir %s: %v", destDir, err)
 			continue
 		}
 
 		websiteSection := manifest.WebsiteSection{
-			Name:  dirName,
+			Name:  sectionName,
 			Title: sectionCfg.Title,
 			Files: []manifest.SectionManifest{},
 		}
 
-		// Copy assets if they exist in the section directory
-		// Assets are stored per-section (e.g., docgen/overview/images/)
+		// Copy assets from section directory
 		for _, assetType := range []string{"images", "asciicasts", "videos"} {
-			assetSrc := filepath.Join(srcDir, assetType)
+			assetSrc := filepath.Join(sectionDir, assetType)
 			if dirExists(assetSrc) {
 				assetDest := filepath.Join(destDir, assetType)
 				if err := copyDir(assetSrc, assetDest); err != nil {
-					a.logger.Warnf("Failed to copy %s for section %s: %v", assetType, dirName, err)
+					a.logger.Warnf("Failed to copy %s for section %s: %v", assetType, sectionName, err)
 				} else {
-					a.logger.Debugf("Copied %s for section %s", assetType, dirName)
+					a.logger.Debugf("Copied %s for section %s", assetType, sectionName)
 				}
 			}
 		}
 
-		// Scan for markdown files
-		files, err := os.ReadDir(srcDir)
-		if err != nil {
-			a.logger.Warnf("Failed to read section dir %s: %v", srcDir, err)
-			continue
+		// Resolve docs directory (respects settings.output_dir from section config)
+		docsSubdir := "docs"
+		if sectionCfg.Settings.OutputDir != "" {
+			docsSubdir = sectionCfg.Settings.OutputDir
 		}
+		docsDir := filepath.Join(sectionDir, docsSubdir)
 
-		for _, file := range files {
-			if file.IsDir() || filepath.Ext(file.Name()) != ".md" {
-				continue
-			}
+		// Process sections from the section's config (like a mini-package)
+		for _, sec := range sectionCfg.Sections {
+			status := sec.GetStatus()
 
-			filePath := filepath.Join(srcDir, file.Name())
-
-			// Parse frontmatter for status
-			status, title, order := parseFrontmatter(filePath)
-
-			// Filter by status:
-			// - draft: excluded from all builds
-			// - dev: included in dev mode only
-			// - production: included in all builds
+			// Filter by status
 			if status == docgenConfig.StatusDraft {
-				a.logger.Debugf("Skipping %s/%s (status: draft)", dirName, file.Name())
+				a.logger.Debugf("Skipping %s/%s (status: draft)", sectionName, sec.Output)
 				continue
 			}
 			if mode == "prod" && status == docgenConfig.StatusDev {
-				a.logger.Debugf("Skipping %s/%s (status: dev, mode: prod)", dirName, file.Name())
+				a.logger.Debugf("Skipping %s/%s (status: dev, mode: prod)", sectionName, sec.Output)
+				continue
+			}
+
+			srcFile := filepath.Join(docsDir, sec.Output)
+			if _, err := os.Stat(srcFile); os.IsNotExist(err) {
+				a.logger.Warnf("Doc file not found: %s", srcFile)
 				continue
 			}
 
 			// Copy file
-			destPath := filepath.Join(destDir, file.Name())
-			if err := copyFile(filePath, destPath); err != nil {
-				a.logger.Warnf("Failed to copy %s: %v", file.Name(), err)
+			destPath := filepath.Join(destDir, sec.Output)
+			if err := copyFile(srcFile, destPath); err != nil {
+				a.logger.Warnf("Failed to copy %s: %v", sec.Output, err)
 				continue
 			}
 
 			websiteSection.Files = append(websiteSection.Files, manifest.SectionManifest{
-				Name:  file.Name(),
-				Title: title,
-				Order: order,
-				Path:  fmt.Sprintf("./%s/%s", dirName, file.Name()),
+				Name:  sec.Output,
+				Title: sec.Title,
+				Order: sec.Order,
+				Path:  fmt.Sprintf("./%s/%s", sectionName, sec.Output),
 			})
 		}
 
@@ -755,7 +777,7 @@ func (a *Aggregator) processWebsiteSections(wsPath string, cfg *docgenConfig.Doc
 
 		if len(websiteSection.Files) > 0 {
 			m.WebsiteSections = append(m.WebsiteSections, websiteSection)
-			a.logger.Infof("Added website section %s with %d files", dirName, len(websiteSection.Files))
+			a.logger.Infof("Added website section %s with %d files", sectionName, len(websiteSection.Files))
 		}
 	}
 }

@@ -427,37 +427,49 @@ func rebuildPackage(pkg *watchedPackage, w *writer.AstroWriter, mode string, loc
 }
 
 // rebuildWebsiteSections handles output_mode: sections (overview, concepts)
+// Discovers section subdirectories with their own docgen.config.yml and processes them.
 func rebuildWebsiteSections(pkg *watchedPackage, w *writer.AstroWriter, mode string, docCfg *config.DocgenConfig, localCfg *config.DocgenConfig, quiet bool) error {
-	for _, sectionCfg := range docCfg.Sections {
-		dirName := sectionCfg.OutputDir
-		if dirName == "" {
-			dirName = sectionCfg.Name
-		}
+	// Discover section subdirectories that have their own docgen.config.yml
+	entries, err := os.ReadDir(pkg.docgenDir)
+	if err != nil {
+		return err
+	}
 
-		srcDir := filepath.Join(pkg.docgenDir, dirName)
-		if _, err := os.Stat(srcDir); os.IsNotExist(err) {
+	for _, entry := range entries {
+		if !entry.IsDir() {
 			continue
 		}
 
-		// Read all markdown files
-		files, err := os.ReadDir(srcDir)
+		sectionName := entry.Name()
+		sectionDir := filepath.Join(pkg.docgenDir, sectionName)
+
+		// Check if this subdirectory has its own docgen.config.yml
+		sectionConfigPath := filepath.Join(sectionDir, config.ConfigFileName)
+		if _, err := os.Stat(sectionConfigPath); os.IsNotExist(err) {
+			continue // Not a section directory
+		}
+
+		// Load the section's config
+		sectionCfg, err := config.LoadFromPath(sectionConfigPath)
 		if err != nil {
 			continue
 		}
 
-		for _, file := range files {
-			if file.IsDir() || filepath.Ext(file.Name()) != ".md" {
-				continue
-			}
+		if !sectionCfg.Enabled {
+			continue
+		}
 
-			srcPath := filepath.Join(srcDir, file.Name())
-			content, err := os.ReadFile(srcPath)
-			if err != nil {
-				continue
-			}
+		// Resolve docs directory
+		docsSubdir := "docs"
+		if sectionCfg.Settings.OutputDir != "" {
+			docsSubdir = sectionCfg.Settings.OutputDir
+		}
+		docsDir := filepath.Join(sectionDir, docsSubdir)
 
-			// Parse frontmatter for status filtering
-			status := parseStatus(string(content))
+		// Process sections from the section's config
+		for _, sec := range sectionCfg.Sections {
+			status := sec.GetStatus()
+
 			if status == config.StatusDraft {
 				continue
 			}
@@ -465,11 +477,17 @@ func rebuildWebsiteSections(pkg *watchedPackage, w *writer.AstroWriter, mode str
 				continue
 			}
 
+			srcPath := filepath.Join(docsDir, sec.Output)
+			content, err := os.ReadFile(srcPath)
+			if err != nil {
+				continue
+			}
+
 			// Transform content (rewrite paths)
-			transformed := transformWebsiteSection(string(content), dirName)
+			transformed := transformWebsiteSection(string(content), sectionName)
 
 			// Write to website content collection
-			destPath := filepath.Join(w.WebsiteDir(), "src/content", dirName, file.Name())
+			destPath := filepath.Join(w.WebsiteDir(), "src/content", sectionName, sec.Output)
 			if err := os.MkdirAll(filepath.Dir(destPath), 0755); err != nil {
 				continue
 			}
@@ -479,7 +497,7 @@ func rebuildWebsiteSections(pkg *watchedPackage, w *writer.AstroWriter, mode str
 		}
 
 		// Copy assets for this section
-		copyWebsiteSectionAssets(srcDir, dirName, w)
+		copyWebsiteSectionAssets(sectionDir, sectionName, w)
 	}
 
 	return nil

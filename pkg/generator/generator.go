@@ -136,6 +136,11 @@ func (g *Generator) generateInPlace(packageDir string, opts GenerateOptions) err
 		return fmt.Errorf("failed to load docgen config: %w", err)
 	}
 
+	// Handle "sections" output mode: delegate to subdirectory-based generation
+	if cfg.Settings.OutputMode == "sections" {
+		return g.generateSectionsMode(packageDir, configPath, cfg, opts)
+	}
+
 	// 2. Determine output base directory based on config location
 	var outputBaseDir string
 
@@ -500,6 +505,209 @@ func (g *Generator) CallLLM(promptContent, model string, genConfig config.Genera
 	// The response should be clean markdown at this point
 
 	return response, nil
+}
+
+// generateSectionsMode handles output_mode: sections where the top-level config
+// is a website content aggregator. Sections live in subdirectories (e.g., overview/,
+// concepts/), each with their own docgen.config.yml. This method discovers those
+// subdirectory configs, merges their sections, and generates from each.
+func (g *Generator) generateSectionsMode(packageDir, configPath string, topCfg *config.DocgenConfig, opts GenerateOptions) error {
+	docgenDir := filepath.Dir(configPath)
+	g.logger.Infof("Sections mode: scanning subdirectories in %s", docgenDir)
+	ulog.Info("Sections mode").
+		Field("docgenDir", docgenDir).
+		Emit()
+
+	// Build context once for the whole package
+	g.logger.Info("Building context with 'cx generate'...")
+	if err := g.BuildContext(packageDir); err != nil {
+		return fmt.Errorf("failed to build context: %w", err)
+	}
+
+	// Discover subdirectories with their own docgen.config.yml
+	type subSection struct {
+		subDir    string              // subdirectory path (e.g., .../docgen/overview)
+		subCfg    *config.DocgenConfig
+		section   config.SectionConfig
+	}
+
+	var allSections []subSection
+
+	entries, err := os.ReadDir(docgenDir)
+	if err != nil {
+		return fmt.Errorf("failed to read docgen directory %s: %w", docgenDir, err)
+	}
+
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			continue
+		}
+
+		subDirPath := filepath.Join(docgenDir, entry.Name())
+		subConfigPath := filepath.Join(subDirPath, config.ConfigFileName)
+
+		if _, statErr := os.Stat(subConfigPath); os.IsNotExist(statErr) {
+			continue
+		}
+
+		subCfg, loadErr := config.LoadFromPath(subConfigPath)
+		if loadErr != nil {
+			g.logger.Warnf("Failed to load config from %s: %v", subConfigPath, loadErr)
+			continue
+		}
+
+		g.logger.Infof("Found section directory: %s (%d sections)", entry.Name(), len(subCfg.Sections))
+
+		for _, section := range subCfg.Sections {
+			allSections = append(allSections, subSection{
+				subDir:  subDirPath,
+				subCfg:  subCfg,
+				section: section,
+			})
+		}
+	}
+
+	if len(allSections) == 0 {
+		return fmt.Errorf("no section subdirectories with %s found in %s", config.ConfigFileName, docgenDir)
+	}
+
+	// Build a list of qualified names (subdir/section) for display and lookup
+	qualifiedName := func(ss subSection) string {
+		return filepath.Base(ss.subDir) + "/" + ss.section.Name
+	}
+
+	// Filter sections if specific ones were requested
+	// Supports both bare names ("introduction") and namespaced ("overview/introduction").
+	// Bare names work if unique; if ambiguous, an error lists the namespaced alternatives.
+	sectionsToGenerate := allSections
+	if len(opts.Sections) > 0 {
+		var filtered []subSection
+		var errors []string
+
+		for _, requested := range opts.Sections {
+			if strings.Contains(requested, "/") {
+				// Namespaced: match exactly against subdir/name
+				var found bool
+				for _, ss := range allSections {
+					if qualifiedName(ss) == requested {
+						filtered = append(filtered, ss)
+						found = true
+						break
+					}
+				}
+				if !found {
+					var available []string
+					for _, ss := range allSections {
+						available = append(available, qualifiedName(ss))
+					}
+					errors = append(errors, fmt.Sprintf("section %q not found (available: %v)", requested, available))
+				}
+			} else {
+				// Bare name: find all matches across subdirectories
+				var matches []subSection
+				for _, ss := range allSections {
+					if ss.section.Name == requested {
+						matches = append(matches, ss)
+					}
+				}
+				switch len(matches) {
+				case 0:
+					var available []string
+					for _, ss := range allSections {
+						available = append(available, qualifiedName(ss))
+					}
+					errors = append(errors, fmt.Sprintf("section %q not found (available: %v)", requested, available))
+				case 1:
+					filtered = append(filtered, matches[0])
+				default:
+					var ambiguous []string
+					for _, m := range matches {
+						ambiguous = append(ambiguous, qualifiedName(m))
+					}
+					errors = append(errors, fmt.Sprintf("section %q is ambiguous, use a qualified name: %v", requested, ambiguous))
+				}
+			}
+		}
+
+		if len(errors) > 0 {
+			return fmt.Errorf("%s", strings.Join(errors, "; "))
+		}
+
+		sectionsToGenerate = filtered
+		g.logger.Infof("Generating %d of %d sections: %v", len(sectionsToGenerate), len(allSections), opts.Sections)
+	}
+
+	// Generate each section using its subdirectory context
+	for _, ss := range sectionsToGenerate {
+		g.logger.Infof("Generating section: %s", qualifiedName(ss))
+
+		// Resolve prompt from the subdirectory's prompts/ folder
+		promptPath := filepath.Join(ss.subDir, "prompts", ss.section.Prompt)
+		promptContent, err := os.ReadFile(promptPath)
+		if err != nil {
+			return fmt.Errorf("could not read prompt for section '%s' at %s: %w", ss.section.Name, promptPath, err)
+		}
+
+		// Build the final prompt with system prompt if configured
+		finalPrompt := string(promptContent)
+		if ss.subCfg.Settings.SystemPrompt != "" {
+			if ss.subCfg.Settings.SystemPrompt == "default" {
+				finalPrompt = DefaultSystemPrompt + "\n" + finalPrompt
+			} else {
+				systemPromptPath := filepath.Join(ss.subDir, ss.subCfg.Settings.SystemPrompt)
+				if content, readErr := os.ReadFile(systemPromptPath); readErr == nil {
+					finalPrompt = string(content) + "\n" + finalPrompt
+				}
+			}
+		}
+
+		// Handle reference mode
+		outputDir := filepath.Join(ss.subDir, "docs")
+		if ss.subCfg.Settings.OutputDir != "" {
+			outputDir = filepath.Join(ss.subDir, ss.subCfg.Settings.OutputDir)
+		}
+		if ss.subCfg.Settings.RegenerationMode == "reference" {
+			existingOutputPath := filepath.Join(outputDir, ss.section.Output)
+			if existingDocs, readErr := os.ReadFile(existingOutputPath); readErr == nil {
+				g.logger.Debugf("Injecting reference content from %s", existingOutputPath)
+				finalPrompt = "For your reference, here is the previous version of the documentation:\n\n<reference_docs>\n" +
+					string(existingDocs) + "\n</reference_docs>\n\n---\n\n" + finalPrompt
+			}
+		}
+
+		// Determine model (section override > sub-config > top-level)
+		model := topCfg.Settings.Model
+		if ss.subCfg.Settings.Model != "" {
+			model = ss.subCfg.Settings.Model
+		}
+		if ss.section.Model != "" {
+			model = ss.section.Model
+		}
+
+		genConfig := config.MergeGenerationConfig(ss.subCfg.Settings.GenerationConfig, ss.section.GenerationConfig)
+
+		output, err := g.CallLLM(finalPrompt, model, genConfig, packageDir)
+		if err != nil {
+			g.logger.WithError(err).Errorf("LLM call failed for section '%s'", ss.section.Name)
+			continue
+		}
+
+		// Write output to the subdirectory's docs/ folder
+		outputPath := filepath.Join(outputDir, ss.section.Output)
+		if err := os.MkdirAll(filepath.Dir(outputPath), 0755); err != nil {
+			return fmt.Errorf("failed to create output directory: %w", err)
+		}
+		if err := os.WriteFile(outputPath, []byte(output), 0644); err != nil {
+			return fmt.Errorf("failed to write section output: %w", err)
+		}
+		g.logger.Infof("Successfully wrote section '%s' to %s", ss.section.Name, outputPath)
+		ulog.Success("Wrote section").
+			Field("section", ss.section.Name).
+			Field("path", outputPath).
+			Emit()
+	}
+
+	return nil
 }
 
 func copyDir(src, dst string) error {

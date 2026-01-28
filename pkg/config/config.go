@@ -117,6 +117,21 @@ func Load(dir string) (*DocgenConfig, error) {
 	return cfg, err
 }
 
+// LoadFromPath loads a docgen config from a specific file path.
+func LoadFromPath(configPath string) (*DocgenConfig, error) {
+	data, err := os.ReadFile(configPath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read %s: %w", configPath, err)
+	}
+
+	var config DocgenConfig
+	if err := yaml.Unmarshal(data, &config); err != nil {
+		return nil, fmt.Errorf("failed to parse %s: %w", configPath, err)
+	}
+
+	return &config, nil
+}
+
 // LoadWithNotebook tries to load docgen config from notebook location first, then falls back to repo docs/.
 // Returns the config, the path where it was found, and any error.
 // The returned path indicates whether we're in "notebook mode" or "repo mode".
