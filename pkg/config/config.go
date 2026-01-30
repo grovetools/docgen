@@ -29,6 +29,7 @@ type DocgenConfig struct {
 	Sections    []SectionConfig `yaml:"sections"`
 	Readme      *ReadmeConfig   `yaml:"readme,omitempty"`
 	Sidebar     *SidebarConfig  `yaml:"sidebar,omitempty"` // Website sidebar configuration
+	Logos       []string        `yaml:"logos,omitempty"`   // Additional logo files to copy during aggregation (absolute paths with ~ expansion)
 }
 
 // SidebarConfig defines the sidebar ordering and display configuration.
@@ -104,12 +105,25 @@ func (s *SectionConfig) GetStatus() string {
 
 // ReadmeConfig defines the settings for synchronizing the README.md.
 type ReadmeConfig struct {
-	Template      string `yaml:"template"`       // Path to the README template, relative to package root.
-	Output        string `yaml:"output"`         // Path to the output README file, relative to package root.
-	SourceSection string `yaml:"source_section"` // The 'name' of the section to inject into the template.
-	StripLines    int    `yaml:"strip_lines,omitempty"` // Number of lines to strip from the top of source file (default: 0).
-	GenerateTOC   bool   `yaml:"generate_toc,omitempty"` // Whether to generate a table of contents from sections (default: false).
-	BaseURL       string `yaml:"base_url,omitempty"` // Base URL for converting root-relative paths to absolute URLs (e.g., "https://grovetools.ai").
+	Template      string           `yaml:"template"`       // Path to the README template, relative to package root.
+	Output        string           `yaml:"output"`         // Path to the output README file, relative to package root.
+	SourceSection string           `yaml:"source_section"` // The 'name' of the section to inject into the template.
+	StripLines    int              `yaml:"strip_lines,omitempty"` // Number of lines to strip from the top of source file (default: 0).
+	GenerateTOC   bool             `yaml:"generate_toc,omitempty"` // Whether to generate a table of contents from sections (default: false).
+	BaseURL       string           `yaml:"base_url,omitempty"` // Base URL for converting root-relative paths to absolute URLs (e.g., "https://grovetools.ai").
+	Logo          *LogoConfig      `yaml:"logo,omitempty"` // Optional logo generation configuration.
+}
+
+// LogoConfig defines settings for generating a combined logo+text SVG.
+type LogoConfig struct {
+	Input     string  `yaml:"input"`               // Path to input logo SVG (relative to base_url root or absolute)
+	Output    string  `yaml:"output"`              // Path for output logo-with-text SVG
+	Text      string  `yaml:"text"`                // Text to display below logo
+	Font      string  `yaml:"font"`                // Path to TTF/OTF font file
+	Color     string  `yaml:"color,omitempty"`     // Text color (hex), defaults to "#589ac7"
+	Spacing   float64 `yaml:"spacing,omitempty"`   // Spacing between logo and text (default: 35)
+	TextScale float64 `yaml:"text_scale,omitempty"` // Text width as proportion of logo (default: 1.1)
+	Width     float64 `yaml:"width,omitempty"`     // Output SVG width in pixels (default: 200)
 }
 
 // Load attempts to load a docgen.config.yml file from a given directory's docs/ subdirectory.

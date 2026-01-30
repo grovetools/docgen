@@ -1,39 +1,46 @@
 <!-- DOCGEN:OVERVIEW:START -->
 
-# Grove Docgen
+# Grove Docgen Overview
 
-`grove-docgen` is a command-line tool that generates technical documentation from a project's source code using LLMs and user-defined prompts. It provides a structured workflow for creating and maintaining documentation by defining it as a series of configurable sections.
+`grove-docgen` is a command-line tool for generating documentation for software projects using Large Language Models (LLMs). It integrates with the Grove ecosystem to create documentation from source code and project structure.
 
 <!-- placeholder for animated gif -->
 
-### Key Features
+## Key Features
 
-*   **Section-Based Architecture**: Defines documentation structure in a `docgen.config.yml` file. Each section is configured with its own prompt, output file, and LLM settings.
-*   **Customizable Prompts**: The `docgen init` command scaffolds a set of starter prompts in `docs/prompts/`. These files can be modified to fit the project's specific needs and documentation style.
-*   **Context-Aware Generation**: Uses `grove-context` to build file-based context from a `.grove/rules` file, providing the LLM with relevant source code to generate accurate documentation.
-*   **Interactive Customization**: The `docgen customize` command creates a `grove-flow` plan, enabling an interactive, agent-assisted workflow to refine documentation structure and content before generation.
-*   **Multi-Model Support**: A global default LLM model can be set in the configuration, with the option to override it for specific sections, allowing different models to be used for different tasks.
-*   **Workspace Aggregation**: The `docgen aggregate` command discovers all `docgen`-enabled packages within a workspace, generates their documentation, and collects the results into a single output directory with a `manifest.json`.
-*   **README Synchronization**: The `docgen sync-readme` command generates a project `README.md` from a template, injecting content from a specified documentation section to keep the overview consistent.
-
-## How It Works
-
-The documentation generation process follows a repeatable pipeline:
-1.  `grove-docgen` reads the `docs/docgen.config.yml` file to identify the defined documentation sections.
-2.  For each section, it calls `grove-context` (`cx`) to generate a file-based context based on the patterns in the configured `rules_file`.
-3.  It reads the content of the section's corresponding prompt file from the `docs/prompts/` directory.
-4.  It sends the generated context and the prompt to the configured LLM using the `grove llm request` command.
-5.  The LLM's response is processed and written to the section's specified output markdown file.
+*   **Section-Based Architecture**: Documentation is defined in a `docgen.config.yml` file, organized into logical sections. Each section is configured with its own prompt, output file, and can override global settings like the LLM model.
+*   **Customizable Prompts**: The `docgen init` command creates a `docs/prompts/` directory containing starter prompt files. These markdown files can be modified to direct the LLM's content generation.
+*   **Interactive Customization**: The `docgen customize` command creates a `grove-flow` plan, using AI agents or structured prompts to interactively customize and generate documentation.
+*   **Multi-Model Support**: The tool leverages `grove llm`, which allows the use of different LLM providers and models (e.g., Gemini, Claude, OpenAI) for different documentation sections.
+*   **Workspace-Aware Context**: It uses `grove cx` to analyze project files based on configurable rules. This context is provided to the LLM during generation.
+*   **README Synchronization**: A `sync-readme` command updates the project's root `README.md` by injecting content from a specified documentation section into a template file.
+*   **Documentation Aggregation**: The `aggregate` command discovers all enabled packages in a workspace, copies their documentation into an output directory, and creates a `manifest.json` file.
+*   **Schema Tools**: Includes commands to generate JSON schemas from Go types (`schema generate`) and enrich them with LLM-generated descriptions (`schema enrich`).
 
 ## Ecosystem Integration
 
-`grove-docgen` functions as a component of the Grove tool suite and executes other tools in the ecosystem as subprocesses.
+`grove-docgen` functions as a component within the Grove developer tool ecosystem.
 
-*   **`grove-context` (`cx`)**: Provides the file-based context for all LLM requests, ensuring the model has an accurate understanding of the project's source code.
-*   **`grove-flow`**: The `docgen customize` command uses `grove-flow` to create and manage an interactive, plan-based workflow, turning documentation generation into a guided, agent-assisted process.
-*   **`grove-gemini` and `grove-openai`**: The `grove llm request` command is used to execute the calls to the configured LLM providers, handling the API interactions required to generate the documentation content.
+*   It uses `grove cx` to build context from source code.
+*   It uses `grove llm` to send requests to language models.
+*   It uses `grove-flow` to create interactive documentation plans.
+*   It recognizes the workspace structure defined in the ecosystem's `grove.yml` file.
+*   Prompts can be stored and resolved from a central `grove-notebook` location, with a `migrate-prompts` command to assist in moving them.
 
-## Installation
+This design allows `docgen` to operate with an understanding of the project and its related components.
+
+## How It Works
+
+The documentation generation process consists of the following steps:
+
+1.  **Configuration Load**: `docgen` reads the `docs/docgen.config.yml` file to determine which sections to generate.
+2.  **Context Generation**: It executes `grove cx generate`, which reads project files according to patterns in a rules file and prepares context for the LLM.
+3.  **Prompt Resolution**: It locates and reads the specified prompt file for the section, checking first in the associated `grove-notebook` and then falling back to the local `docs/prompts/` directory.
+4.  **LLM Invocation**: It calls `grove llm request`, sending the generated context and the prompt content to the configured language model.
+5.  **Output Writing**: The markdown response from the LLM is written to the section's specified output file.
+6.  **JSON Regeneration (Optional)**: If configured, it parses the generated markdown files to create a structured JSON representation of the documentation.
+
+### Installation
 
 Install via the Grove meta-CLI:
 ```bash

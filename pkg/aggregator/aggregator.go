@@ -379,6 +379,28 @@ func (a *Aggregator) aggregateEcosystem(rootDir string, m *manifest.Manifest, ou
 			}
 		}
 
+		// Copy additional logo files specified in logos: config
+		if len(docCfg.Logos) > 0 {
+			imagesDestPath := filepath.Join(distDest, "images")
+			if err := os.MkdirAll(imagesDestPath, 0755); err != nil {
+				a.logger.WithError(err).Errorf("Failed to create images directory for logos: %s", wsName)
+			} else {
+				for _, logoPath := range docCfg.Logos {
+					// Expand ~ in path
+					expandedPath := expandPath(logoPath)
+					if _, err := os.Stat(expandedPath); os.IsNotExist(err) {
+						a.logger.Warnf("Logo file not found for %s: %s", wsName, expandedPath)
+						continue
+					}
+					logoDestPath := filepath.Join(imagesDestPath, filepath.Base(expandedPath))
+					a.logger.Infof("Copying logo for %s: %s -> %s", wsName, expandedPath, logoDestPath)
+					if err := copyFile(expandedPath, logoDestPath); err != nil {
+						a.logger.WithError(err).Errorf("Failed to copy logo file for %s", wsName)
+					}
+				}
+			}
+		}
+
 		sort.Slice(sectionsToAggregate, func(i, j int) bool {
 			return sectionsToAggregate[i].Order < sectionsToAggregate[j].Order
 		})
@@ -873,4 +895,15 @@ func copyFile(src, dst string) error {
 func dirExists(path string) bool {
 	info, err := os.Stat(path)
 	return err == nil && info.IsDir()
+}
+
+// expandPath expands ~ to user home directory
+func expandPath(p string) string {
+	if strings.HasPrefix(p, "~/") {
+		home, err := os.UserHomeDir()
+		if err == nil {
+			return filepath.Join(home, p[2:])
+		}
+	}
+	return p
 }

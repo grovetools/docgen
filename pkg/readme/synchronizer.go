@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/grovetools/docgen/pkg/config"
+	"github.com/grovetools/docgen/pkg/logo"
 	"github.com/sirupsen/logrus"
 )
 
@@ -168,6 +169,80 @@ func (s *Synchronizer) Sync(packageDir string) error {
 	}
 
 	s.logger.Debugf("Successfully synchronized %s", outputPath)
+
+	// 5. Generate logo with text if configured
+	if cfg.Readme.Logo != nil {
+		if err := s.generateLogo(cfg.Readme.Logo, packageDir); err != nil {
+			return fmt.Errorf("failed to generate logo: %w", err)
+		}
+	}
+
+	return nil
+}
+
+// generateLogo creates a combined logo+text SVG using the logo package.
+func (s *Synchronizer) generateLogo(logoCfg *config.LogoConfig, packageDir string) error {
+	// Helper to expand ~ in paths
+	expandPath := func(p string) string {
+		if strings.HasPrefix(p, "~/") {
+			home, err := os.UserHomeDir()
+			if err == nil {
+				return filepath.Join(home, p[2:])
+			}
+		}
+		return p
+	}
+
+	// Resolve input path - could be absolute or relative to package
+	inputPath := expandPath(logoCfg.Input)
+	if !filepath.IsAbs(inputPath) {
+		inputPath = filepath.Join(packageDir, inputPath)
+	}
+
+	// Resolve output path
+	outputPath := expandPath(logoCfg.Output)
+	if !filepath.IsAbs(outputPath) {
+		outputPath = filepath.Join(packageDir, outputPath)
+	}
+
+	// Expand ~ in font path
+	fontPath := expandPath(logoCfg.Font)
+
+	// Apply defaults
+	spacing := logoCfg.Spacing
+	if spacing == 0 {
+		spacing = 35
+	}
+	textScale := logoCfg.TextScale
+	if textScale == 0 {
+		textScale = 1.1
+	}
+	color := logoCfg.Color
+	if color == "" {
+		color = "#589ac7"
+	}
+	width := logoCfg.Width
+	if width == 0 {
+		width = 200
+	}
+
+	cfg := logo.Config{
+		InputPath:  inputPath,
+		OutputPath: outputPath,
+		Text:       logoCfg.Text,
+		TextColor:  color,
+		FontPath:   fontPath,
+		Spacing:    spacing,
+		TextScale:  textScale,
+		Width:      width,
+	}
+
+	gen := logo.New(s.logger)
+	if err := gen.Generate(cfg); err != nil {
+		return err
+	}
+
+	s.logger.Debugf("Generated logo with text: %s", outputPath)
 	return nil
 }
 

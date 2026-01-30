@@ -420,6 +420,9 @@ func rebuildPackage(pkg *watchedPackage, w *writer.AstroWriter, mode string, loc
 	// Copy assets
 	copyAssets(pkg.docgenDir, pkg.pkgName, w)
 
+	// Copy additional logos from config
+	copyLogos(docCfg.Logos, pkg.pkgName, w)
+
 	// Update manifest sidebar entry
 	updateManifestSidebar(pkg.pkgName, docCfg, mode, w, localCfg)
 
@@ -615,6 +618,32 @@ func copyAssets(docgenDir, pkgName string, w *writer.AstroWriter) {
 			return nil
 		})
 	}
+}
+
+// copyLogos copies additional logo files specified in the logos: config
+func copyLogos(logos []string, pkgName string, w *writer.AstroWriter) {
+	for _, logoPath := range logos {
+		// Expand ~ in path
+		expandedPath := expandHomePath(logoPath)
+		data, err := os.ReadFile(expandedPath)
+		if err != nil {
+			ulog.Warn("Could not read logo file").Field("path", expandedPath).Err(err).Emit()
+			continue
+		}
+		filename := filepath.Base(expandedPath)
+		w.WriteAsset(pkgName, "images", filename, data)
+	}
+}
+
+// expandHomePath expands ~ to user home directory
+func expandHomePath(p string) string {
+	if strings.HasPrefix(p, "~/") {
+		home, err := os.UserHomeDir()
+		if err == nil {
+			return filepath.Join(home, p[2:])
+		}
+	}
+	return p
 }
 
 // copyWebsiteSectionAssets copies assets for a website section
