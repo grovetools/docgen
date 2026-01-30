@@ -109,6 +109,7 @@ type ReadmeConfig struct {
 	SourceSection string `yaml:"source_section"` // The 'name' of the section to inject into the template.
 	StripLines    int    `yaml:"strip_lines,omitempty"` // Number of lines to strip from the top of source file (default: 0).
 	GenerateTOC   bool   `yaml:"generate_toc,omitempty"` // Whether to generate a table of contents from sections (default: false).
+	BaseURL       string `yaml:"base_url,omitempty"` // Base URL for converting root-relative paths to absolute URLs (e.g., "https://grovetools.ai").
 }
 
 // Load attempts to load a docgen.config.yml file from a given directory's docs/ subdirectory.

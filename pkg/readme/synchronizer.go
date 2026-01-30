@@ -140,8 +140,8 @@ func (s *Synchronizer) Sync(packageDir string) error {
 	if startIdx == -1 || endIdx == -1 {
 		s.logger.Warnf("Could not find markers %s and %s in template. Skipping content injection.", startMarker, endMarker)
 	} else {
-		// Rewrite relative image paths for the README context
-		rewrittenSource := rewriteImagePathsForReadme(string(sourceContent))
+		// Rewrite media paths for the README context
+		rewrittenSource := rewriteMediaPathsForReadme(string(sourceContent), cfg.Readme.BaseURL)
 		
 		prefix := composedContent[:startIdx+len(startMarker)]
 		suffix := composedContent[endIdx:]
@@ -156,6 +156,11 @@ func (s *Synchronizer) Sync(packageDir string) error {
 		}
 	}
 
+	// 4. Rewrite all media paths in the final content (including template paths)
+	if cfg.Readme.BaseURL != "" {
+		composedContent = rewriteMediaPathsForReadme(composedContent, cfg.Readme.BaseURL)
+	}
+
 	// Write the final README.md
 	outputPath := filepath.Join(packageDir, cfg.Readme.Output)
 	if err := os.WriteFile(outputPath, []byte(composedContent), 0644); err != nil {
@@ -166,9 +171,11 @@ func (s *Synchronizer) Sync(packageDir string) error {
 	return nil
 }
 
-// rewriteImagePathsForReadme prepends 'docs/' to relative image paths in markdown content.
-func rewriteImagePathsForReadme(content string) string {
-	// First handle markdown image syntax: ![alt text](path)
+// rewriteMediaPathsForReadme rewrites media paths in markdown content for README context.
+// If baseURL is provided, root-relative paths (starting with /) are converted to absolute URLs.
+// Relative paths (like ./images/) are converted to docs/ paths for the repository context.
+func rewriteMediaPathsForReadme(content, baseURL string) string {
+	// First handle markdown image/link syntax: ![alt text](path) and [![alt](img)](link)
 	markdownRe := regexp.MustCompile(`!\[([^\]]*)\]\(([^\)]*)\)`)
 	content = markdownRe.ReplaceAllStringFunc(content, func(match string) string {
 		parts := markdownRe.FindStringSubmatch(match)
@@ -178,20 +185,33 @@ func rewriteImagePathsForReadme(content string) string {
 		altText := parts[1]
 		path := parts[2]
 
-		// If path is absolute, an external URL, or already starts with docs/, do nothing
-		if strings.HasPrefix(path, "http") || strings.HasPrefix(path, "/") || strings.HasPrefix(path, "docs/") {
+		newPath := rewritePath(path, baseURL)
+		if newPath == path {
 			return match
 		}
-
-		// Handle ./images/ paths - convert to docs/images/
-		if strings.HasPrefix(path, "./images/") {
-			newPath := "docs/images/" + strings.TrimPrefix(path, "./images/")
-			return fmt.Sprintf("![%s](%s)", altText, newPath)
-		}
-
-		// For other relative paths, prepend "docs/"
-		newPath := "docs/" + path
 		return fmt.Sprintf("![%s](%s)", altText, newPath)
+	})
+
+	// Handle markdown links that wrap images: [![...](img)](link)
+	// This catches video thumbnails linked to video files
+	linkRe := regexp.MustCompile(`\[([^\]]*)\]\(([^\)]+)\)`)
+	content = linkRe.ReplaceAllStringFunc(content, func(match string) string {
+		// Skip if it's an image (already handled above)
+		if strings.HasPrefix(match, "!") {
+			return match
+		}
+		parts := linkRe.FindStringSubmatch(match)
+		if len(parts) < 3 {
+			return match
+		}
+		linkText := parts[1]
+		path := parts[2]
+
+		newPath := rewritePath(path, baseURL)
+		if newPath == path {
+			return match
+		}
+		return fmt.Sprintf("[%s](%s)", linkText, newPath)
 	})
 
 	// Then handle HTML img tags: <img src="path" ...>
@@ -208,23 +228,48 @@ func rewriteImagePathsForReadme(content string) string {
 		path := parts[2]
 		afterSrc := parts[3]
 
-		// If path is absolute, an external URL, or already starts with docs/, do nothing
-		if strings.HasPrefix(path, "http") || strings.HasPrefix(path, "/") || strings.HasPrefix(path, "docs/") {
+		newPath := rewritePath(path, baseURL)
+		if newPath == path {
 			return match
 		}
-
-		// Handle ./images/ paths - convert to docs/images/
-		if strings.HasPrefix(path, "./images/") {
-			newPath := "docs/images/" + strings.TrimPrefix(path, "./images/")
-			return fmt.Sprintf(`<img %ssrc="%s"%s>`, beforeSrc, newPath, afterSrc)
-		}
-
-		// For other relative paths, prepend "docs/"
-		newPath := "docs/" + path
 		return fmt.Sprintf(`<img %ssrc="%s"%s>`, beforeSrc, newPath, afterSrc)
 	})
 
 	return content
+}
+
+// rewritePath rewrites a single path according to README context rules.
+// - External URLs (http/https) are unchanged
+// - Root-relative paths (/) are prefixed with baseURL if provided, otherwise unchanged
+// - Relative paths (./images/) are converted to docs/images/
+// - Other relative paths are prefixed with docs/
+func rewritePath(path, baseURL string) string {
+	// External URLs are unchanged
+	if strings.HasPrefix(path, "http") {
+		return path
+	}
+
+	// Root-relative paths: convert to absolute URL if baseURL is set
+	if strings.HasPrefix(path, "/") {
+		if baseURL != "" {
+			return strings.TrimRight(baseURL, "/") + path
+		}
+		// No baseURL, leave root-relative paths unchanged
+		return path
+	}
+
+	// Already has docs/ prefix
+	if strings.HasPrefix(path, "docs/") {
+		return path
+	}
+
+	// Handle ./images/ paths - convert to docs/images/
+	if strings.HasPrefix(path, "./images/") {
+		return "docs/images/" + strings.TrimPrefix(path, "./images/")
+	}
+
+	// For other relative paths, prepend "docs/"
+	return "docs/" + path
 }
 
 // injectTOC generates and injects a table of contents into the README content.
