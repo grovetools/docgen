@@ -14,6 +14,7 @@ import (
 	"github.com/grovetools/core/pkg/workspace"
 	docgenConfig "github.com/grovetools/docgen/pkg/config"
 	"github.com/grovetools/docgen/pkg/manifest"
+	"github.com/grovetools/docgen/pkg/transformer"
 	"github.com/sirupsen/logrus"
 )
 
@@ -27,7 +28,8 @@ func New(logger *logrus.Logger) *Aggregator {
 
 // Aggregate collects documentation from ecosystems specified in the local docgen.config.yml.
 // If no ecosystems are specified, it falls back to the current ecosystem only and warns the user.
-func (a *Aggregator) Aggregate(outputDir string, mode string) error {
+// The transform parameter specifies output transformations (e.g., "astro" for website builds).
+func (a *Aggregator) Aggregate(outputDir string, mode string, transform string) error {
 	// Validate mode
 	if mode != "dev" && mode != "prod" {
 		return fmt.Errorf("invalid mode '%s': must be 'dev' or 'prod'", mode)
@@ -106,7 +108,7 @@ func (a *Aggregator) Aggregate(outputDir string, mode string) error {
 	// Aggregate from each ecosystem
 	for _, eco := range ecosystemsToProcess {
 		a.logger.Infof("Processing ecosystem: %s (%s)", eco.Name, eco.Path)
-		if err := a.aggregateEcosystem(eco.Path, m, outputDir, mode, allowedPackages); err != nil {
+		if err := a.aggregateEcosystem(eco.Path, m, outputDir, mode, transform, allowedPackages); err != nil {
 			a.logger.Warnf("Error aggregating ecosystem %s: %v", eco.Name, err)
 			// Continue with other ecosystems
 		}
@@ -186,7 +188,8 @@ func (a *Aggregator) buildSidebarManifest(src *docgenConfig.SidebarConfig, mode 
 
 // aggregateEcosystem processes a single ecosystem and adds its docs to the manifest
 // If allowedPackages is non-empty, only packages in that set will be included.
-func (a *Aggregator) aggregateEcosystem(rootDir string, m *manifest.Manifest, outputDir, mode string, allowedPackages map[string]bool) error {
+// The transform parameter specifies output transformations (e.g., "astro" for website builds).
+func (a *Aggregator) aggregateEcosystem(rootDir string, m *manifest.Manifest, outputDir, mode, transform string, allowedPackages map[string]bool) error {
 	// Load the ecosystem config to get workspace paths
 	groveYmlPath := filepath.Join(rootDir, "grove.yml")
 	cfg, err := config.Load(groveYmlPath)
@@ -246,7 +249,7 @@ func (a *Aggregator) aggregateEcosystem(rootDir string, m *manifest.Manifest, ou
 
 		// Handle "sections" output mode (for website content like overview, concepts)
 		if docCfg.Settings.OutputMode == "sections" {
-			a.processWebsiteSections(wsPath, docCfg, m, outputDir, mode)
+			a.processWebsiteSections(wsPath, docCfg, m, outputDir, mode, transform)
 			continue
 		}
 
@@ -329,16 +332,30 @@ func (a *Aggregator) aggregateEcosystem(rootDir string, m *manifest.Manifest, ou
 			} else {
 				// Copy the actual documentation file
 				a.logger.Infof("Copying documentation for %s/%s", wsName, section.Output)
-				
+
 				srcData, err := os.ReadFile(srcFile)
 				if err != nil {
 					a.logger.WithError(err).Errorf("Failed to read %s", srcFile)
 					continue
 				}
-				
+
 				// Apply agg_strip_lines if configured for this section
 				processedData := a.applyStripLines(srcData, section.AggStripLines, wsName, section.Output)
-				
+
+				// Apply Astro transformations if requested
+				if transform == "astro" {
+					trans := transformer.NewAstroTransformer()
+					opts := transformer.TransformOptions{
+						PackageName: wsName,
+						Title:       section.Title,
+						Description: docCfg.Description,
+						Version:     version,
+						Category:    docCfg.Category,
+						Order:       section.Order,
+					}
+					processedData = trans.TransformStandardDoc(processedData, opts)
+				}
+
 				if err := os.WriteFile(destFile, processedData, 0644); err != nil {
 					a.logger.WithError(err).Errorf("Failed to write %s", destFile)
 					continue
@@ -416,12 +433,26 @@ func (a *Aggregator) aggregateEcosystem(rootDir string, m *manifest.Manifest, ou
 		changelogSrc := filepath.Join(wsPath, "CHANGELOG.md")
 		if _, err := os.Stat(changelogSrc); err == nil {
 			changelogDest := filepath.Join(distDest, "CHANGELOG.md")
-			
+
 			// Copy the CHANGELOG.md file
 			changelogData, err := os.ReadFile(changelogSrc)
 			if err != nil {
 				a.logger.WithError(err).Errorf("Failed to read CHANGELOG.md for %s", wsName)
 			} else {
+				// Apply Astro transformations if requested
+				if transform == "astro" {
+					trans := transformer.NewAstroTransformer()
+					opts := transformer.TransformOptions{
+						PackageName: wsName,
+						Title:       fmt.Sprintf("Changelog for %s", docCfg.Title),
+						Description: "",
+						Version:     version,
+						Category:    docCfg.Category,
+						Order:       999, // Changelogs go at the end
+					}
+					changelogData = trans.TransformStandardDoc(changelogData, opts)
+				}
+
 				if err := os.WriteFile(changelogDest, changelogData, 0644); err != nil {
 					a.logger.WithError(err).Errorf("Failed to write CHANGELOG.md for %s", wsName)
 				} else {
@@ -661,7 +692,7 @@ func copyDir(src, dst string) error {
 //
 // Each section subdirectory should have its own docgen.config.yml (like a mini-package),
 // mirroring the structure of package docgen directories (docs/, prompts/, images/, etc.)
-func (a *Aggregator) processWebsiteSections(wsPath string, cfg *docgenConfig.DocgenConfig, m *manifest.Manifest, outputDir, mode string) {
+func (a *Aggregator) processWebsiteSections(wsPath string, cfg *docgenConfig.DocgenConfig, m *manifest.Manifest, outputDir, mode, transform string) {
 	wsName := filepath.Base(wsPath)
 	a.logger.Infof("Processing website sections for %s", wsName)
 
@@ -777,10 +808,27 @@ func (a *Aggregator) processWebsiteSections(wsPath string, cfg *docgenConfig.Doc
 				continue
 			}
 
-			// Copy file
+			// Read file content
+			content, err := os.ReadFile(srcFile)
+			if err != nil {
+				a.logger.Warnf("Failed to read %s: %v", sec.Output, err)
+				continue
+			}
+
+			// Apply Astro transformations if requested
+			if transform == "astro" {
+				trans := transformer.NewAstroTransformer()
+				opts := transformer.TransformOptions{
+					SectionName: sectionName,
+					Category:    sectionCfg.Category,
+				}
+				content = trans.TransformWebsiteSection(content, opts)
+			}
+
+			// Write file
 			destPath := filepath.Join(destDir, sec.Output)
-			if err := copyFile(srcFile, destPath); err != nil {
-				a.logger.Warnf("Failed to copy %s: %v", sec.Output, err)
+			if err := os.WriteFile(destPath, content, 0644); err != nil {
+				a.logger.Warnf("Failed to write %s: %v", sec.Output, err)
 				continue
 			}
 

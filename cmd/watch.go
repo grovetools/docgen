@@ -2,7 +2,6 @@ package cmd
 
 import (
 	"encoding/json"
-	"fmt"
 	"os"
 	"path/filepath"
 	"sort"
@@ -15,6 +14,7 @@ import (
 	"github.com/grovetools/core/pkg/workspace"
 	"github.com/grovetools/docgen/pkg/config"
 	"github.com/grovetools/docgen/pkg/manifest"
+	"github.com/grovetools/docgen/pkg/transformer"
 	"github.com/grovetools/docgen/pkg/watcher"
 	"github.com/grovetools/docgen/pkg/writer"
 	"github.com/spf13/cobra"
@@ -486,15 +486,15 @@ func rebuildWebsiteSections(pkg *watchedPackage, w *writer.AstroWriter, mode str
 				continue
 			}
 
-			// Transform content (rewrite paths)
-			transformed := transformWebsiteSection(string(content), sectionName)
+			// Transform content (rewrite paths) using central transformer
+			transformed := transformWebsiteSection(content, sectionName, sectionCfg.Category)
 
 			// Write to website content collection
 			destPath := filepath.Join(w.WebsiteDir(), "src/content", sectionName, sec.Output)
 			if err := os.MkdirAll(filepath.Dir(destPath), 0755); err != nil {
 				continue
 			}
-			if err := os.WriteFile(destPath, []byte(transformed), 0644); err != nil {
+			if err := os.WriteFile(destPath, transformed, 0644); err != nil {
 				ulog.Error("Failed to write section file").Field("file", destPath).Err(err).Emit()
 			}
 		}
@@ -507,72 +507,14 @@ func rebuildWebsiteSections(pkg *watchedPackage, w *writer.AstroWriter, mode str
 }
 
 // transformWebsiteSection transforms paths and augments frontmatter for website section content
-func transformWebsiteSection(content, sectionName string) string {
-	basePath := "/docs/" + sectionName
-
-	// Map section names to sidebar category names
-	categoryMap := map[string]string{
-		"overview": "Overview",
-		"concepts": "Concepts",
+// using the central transformer package for consistency with aggregate command.
+func transformWebsiteSection(content []byte, sectionName, category string) []byte {
+	trans := transformer.NewAstroTransformer()
+	opts := transformer.TransformOptions{
+		SectionName: sectionName,
+		Category:    category,
 	}
-	category := categoryMap[sectionName]
-	if category == "" {
-		category = sectionName
-	}
-
-	// Augment frontmatter with category and package fields
-	content = augmentFrontmatter(content, category, "Grove Ecosystem")
-
-	// Rewrite image paths
-	content = strings.ReplaceAll(content, "](./images/", "]("+basePath+"/images/")
-
-	// Rewrite asciinema paths
-	content = strings.ReplaceAll(content, `"./asciicasts/`, `"`+basePath+"/asciicasts/")
-
-	// Rewrite video paths
-	content = strings.ReplaceAll(content, "](./videos/", "]("+basePath+"/videos/")
-
-	return content
-}
-
-// augmentFrontmatter adds category and package fields to existing frontmatter
-// or creates new frontmatter if none exists. Preserves all existing fields.
-func augmentFrontmatter(content, category, pkg string) string {
-	if !strings.HasPrefix(content, "---\n") {
-		// No frontmatter, create new
-		newFrontmatter := fmt.Sprintf("---\ncategory: \"%s\"\npackage: \"%s\"\n---\n\n", category, pkg)
-		return newFrontmatter + content
-	}
-
-	// Find end of frontmatter
-	endIdx := strings.Index(content[4:], "\n---")
-	if endIdx == -1 {
-		return content // Malformed frontmatter, skip
-	}
-
-	existingFrontmatter := content[4 : endIdx+4]
-	restOfContent := content[endIdx+8:] // Skip past "\n---"
-
-	// Check which fields already exist
-	hasCategory := strings.Contains(existingFrontmatter, "category:")
-	hasPackage := strings.Contains(existingFrontmatter, "package:")
-
-	// Build new fields to add
-	var newFields []string
-	if !hasCategory {
-		newFields = append(newFields, fmt.Sprintf("category: \"%s\"", category))
-	}
-	if !hasPackage {
-		newFields = append(newFields, fmt.Sprintf("package: \"%s\"", pkg))
-	}
-
-	// If no new fields needed, return as-is
-	if len(newFields) == 0 {
-		return content
-	}
-
-	// Append new fields to existing frontmatter
-	return "---\n" + existingFrontmatter + "\n" + strings.Join(newFields, "\n") + "\n---" + restOfContent
+	return trans.TransformWebsiteSection(content, opts)
 }
 
 // parseStatus extracts status from frontmatter

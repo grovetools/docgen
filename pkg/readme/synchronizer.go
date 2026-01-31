@@ -24,13 +24,26 @@ func New(logger *logrus.Logger) *Synchronizer {
 
 // Sync performs the README synchronization for a given package directory.
 func (s *Synchronizer) Sync(packageDir string) error {
+	fmt.Println("DEBUG: Sync called with packageDir:", packageDir)
 	cfg, configPath, err := config.LoadWithNotebook(packageDir)
+	fmt.Printf("DEBUG: LoadWithNotebook returned - configPath=%s, err=%v\n", configPath, err)
 	if err != nil {
 		if os.IsNotExist(err) {
 			s.logger.Debugf("Skipping README sync: no docgen.config.yml found in %s", packageDir)
 			return nil
 		}
 		return fmt.Errorf("failed to load docgen.config.yml: %w", err)
+	}
+
+	// DEBUG: Log config path and logo config status
+	fmt.Printf("DEBUG: cfg.Readme is nil? %v\n", cfg.Readme == nil)
+	if cfg.Readme != nil {
+		if cfg.Readme.Logo != nil {
+			fmt.Printf("DEBUG: Logo config found - input=%s, output=%s, text=%s\n",
+				cfg.Readme.Logo.Input, cfg.Readme.Logo.Output, cfg.Readme.Logo.Text)
+		} else {
+			fmt.Println("DEBUG: cfg.Readme.Logo is NIL")
+		}
 	}
 
 	if cfg.Readme == nil {
@@ -217,10 +230,8 @@ func (s *Synchronizer) generateLogo(logoCfg *config.LogoConfig, packageDir strin
 	if textScale == 0 {
 		textScale = 1.1
 	}
+	// Pass color as-is; empty string triggers auto-detection in logo.Generator
 	color := logoCfg.Color
-	if color == "" {
-		color = "#589ac7"
-	}
 	width := logoCfg.Width
 	if width == 0 {
 		width = 200

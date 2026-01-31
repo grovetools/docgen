@@ -78,7 +78,7 @@ Example:
 	}
 
 	cmd.Flags().StringVar(&text, "text", "", "Text to display below the logo (required)")
-	cmd.Flags().StringVar(&textColor, "color", "#589ac7", "Text color (hex)")
+	cmd.Flags().StringVar(&textColor, "color", "", "Text color (hex, empty for auto-detect from source SVG)")
 	cmd.Flags().StringVar(&fontPath, "font", "", "Path to TTF/OTF font file (required)")
 	cmd.Flags().Float64Var(&fontSize, "size", 48, "Font size in pixels")
 	cmd.Flags().Float64Var(&spacing, "spacing", 20, "Spacing between logo and text in pixels")

@@ -23,16 +23,21 @@ The --mode flag controls which documentation status levels are included:
   dev: Includes draft, dev, and production sections (for dev website)
   prod: Only includes production sections (for production website)
 
-Mode can also be set via the DOCGEN_MODE environment variable.`,
+Mode can also be set via the DOCGEN_MODE environment variable.
+
+The --transform flag applies output-specific transformations to the documentation:
+  astro: Rewrites asset paths and adds Astro-compatible frontmatter for the Grove website`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			outputDir, _ := cmd.Flags().GetString("output-dir")
 			mode, _ := cmd.Flags().GetString("mode")
+			transform, _ := cmd.Flags().GetString("transform")
 
 			agg := aggregator.New(getLogger())
-			return agg.Aggregate(outputDir, mode)
+			return agg.Aggregate(outputDir, mode, transform)
 		},
 	}
 	cmd.Flags().StringP("output-dir", "o", "dist", "Directory to save the aggregated documentation")
 	cmd.Flags().StringP("mode", "m", defaultMode, "Aggregation mode: 'dev' (all statuses) or 'prod' (production only)")
+	cmd.Flags().String("transform", "", "Apply transformations to output (e.g., 'astro' for website builds)")
 	return cmd
 }

@@ -463,7 +463,7 @@ func (g *Generator) CallLLM(promptContent, model string, genConfig config.Genera
 	}
 
 	// Try stdout first, which should now have the content
-	// (after fixing gemapi to output to stdout)
+	// (after fixing grove-gemini to output to stdout)
 	output := stdout.Bytes()
 	if len(output) == 0 {
 		// Fallback to stderr for backward compatibility
