@@ -7,6 +7,7 @@ require (
 	github.com/grovetools/core v0.0.1
 	github.com/sirupsen/logrus v1.9.3
 	github.com/spf13/cobra v1.9.1
+	github.com/tdewolff/canvas v0.0.0-20260129132952-fb83307db4c6
 	gopkg.in/yaml.v3 v3.0.1
 )
 
@@ -45,7 +46,6 @@ require (
 	github.com/spf13/pflag v1.0.7 // indirect
 	github.com/srwiley/rasterx v0.0.0-20220730225603-2ab79fcdd4ef // indirect
 	github.com/srwiley/scanx v0.0.0-20190309010443-e94503791388 // indirect
-	github.com/tdewolff/canvas v0.0.0-20260129132952-fb83307db4c6 // indirect
 	github.com/tdewolff/font v0.0.0-20260129132752-ab952538a56d // indirect
 	github.com/tdewolff/minify/v2 v2.24.4 // indirect
 	github.com/tdewolff/parse/v2 v2.8.5 // indirect

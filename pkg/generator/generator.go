@@ -12,6 +12,7 @@ import (
 	"github.com/grovetools/core/logging"
 	"github.com/grovetools/core/pkg/workspace"
 	"github.com/grovetools/core/util/delegation"
+	"github.com/grovetools/docgen/pkg/capture"
 	"github.com/grovetools/docgen/pkg/config"
 	"github.com/grovetools/docgen/pkg/parser"
 	"github.com/grovetools/docgen/pkg/schema"
@@ -244,6 +245,12 @@ func (g *Generator) generateInPlace(packageDir string, opts GenerateOptions) err
 			}
 			continue
 		}
+		if section.Type == "capture" {
+			if err := g.generateFromCapture(packageDir, section, cfg, outputBaseDir); err != nil {
+				g.logger.WithError(err).Errorf("CLI capture generation failed for section '%s'", section.Name)
+			}
+			continue
+		}
 		g.logger.Infof("Generating section: %s", section.Name)
 
 		// Use the new prompt resolution method that checks notebook first
@@ -356,6 +363,46 @@ func (g *Generator) generateFromSchema(packageDir string, section config.Section
 		return fmt.Errorf("failed to write schema doc output: %w", err)
 	}
 	g.logger.Infof("Successfully wrote schema doc section '%s' to %s", section.Name, outputPath)
+	return nil
+}
+
+func (g *Generator) generateFromCapture(packageDir string, section config.SectionConfig, cfg *config.DocgenConfig, outputBaseDir string) error {
+	g.logger.Infof("Generating CLI capture section: %s", section.Name)
+
+	if section.Binary == "" {
+		return fmt.Errorf("section type 'capture' requires 'binary' (binary name)")
+	}
+
+	// Determine output format (default to styled)
+	format := capture.FormatHTML
+	if section.Format == "plain" {
+		format = capture.FormatMarkdown
+	}
+
+	// Determine recursion depth (default to 5)
+	depth := 5
+	if section.Depth > 0 {
+		depth = section.Depth
+	}
+
+	// Create capturer and run
+	capturer := capture.New(g.logger)
+	opts := capture.Options{
+		MaxDepth:        depth,
+		Format:          format,
+		SubcommandOrder: section.SubcommandOrder,
+	}
+
+	outputPath := filepath.Join(outputBaseDir, section.Output)
+	if err := os.MkdirAll(filepath.Dir(outputPath), 0755); err != nil {
+		return fmt.Errorf("failed to create output directory for capture: %w", err)
+	}
+
+	if err := capturer.Capture(section.Binary, outputPath, opts); err != nil {
+		return fmt.Errorf("CLI capture failed for section '%s': %w", section.Name, err)
+	}
+
+	g.logger.Infof("Successfully captured CLI reference for '%s' to %s", section.Binary, outputPath)
 	return nil
 }
 

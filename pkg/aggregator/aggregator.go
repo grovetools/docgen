@@ -12,6 +12,7 @@ import (
 
 	"github.com/grovetools/core/config"
 	"github.com/grovetools/core/pkg/workspace"
+	"github.com/grovetools/docgen/pkg/capture"
 	docgenConfig "github.com/grovetools/docgen/pkg/config"
 	"github.com/grovetools/docgen/pkg/manifest"
 	"github.com/grovetools/docgen/pkg/transformer"
@@ -309,6 +310,66 @@ func (a *Aggregator) aggregateEcosystem(rootDir string, m *manifest.Manifest, ou
 		for _, section := range sectionsToAggregate {
 			srcFile := filepath.Join(docsDir, section.Output)
 			destFile := filepath.Join(distDest, section.Output)
+
+			// Handle capture sections - generate on-the-fly during aggregation
+			if section.Type == "capture" {
+				if section.Binary == "" {
+					a.logger.Warnf("Capture section %s/%s missing 'binary' field, skipping", wsName, section.Name)
+					continue
+				}
+
+				a.logger.Infof("Capturing CLI reference for %s/%s (binary: %s)", wsName, section.Name, section.Binary)
+
+				// Determine format and depth
+				format := capture.FormatHTML
+				if section.Format == "plain" {
+					format = capture.FormatMarkdown
+				}
+				depth := 5
+				if section.Depth > 0 {
+					depth = section.Depth
+				}
+
+				// Run capture directly to destination
+				capturer := capture.New(a.logger)
+				opts := capture.Options{
+					MaxDepth:        depth,
+					Format:          format,
+					SubcommandOrder: section.SubcommandOrder,
+				}
+
+				if err := capturer.Capture(section.Binary, destFile, opts); err != nil {
+					a.logger.WithError(err).Errorf("Failed to capture CLI for %s/%s", wsName, section.Name)
+					continue
+				}
+
+				// Apply Astro transformations if requested
+				if transform == "astro" {
+					srcData, err := os.ReadFile(destFile)
+					if err != nil {
+						a.logger.WithError(err).Errorf("Failed to read captured file %s", destFile)
+						continue
+					}
+
+					trans := transformer.NewAstroTransformer()
+					opts := transformer.TransformOptions{
+						PackageName: wsName,
+						Title:       section.Title,
+						Description: docCfg.Description,
+						Version:     version,
+						Category:    docCfg.Category,
+						Order:       section.Order,
+					}
+					processedData := trans.TransformStandardDoc(srcData, opts)
+
+					if err := os.WriteFile(destFile, processedData, 0644); err != nil {
+						a.logger.WithError(err).Errorf("Failed to write transformed %s", destFile)
+						continue
+					}
+				}
+
+				continue
+			}
 
 			// Check if the actual documentation file exists
 			if _, err := os.Stat(srcFile); os.IsNotExist(err) {
