@@ -1,0 +1,14 @@
+name = "docgen"
+description = "LLM-powered, workspace-aware documentation generator."
+type = "go"
+managed = true
+
+[binary]
+name = "docgen"
+path = "./bin/docgen"
+
+[context]
+default_rules_path = ".cx/dev-no-tests.rules"
+
+[agent.providers.claude]
+args = ["--dangerously-skip-permissions --chrome"]
