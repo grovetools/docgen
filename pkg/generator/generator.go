@@ -257,6 +257,12 @@ func (g *Generator) generateInPlace(packageDir string, opts GenerateOptions) err
 			}
 			continue
 		}
+		if section.Type == "nb_concept" {
+			if err := g.generateFromConcept(packageDir, section, cfg, outputBaseDir); err != nil {
+				g.logger.WithError(err).Errorf("Concept generation failed for section '%s'", section.Name)
+			}
+			continue
+		}
 		g.logger.Infof("Generating section: %s", section.Name)
 
 		// Use the new prompt resolution method that checks notebook first

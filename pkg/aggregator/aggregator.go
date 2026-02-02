@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strings"
 	"time"
@@ -17,6 +18,7 @@ import (
 	"github.com/grovetools/docgen/pkg/manifest"
 	"github.com/grovetools/docgen/pkg/transformer"
 	"github.com/sirupsen/logrus"
+	"gopkg.in/yaml.v3"
 )
 
 type Aggregator struct {
@@ -482,6 +484,11 @@ func (a *Aggregator) aggregateEcosystem(rootDir string, m *manifest.Manifest, ou
 			}
 		}
 
+		// Aggregate concepts from the workspace's concepts directory
+		if err := a.aggregateConcepts(wsPath, wsName, docCfg, distDest, mode, transform); err != nil {
+			a.logger.Warnf("Failed to aggregate concepts for %s: %v", wsName, err)
+		}
+
 		sort.Slice(sectionsToAggregate, func(i, j int) bool {
 			return sectionsToAggregate[i].Order < sectionsToAggregate[j].Order
 		})
@@ -905,6 +912,195 @@ func (a *Aggregator) processWebsiteSections(wsPath string, cfg *docgenConfig.Doc
 			a.logger.Infof("Added website section %s with %d files", sectionName, len(websiteSection.Files))
 		}
 	}
+}
+
+// ConceptManifest represents the concept-manifest.yml structure
+type ConceptManifest struct {
+	ID            string   `yaml:"id"`
+	Title         string   `yaml:"title"`
+	Description   string   `yaml:"description"`
+	Status        string   `yaml:"status"`
+	DocgenPublish string   `yaml:"docgen_publish"` // draft | dev | production
+	DocgenOrder   []string `yaml:"docgen_order"`   // ordered list of .md files
+}
+
+// aggregateConcepts scans the workspace's concepts directory and copies publishable concepts
+func (a *Aggregator) aggregateConcepts(wsPath string, wsName string, docCfg *docgenConfig.DocgenConfig, distDest string, mode string, transform string) error {
+	// 1. Find concepts directory via notebook locator
+	node, err := workspace.GetProjectByPath(wsPath)
+	if err != nil {
+		a.logger.Debugf("Could not resolve workspace for concepts: %v", err)
+		return nil // Not an error, just skip concepts
+	}
+
+	coreCfg, err := config.LoadDefault()
+	if err != nil {
+		return nil
+	}
+
+	locator := workspace.NewNotebookLocator(coreCfg)
+	docgenDir, err := locator.GetDocgenDir(node)
+	if err != nil {
+		return nil
+	}
+
+	// concepts is at the same level as docgen: {notebook}/workspaces/{name}/concepts/
+	workspaceDir := filepath.Dir(docgenDir)
+	conceptsDir := filepath.Join(workspaceDir, "concepts")
+
+	if !dirExists(conceptsDir) {
+		a.logger.Debugf("No concepts directory found for %s", wsName)
+		return nil
+	}
+
+	// 2. Scan for concept subdirectories
+	entries, err := os.ReadDir(conceptsDir)
+	if err != nil {
+		return fmt.Errorf("failed to read concepts directory: %w", err)
+	}
+
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			continue
+		}
+
+		conceptID := entry.Name()
+		conceptDir := filepath.Join(conceptsDir, conceptID)
+
+		// 3. Read concept manifest
+		manifestPath := filepath.Join(conceptDir, "concept-manifest.yml")
+		manifestData, err := os.ReadFile(manifestPath)
+		if err != nil {
+			a.logger.Debugf("No manifest for concept %s: %v", conceptID, err)
+			continue
+		}
+
+		var cm ConceptManifest
+		if err := yaml.Unmarshal(manifestData, &cm); err != nil {
+			a.logger.Warnf("Failed to parse manifest for concept %s: %v", conceptID, err)
+			continue
+		}
+
+		// 4. Check docgen_publish status
+		publishStatus := cm.DocgenPublish
+		if publishStatus == "" {
+			publishStatus = docgenConfig.StatusDraft // Default to draft (not published)
+		}
+
+		if publishStatus == docgenConfig.StatusDraft {
+			a.logger.Debugf("Skipping concept %s (docgen_publish: draft)", conceptID)
+			continue
+		}
+		if mode == "prod" && publishStatus == docgenConfig.StatusDev {
+			a.logger.Debugf("Skipping concept %s (docgen_publish: dev, mode: prod)", conceptID)
+			continue
+		}
+
+		a.logger.Infof("Aggregating concept: %s/%s", wsName, conceptID)
+
+		// 5. Find all .md files in the concept, respecting docgen_order
+		var mdFiles []string
+		if len(cm.DocgenOrder) > 0 {
+			// Use explicit order from manifest
+			for _, f := range cm.DocgenOrder {
+				path := filepath.Join(conceptDir, f)
+				if _, err := os.Stat(path); err == nil {
+					mdFiles = append(mdFiles, path)
+				}
+			}
+		} else {
+			// Fall back to glob (alphabetical)
+			mdFiles, _ = filepath.Glob(filepath.Join(conceptDir, "*.md"))
+		}
+		if len(mdFiles) == 0 {
+			a.logger.Debugf("No markdown files in concept %s", conceptID)
+			continue
+		}
+
+		// 6. Create output directory: {dist}/{pkg}/concepts/{concept-id}/
+		conceptDestDir := filepath.Join(distDest, "concepts", conceptID)
+		if err := os.MkdirAll(conceptDestDir, 0755); err != nil {
+			a.logger.Errorf("Failed to create concept output dir: %v", err)
+			continue
+		}
+
+		// 7. Copy each .md file with proper frontmatter
+		for i, mdPath := range mdFiles {
+			mdFile := filepath.Base(mdPath)
+			content, err := os.ReadFile(mdPath)
+			if err != nil {
+				a.logger.Warnf("Failed to read %s: %v", mdPath, err)
+				continue
+			}
+
+			// Strip existing frontmatter
+			body := stripMarkdownFrontmatter(string(content))
+
+			// Generate title from filename
+			title := formatConceptTitle(strings.TrimSuffix(mdFile, ".md"))
+
+			// Calculate order: concepts start at high numbers to appear after regular docs
+			order := 2000 + i + 1
+
+			// Build new content with Astro-compatible frontmatter
+			var newContent string
+			if transform == "astro" {
+				newContent = fmt.Sprintf(`---
+title: "%s"
+package: "%s"
+category: "%s"
+order: %d
+concept_title: "%s"
+concept_id: "%s"
+---
+
+%s`, title, wsName, docCfg.Category, order, cm.Title, conceptID, body)
+			} else {
+				newContent = string(content)
+			}
+
+			// Write to destination
+			destPath := filepath.Join(conceptDestDir, mdFile)
+			if err := os.WriteFile(destPath, []byte(newContent), 0644); err != nil {
+				a.logger.Errorf("Failed to write %s: %v", destPath, err)
+				continue
+			}
+
+			a.logger.Debugf("Copied concept doc: %s", destPath)
+		}
+	}
+
+	return nil
+}
+
+// stripMarkdownFrontmatter removes YAML frontmatter from markdown content
+func stripMarkdownFrontmatter(content string) string {
+	re := regexp.MustCompile(`(?s)^---\n.*?\n---\n*`)
+	return re.ReplaceAllString(content, "")
+}
+
+// formatConceptTitle converts a filename to a title
+// e.g., "cli-output-destinations" -> "CLI Output Destinations"
+func formatConceptTitle(name string) string {
+	parts := strings.FieldsFunc(name, func(r rune) bool {
+		return r == '-' || r == '_'
+	})
+
+	acronyms := map[string]string{
+		"cli": "CLI", "tui": "TUI", "api": "API",
+		"ui": "UI", "id": "ID", "llm": "LLM",
+	}
+
+	for i, part := range parts {
+		lower := strings.ToLower(part)
+		if acronym, ok := acronyms[lower]; ok {
+			parts[i] = acronym
+		} else {
+			parts[i] = strings.Title(lower)
+		}
+	}
+
+	return strings.Join(parts, " ")
 }
 
 // parseFrontmatter extracts status, title, and order from markdown frontmatter

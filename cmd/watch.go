@@ -23,10 +23,11 @@ import (
 
 // watchedPackage holds cached information about a package being watched
 type watchedPackage struct {
-	wsPath    string // workspace path (e.g., /path/to/grove-flow)
-	docgenDir string // docgen dir in notebook (e.g., /path/to/nb/workspaces/flow/docgen)
-	pkgName   string // package name (e.g., "flow")
-	config    *config.DocgenConfig
+	wsPath      string // workspace path (e.g., /path/to/grove-flow)
+	docgenDir   string // docgen dir in notebook (e.g., /path/to/nb/workspaces/flow/docgen)
+	conceptsDir string // concepts dir in notebook (e.g., /path/to/nb/workspaces/flow/concepts)
+	pkgName     string // package name (e.g., "flow")
+	config      *config.DocgenConfig
 }
 
 func newWatchCmd() *cobra.Command {
@@ -137,10 +138,15 @@ func runWatch(websiteDir, mode string, debounce time.Duration, quiet bool) error
 	pending := make(map[string]bool) // docgenDir -> needs rebuild
 	var timer *time.Timer
 
+	// Track whether changes are to concepts or regular docs
+	pendingConcepts := make(map[string]bool) // docgenDir -> needs concept rebuild
+
 	processPending := func() {
 		mu.Lock()
 		toProcess := pending
+		toProcessConcepts := pendingConcepts
 		pending = make(map[string]bool)
+		pendingConcepts = make(map[string]bool)
 		mu.Unlock()
 
 		for docgenDir := range toProcess {
@@ -157,6 +163,23 @@ func runWatch(websiteDir, mode string, debounce time.Duration, quiet bool) error
 				ulog.Error("Rebuild failed").Field("package", pkg.pkgName).Err(err).Emit()
 			} else if !quiet {
 				ulog.Info("Done").Field("package", pkg.pkgName).Emit()
+			}
+		}
+
+		for docgenDir := range toProcessConcepts {
+			pkg := watchedPkgs[docgenDir]
+			if pkg == nil {
+				continue
+			}
+
+			if !quiet {
+				ulog.Info("Rebuilding concepts").Field("package", pkg.pkgName).Emit()
+			}
+
+			if err := rebuildConcepts(pkg, astroWriter, mode, quiet); err != nil {
+				ulog.Error("Concept rebuild failed").Field("package", pkg.pkgName).Err(err).Emit()
+			} else if !quiet {
+				ulog.Info("Concepts done").Field("package", pkg.pkgName).Emit()
 			}
 		}
 	}
@@ -198,7 +221,11 @@ func runWatch(websiteDir, mode string, debounce time.Duration, quiet bool) error
 
 			// Queue for debounced processing
 			mu.Lock()
-			pending[docgenDir] = true
+			if isConceptFile(event.Name, watchedPkgs) {
+				pendingConcepts[docgenDir] = true
+			} else {
+				pending[docgenDir] = true
+			}
 			if timer != nil {
 				timer.Stop()
 			}
@@ -308,7 +335,7 @@ func setupWatchForEcosystem(
 			continue
 		}
 
-		// Add recursive watch
+		// Add recursive watch for docgen directory
 		if err := w.AddRecursive(docgenDir, wsPath); err != nil {
 			if !quiet {
 				ulog.Warn("Failed to watch").Field("package", wsName).Err(err).Emit()
@@ -316,11 +343,26 @@ func setupWatchForEcosystem(
 			continue
 		}
 
+		// Also watch concepts directory if it exists
+		// concepts is at the same level as docgen: {notebook}/workspaces/{name}/concepts/
+		workspaceDir := filepath.Dir(docgenDir)
+		conceptsDir := filepath.Join(workspaceDir, "concepts")
+		if _, err := os.Stat(conceptsDir); err == nil {
+			if err := w.AddRecursive(conceptsDir, wsPath); err != nil {
+				if !quiet {
+					ulog.Warn("Failed to watch concepts").Field("package", wsName).Err(err).Emit()
+				}
+			} else if !quiet {
+				ulog.Info("Watching concepts").Field("package", wsName).Field("dir", conceptsDir).Emit()
+			}
+		}
+
 		watchedPkgs[docgenDir] = &watchedPackage{
-			wsPath:    wsPath,
-			docgenDir: docgenDir,
-			pkgName:   wsName,
-			config:    docCfg,
+			wsPath:      wsPath,
+			docgenDir:   docgenDir,
+			conceptsDir: conceptsDir,
+			pkgName:     wsName,
+			config:      docCfg,
 		}
 
 		if !quiet {
@@ -333,12 +375,26 @@ func setupWatchForEcosystem(
 
 // findDocgenDir finds the docgen directory that contains the given file path
 func findDocgenDir(filePath string, watchedPkgs map[string]*watchedPackage) string {
-	for docgenDir := range watchedPkgs {
+	for docgenDir, pkg := range watchedPkgs {
 		if strings.HasPrefix(filePath, docgenDir) {
 			return docgenDir
 		}
+		// Also check concepts directory
+		if pkg.conceptsDir != "" && strings.HasPrefix(filePath, pkg.conceptsDir) {
+			return docgenDir // Return docgenDir as the key
+		}
 	}
 	return ""
+}
+
+// isConceptFile checks if a file path is within a concepts directory
+func isConceptFile(filePath string, watchedPkgs map[string]*watchedPackage) bool {
+	for _, pkg := range watchedPkgs {
+		if pkg.conceptsDir != "" && strings.HasPrefix(filePath, pkg.conceptsDir) {
+			return true
+		}
+	}
+	return false
 }
 
 // rebuildPackage rebuilds a single package and writes to the website
@@ -431,6 +487,165 @@ func rebuildPackage(pkg *watchedPackage, w *writer.AstroWriter, mode string, loc
 	updateManifestSidebar(pkg.pkgName, docCfg, mode, w, localCfg)
 
 	return nil
+}
+
+// rebuildConcepts rebuilds concepts for a package
+func rebuildConcepts(pkg *watchedPackage, w *writer.AstroWriter, mode string, quiet bool) error {
+	if pkg.conceptsDir == "" {
+		return nil
+	}
+
+	if _, err := os.Stat(pkg.conceptsDir); os.IsNotExist(err) {
+		return nil
+	}
+
+	// Reload config
+	docCfg, _, err := config.LoadWithNotebook(pkg.wsPath)
+	if err != nil || docCfg == nil {
+		return err
+	}
+
+	// Scan for concept subdirectories
+	entries, err := os.ReadDir(pkg.conceptsDir)
+	if err != nil {
+		return err
+	}
+
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			continue
+		}
+
+		conceptID := entry.Name()
+		conceptDir := filepath.Join(pkg.conceptsDir, conceptID)
+
+		// Read concept manifest
+		manifestPath := filepath.Join(conceptDir, "concept-manifest.yml")
+		manifestData, err := os.ReadFile(manifestPath)
+		if err != nil {
+			continue
+		}
+
+		// Parse manifest (simple YAML parsing)
+		var title, publish string
+		var docgenOrder []string
+		for _, line := range strings.Split(string(manifestData), "\n") {
+			line = strings.TrimSpace(line)
+			if strings.HasPrefix(line, "title:") {
+				title = strings.Trim(strings.TrimPrefix(line, "title:"), " \"'")
+			} else if strings.HasPrefix(line, "docgen_publish:") {
+				publish = strings.TrimSpace(strings.Split(strings.TrimPrefix(line, "docgen_publish:"), "#")[0])
+			} else if strings.HasPrefix(line, "- ") && len(docgenOrder) > 0 || strings.HasPrefix(line, "docgen_order:") {
+				if strings.HasPrefix(line, "- ") {
+					docgenOrder = append(docgenOrder, strings.TrimPrefix(line, "- "))
+				}
+			}
+		}
+
+		// Check publish status
+		if publish == "" {
+			publish = config.StatusDraft
+		}
+		if publish == config.StatusDraft {
+			continue
+		}
+		if mode == "prod" && publish == config.StatusDev {
+			continue
+		}
+
+		if !quiet {
+			ulog.Info("Rebuilding concept").Field("package", pkg.pkgName).Field("concept", conceptID).Emit()
+		}
+
+		// Get list of .md files to process
+		var mdFiles []string
+		if len(docgenOrder) > 0 {
+			for _, f := range docgenOrder {
+				path := filepath.Join(conceptDir, f)
+				if _, err := os.Stat(path); err == nil {
+					mdFiles = append(mdFiles, path)
+				}
+			}
+		} else {
+			mdFiles, _ = filepath.Glob(filepath.Join(conceptDir, "*.md"))
+		}
+
+		// Process each .md file
+		for i, mdPath := range mdFiles {
+			mdFile := filepath.Base(mdPath)
+			content, err := os.ReadFile(mdPath)
+			if err != nil {
+				continue
+			}
+
+			// Strip existing frontmatter
+			body := stripFrontmatter(string(content))
+
+			// Generate title from filename
+			docTitle := formatConceptDocTitle(strings.TrimSuffix(mdFile, ".md"))
+
+			// Calculate order
+			order := 2000 + i + 1
+
+			// Build new content with frontmatter
+			newContent := fmt.Sprintf(`---
+title: "%s"
+package: "%s"
+category: "%s"
+order: %d
+concept_title: "%s"
+concept_id: "%s"
+---
+
+%s`, docTitle, pkg.pkgName, docCfg.Category, order, title, conceptID, body)
+
+			// Write to website
+			destPath := filepath.Join(w.WebsiteDir(), "src/content/docs", pkg.pkgName, "concepts", conceptID, mdFile)
+			if err := os.MkdirAll(filepath.Dir(destPath), 0755); err != nil {
+				continue
+			}
+			if err := os.WriteFile(destPath, []byte(newContent), 0644); err != nil {
+				ulog.Error("Failed to write concept doc").Field("file", destPath).Err(err).Emit()
+			}
+		}
+	}
+
+	return nil
+}
+
+// stripFrontmatter removes YAML frontmatter from markdown content
+func stripFrontmatter(content string) string {
+	if !strings.HasPrefix(content, "---\n") {
+		return content
+	}
+	end := strings.Index(content[4:], "\n---")
+	if end == -1 {
+		return content
+	}
+	return strings.TrimLeft(content[end+8:], "\n")
+}
+
+// formatConceptDocTitle formats a filename into a title
+func formatConceptDocTitle(name string) string {
+	parts := strings.FieldsFunc(name, func(r rune) bool {
+		return r == '-' || r == '_'
+	})
+
+	acronyms := map[string]string{
+		"cli": "CLI", "tui": "TUI", "api": "API",
+		"ui": "UI", "id": "ID", "llm": "LLM",
+	}
+
+	for i, part := range parts {
+		lower := strings.ToLower(part)
+		if acronym, ok := acronyms[lower]; ok {
+			parts[i] = acronym
+		} else if len(part) > 0 {
+			parts[i] = strings.ToUpper(string(part[0])) + part[1:]
+		}
+	}
+
+	return strings.Join(parts, " ")
 }
 
 // rebuildWebsiteSections handles output_mode: sections (overview, concepts)

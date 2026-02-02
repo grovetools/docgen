@@ -188,13 +188,14 @@
           "enum": [
             "schema_to_md",
             "doc_sections",
-            "capture"
+            "capture",
+            "nb_concept"
           ],
           "description": "Type of generation: schema_to_md"
         },
         "source": {
           "type": "string",
-          "description": "Source file for schema_to_md type (deprecated: use schemas instead)"
+          "description": "Source identifier. For schema_to_md: path to JSON schema file (deprecated: use schemas instead). For nb_concept: concept ID (e.g. my-concept or workspace:my-concept for cross-workspace)"
         },
         "binary": {
           "type": "string",
