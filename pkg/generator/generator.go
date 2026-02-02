@@ -333,35 +333,40 @@ Convert the provided plain text descriptions of JSON schemas into a user-friendl
 ---
 `
 
-const DocSectionsSystemPrompt = `You are creating a configuration reference document from documentation sections.
-The input contains documentation sections and a list of selected properties for the Quick Start.
+const DocSectionsSystemPrompt = `You are creating a configuration reference document with multiple sections.
+Each section represents a different configuration context (e.g., user config, ecosystem config, package config).
 
-**Property Selection Format:**
-Properties use dot notation: "section.property" or just "property" for top-level.
-Examples: "groves", "logging.level", "notebook.root"
+**Input Format:**
+Each "SECTION" in the input includes:
+- Title: The H2 heading to use
+- Description: What this configuration context is for
+- Properties: Which properties to document and include in the example
+- Documentation: The source docs to pull descriptions from
 
 **Output Format (Markdown):**
 
-# Configuration Reference
+For EACH section provided, create:
 
-A brief 1-2 sentence introduction to configuring the Grove ecosystem.
+## [Section Title]
 
-## Quick Start Configuration
+[Section Description - one paragraph explaining when/where this config is used]
 
-A minimal TOML example showing ONLY the properties listed in "Quick Start Properties".
-Wrap in a toml code fence. Include inline comments with descriptions VERBATIM from the docs.
-Keep it short - just these specific options.
+| Property | Description |
+|----------|-------------|
+[Table rows for each property listed, with descriptions VERBATIM from the source docs]
 
-## Full Configuration Reference
-
-A comprehensive TOML example showing ALL the options from the provided documentation.
-Wrap in a toml code fence. Include inline comments that come VERBATIM from the documentation descriptions.
-Organize by section with comment headers. Show sensible default values.
+` + "```toml" + `
+# [Brief comment about this config context]
+[Realistic example using ONLY the properties listed for this section]
+[Include inline comments with descriptions from the docs]
+` + "```" + `
 
 **Rules:**
-- Use exact wording from the docs for comments - do not paraphrase
-- All TOML must be inside fenced code blocks (triple backticks with toml)
-- No other text or explanations beyond what's specified above
+- Create one H2 section for each input section
+- Use exact wording from the docs for descriptions - do not paraphrase
+- Each section gets its own TOML example with only that section's properties
+- All TOML must be inside fenced code blocks
+- No preamble or explanation outside the specified format
 ---
 `
 
@@ -513,11 +518,21 @@ func (g *Generator) generateFromDocSections(packageDir string, section config.Se
 			return fmt.Errorf("failed to read doc %s: %w", docPath, err)
 		}
 
-		// Add package info and content
-		sb.WriteString(fmt.Sprintf("\n--- PACKAGE: %s ---\n", source.Package))
-		sb.WriteString(fmt.Sprintf("Quick Start Properties: %v\n\n", source.Properties))
+		// Add section info and content
+		sb.WriteString("\n--- SECTION ---\n")
+		if source.Title != "" {
+			sb.WriteString(fmt.Sprintf("Title: %s\n", source.Title))
+		} else {
+			sb.WriteString(fmt.Sprintf("Title: %s Configuration\n", source.Package))
+		}
+		if source.Description != "" {
+			sb.WriteString(fmt.Sprintf("Description: %s\n", source.Description))
+		}
+		sb.WriteString(fmt.Sprintf("Properties: %v\n", source.Properties))
+		sb.WriteString(fmt.Sprintf("Package: %s\n\n", source.Package))
+		sb.WriteString("--- SOURCE DOCUMENTATION ---\n")
 		sb.WriteString(string(content))
-		sb.WriteString("\n\n")
+		sb.WriteString("\n--- END SOURCE ---\n\n")
 	}
 
 	// Send to LLM to add unified example

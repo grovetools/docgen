@@ -1,254 +1,461 @@
 {
-  "$schema": "http://json-schema.org/draft-07/schema#",
-  "$id": "https://github.com/mattsolo1/grove-docgen/schema/docgen.config.schema.json",
-  "title": "Grove Docgen Configuration",
-  "description": "Configuration schema for grove-docgen documentation generation",
-  "type": "object",
-  "required": ["enabled", "title", "sections"],
-  "definitions": {
-    "generationParameters": {
-      "type": "object",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/grovetools/docgen/pkg/config/docgen-config",
+  "$defs": {
+    "DocSectionSource": {
       "properties": {
+        "package": {
+          "type": "string",
+          "description": "Package name (must exist in configured ecosystems)"
+        },
+        "doc": {
+          "type": "string",
+          "description": "Explicit path to doc file (auto-discovers schema_to_md output if omitted)"
+        },
+        "title": {
+          "type": "string",
+          "description": "H2 section title (e.g."
+        },
+        "description": {
+          "type": "string",
+          "description": "Description of what this configuration context is for"
+        },
+        "properties": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array",
+          "description": "Properties to document in this section (dot notation supported)"
+        }
+      },
+      "type": "object",
+      "required": [
+        "package"
+      ]
+    },
+    "LogoConfig": {
+      "properties": {
+        "input": {
+          "type": "string",
+          "description": "Path to input logo SVG (relative to base_url root or absolute)"
+        },
+        "output": {
+          "type": "string",
+          "description": "Path for output logo-with-text SVG"
+        },
+        "text": {
+          "type": "string",
+          "description": "Text to display below logo"
+        },
+        "font": {
+          "type": "string",
+          "description": "Path to TTF/OTF font file"
+        },
+        "color": {
+          "type": "string",
+          "description": "Text color (hex)"
+        },
+        "spacing": {
+          "type": "number",
+          "description": "Spacing between logo and text (default: 35)"
+        },
+        "text_scale": {
+          "type": "number",
+          "description": "Text width as proportion of logo (default: 1.1)"
+        },
+        "width": {
+          "type": "number",
+          "description": "Output SVG width in pixels (default: 200)"
+        }
+      },
+      "type": "object",
+      "required": [
+        "input",
+        "output",
+        "text",
+        "font"
+      ]
+    },
+    "ReadmeConfig": {
+      "properties": {
+        "template": {
+          "type": "string",
+          "description": "Path to the README template"
+        },
+        "output": {
+          "type": "string",
+          "description": "Path to the output README file"
+        },
+        "source_section": {
+          "type": "string",
+          "description": "The name of the section to inject into the template"
+        },
+        "strip_lines": {
+          "type": "integer",
+          "description": "Number of lines to strip from the top of source file (default: 0)"
+        },
+        "generate_toc": {
+          "type": "boolean",
+          "description": "Whether to generate a table of contents from sections"
+        },
+        "base_url": {
+          "type": "string",
+          "description": "Base URL for converting root-relative paths to absolute URLs"
+        },
+        "logo": {
+          "$ref": "#/$defs/LogoConfig",
+          "description": "Optional logo generation configuration"
+        }
+      },
+      "type": "object",
+      "required": [
+        "template",
+        "output",
+        "source_section"
+      ]
+    },
+    "SchemaInput": {
+      "properties": {
+        "path": {
+          "type": "string",
+          "description": "Path to the schema file"
+        },
+        "title": {
+          "type": "string",
+          "description": "Title for the H2 section"
+        }
+      },
+      "type": "object",
+      "required": [
+        "path"
+      ]
+    },
+    "SectionConfig": {
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "Unique identifier for this section"
+        },
+        "title": {
+          "type": "string",
+          "description": "Display title for the section"
+        },
+        "order": {
+          "type": "integer",
+          "description": "Order in which the section appears"
+        },
+        "schemas": {
+          "items": {
+            "$ref": "#/$defs/SchemaInput"
+          },
+          "type": "array",
+          "description": "List of schemas to aggregate into one page (for schema_to_md type)"
+        },
+        "doc_sources": {
+          "items": {
+            "$ref": "#/$defs/DocSectionSource"
+          },
+          "type": "array",
+          "description": "Sources for pulling from generated package docs (for doc_sections type)"
+        },
+        "status": {
+          "type": "string",
+          "enum": [
+            "draft",
+            "dev",
+            "production"
+          ],
+          "description": "Publication status: draft"
+        },
+        "prompt": {
+          "type": "string",
+          "description": "Path to the LLM prompt file"
+        },
+        "output": {
+          "type": "string",
+          "description": "Output markdown filename"
+        },
+        "output_dir": {
+          "type": "string",
+          "description": "Output directory name for sections mode"
+        },
+        "json_key": {
+          "type": "string",
+          "description": "Key for structured JSON output"
+        },
+        "type": {
+          "type": "string",
+          "enum": [
+            "schema_to_md",
+            "doc_sections",
+            "capture"
+          ],
+          "description": "Type of generation: schema_to_md"
+        },
+        "source": {
+          "type": "string",
+          "description": "Source file for schema_to_md type (deprecated: use schemas instead)"
+        },
+        "binary": {
+          "type": "string",
+          "description": "Binary name for capture type"
+        },
+        "format": {
+          "type": "string",
+          "enum": [
+            "styled",
+            "plain"
+          ],
+          "description": "Output format for capture type: styled (default) or plain"
+        },
+        "depth": {
+          "type": "integer",
+          "description": "Recursion depth for capture type (default: 5)"
+        },
+        "subcommand_order": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array",
+          "description": "Priority order for subcommands (rest alphabetical)"
+        },
+        "model": {
+          "type": "string",
+          "description": "Per-section model override"
+        },
+        "agg_strip_lines": {
+          "type": "integer",
+          "description": "Number of lines to strip from the top during aggregation"
+        },
         "temperature": {
           "type": "number",
-          "description": "Controls randomness in generation. Lower values (0.0-0.5) make output more focused and deterministic. Higher values (0.5-1.0) make output more creative and varied.",
-          "minimum": 0.0,
-          "maximum": 1.0,
-          "examples": [0.3, 0.7, 0.9]
+          "maximum": 1,
+          "minimum": 0,
+          "description": "Controls randomness in generation (0.0-1.0)"
         },
         "top_p": {
           "type": "number",
-          "description": "Nucleus sampling threshold. The model considers tokens until their cumulative probability reaches this value. Lower values make output more focused.",
-          "minimum": 0.0,
-          "maximum": 1.0,
-          "default": 0.95,
-          "examples": [0.9, 0.95, 0.99]
+          "maximum": 1,
+          "minimum": 0,
+          "description": "Nucleus sampling parameter (0.0-1.0)"
         },
         "top_k": {
           "type": "integer",
-          "description": "Limits the model to consider only the top K most likely tokens at each step. Lower values make output more predictable.",
           "minimum": 1,
-          "examples": [20, 40, 100]
+          "description": "Top-k sampling parameter"
         },
         "max_output_tokens": {
           "type": "integer",
-          "description": "Maximum number of tokens to generate. Use this to control documentation length. Typical values: 2048 (concise), 4096 (standard), 8192 (detailed).",
           "minimum": 1,
-          "maximum": 32768,
-          "examples": [2048, 4096, 8192, 16384]
+          "description": "Maximum length of generated content"
         }
-      }
+      },
+      "type": "object",
+      "required": [
+        "name",
+        "title",
+        "order",
+        "output"
+      ]
+    },
+    "SettingsConfig": {
+      "properties": {
+        "model": {
+          "type": "string",
+          "description": "LLM model to use for generation"
+        },
+        "output_mode": {
+          "type": "string",
+          "enum": [
+            "package",
+            "sections"
+          ],
+          "description": "Output mode: package (default) or sections for website content"
+        },
+        "ecosystems": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array",
+          "description": "List of ecosystem names to aggregate from"
+        },
+        "regeneration_mode": {
+          "type": "string",
+          "enum": [
+            "scratch",
+            "reference"
+          ],
+          "description": "Regeneration mode: scratch or reference"
+        },
+        "rules_file": {
+          "type": "string",
+          "description": "Custom rules file for cx generate"
+        },
+        "structured_output_file": {
+          "type": "string",
+          "description": "Path for JSON output"
+        },
+        "system_prompt": {
+          "type": "string",
+          "description": "Path to system prompt file or 'default' to use built-in"
+        },
+        "output_dir": {
+          "type": "string",
+          "description": "Output directory for generated docs"
+        },
+        "temperature": {
+          "type": "number",
+          "maximum": 1,
+          "minimum": 0,
+          "description": "Controls randomness in generation (0.0-1.0)"
+        },
+        "top_p": {
+          "type": "number",
+          "maximum": 1,
+          "minimum": 0,
+          "description": "Nucleus sampling parameter (0.0-1.0)"
+        },
+        "top_k": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Top-k sampling parameter"
+        },
+        "max_output_tokens": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Maximum length of generated content"
+        }
+      },
+      "type": "object"
+    },
+    "SidebarCategory": {
+      "properties": {
+        "icon": {
+          "type": "string",
+          "description": "Nerd font icon for the category"
+        },
+        "flat": {
+          "type": "boolean",
+          "description": "If true"
+        },
+        "packages": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array",
+          "description": "Order of packages within this category"
+        }
+      },
+      "type": "object"
+    },
+    "SidebarConfig": {
+      "properties": {
+        "category_order": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array",
+          "description": "Order of categories in sidebar"
+        },
+        "categories": {
+          "additionalProperties": {
+            "$ref": "#/$defs/SidebarCategory"
+          },
+          "type": "object",
+          "description": "Category configuration (icon"
+        },
+        "packages": {
+          "additionalProperties": {
+            "$ref": "#/$defs/SidebarPackage"
+          },
+          "type": "object",
+          "description": "Package configuration (icon"
+        },
+        "package_category_override": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "type": "object",
+          "description": "Remap packages to different categories"
+        }
+      },
+      "type": "object"
+    },
+    "SidebarPackage": {
+      "properties": {
+        "icon": {
+          "type": "string",
+          "description": "Nerd font icon for the package"
+        },
+        "color": {
+          "type": "string",
+          "description": "Color name (green"
+        },
+        "status": {
+          "type": "string",
+          "enum": [
+            "draft",
+            "dev",
+            "production"
+          ],
+          "description": "Publication status: draft"
+        }
+      },
+      "type": "object"
     }
   },
   "properties": {
     "enabled": {
       "type": "boolean",
-      "description": "Whether documentation generation is enabled for this package",
-      "default": true
+      "description": "Whether documentation generation is enabled for this package"
     },
     "title": {
       "type": "string",
-      "description": "The display title for this package's documentation"
+      "description": "Title of the package documentation"
     },
     "description": {
       "type": "string",
-      "description": "A brief description of the package"
+      "description": "Brief description of the package"
     },
     "category": {
       "type": "string",
-      "description": "Category for organizing documentation (e.g., 'Core Libraries', 'Tools', 'Templates')",
-      "examples": ["Core Libraries", "Developer Tools", "Project Templates", "Utilities"]
+      "description": "Category for grouping in documentation sidebar"
     },
     "settings": {
-      "type": "object",
-      "description": "Global settings for documentation generation",
-      "allOf": [
-        { "$ref": "#/definitions/generationParameters" },
-        {
-          "properties": {
-        "model": {
-          "type": "string",
-          "description": "The LLM model to use for generation",
-          "default": "gemini-1.5-flash-latest",
-          "examples": [
-            "gemini-1.5-flash-latest",
-            "gemini-1.5-pro-latest",
-            "gemini-2.0-flash-exp"
-          ]
-        },
-        "regeneration_mode": {
-          "type": "string",
-          "description": "How to handle existing documentation during regeneration",
-          "enum": ["scratch", "reference"],
-          "default": "scratch",
-          "enumDescriptions": [
-            "scratch: Generate fresh documentation without considering existing content",
-            "reference: Include existing documentation as context for improvements"
-          ]
-        },
-        "rules_file": {
-          "type": "string",
-          "description": "Path to a custom .grove/rules file for documentation-specific context gathering (relative to docs/)",
-          "examples": ["docs.rules", "custom.rules"]
-        },
-        "structured_output_file": {
-          "type": "string",
-          "description": "Path to generate structured JSON output for programmatic access (e.g., MCP integration)",
-          "examples": ["pkg/docs/package-docs.json"]
-        },
-        "system_prompt": {
-          "type": "string",
-          "description": "System prompt to prepend to all section prompts. Use 'default' for built-in tone guidelines or specify a custom prompt file path",
-          "default": "default",
-          "examples": ["default", "prompts/custom-system.md", "prompts/technical-style.md"]
-        }
-          }
-        }
-      ]
+      "$ref": "#/$defs/SettingsConfig",
+      "description": "Generator-wide settings"
     },
     "sections": {
-      "type": "array",
-      "description": "Documentation sections to generate",
-      "minItems": 1,
       "items": {
-        "type": "object",
-        "required": ["name", "title", "order", "prompt", "output"],
-        "properties": {
-          "name": {
-            "type": "string",
-            "description": "Unique identifier for this section",
-            "pattern": "^[a-z][a-z0-9-]*$",
-            "examples": ["introduction", "core-concepts", "usage-patterns", "best-practices", "api-reference"]
-          },
-          "title": {
-            "type": "string",
-            "description": "Display title for this section"
-          },
-          "order": {
-            "type": "integer",
-            "description": "Numeric order for sorting sections",
-            "minimum": 1
-          },
-          "prompt": {
-            "type": "string",
-            "description": "Path to the prompt file for this section (relative to docs/)",
-            "pattern": "^prompts/.*\\.md$",
-            "examples": ["prompts/introduction.md", "prompts/core-concepts.md"]
-          },
-          "output": {
-            "type": "string",
-            "description": "Output filename for the generated markdown",
-            "pattern": "^[a-z][a-z0-9-]*\\.md$",
-            "examples": ["introduction.md", "core-concepts.md", "api.md"]
-          },
-          "json_key": {
-            "type": "string",
-            "description": "Optional key for structured JSON output. Used when generating JSON from markdown",
-            "examples": ["introduction", "core_concepts", "usage_patterns"]
-          },
-          "model": {
-            "type": "string",
-            "description": "Model override for this specific section. If not specified, uses the global model setting.",
-            "examples": [
-              "gemini-1.5-flash-latest",
-              "gemini-1.5-pro-latest",
-              "gemini-2.0-flash-exp"
-            ]
-          },
-          "agg_strip_lines": {
-            "type": "integer",
-            "description": "Number of lines to strip from the top of this section's content during aggregation. Useful for removing headers that might not be appropriate in aggregated context.",
-            "minimum": 0,
-            "default": 0,
-            "examples": [1, 2, 3]
-          },
-          "temperature": {
-            "type": "number",
-            "description": "Temperature override for this section. Lower for more deterministic output.",
-            "minimum": 0.0,
-            "maximum": 1.0
-          },
-          "top_p": {
-            "type": "number",
-            "description": "Top-p override for this section.",
-            "minimum": 0.0,
-            "maximum": 1.0
-          },
-          "top_k": {
-            "type": "integer",
-            "description": "Top-k override for this section.",
-            "minimum": 1
-          },
-          "max_output_tokens": {
-            "type": "integer",
-            "description": "Maximum output tokens override for this section. Use larger values for detailed sections like API references.",
-            "minimum": 1,
-            "maximum": 32768
-          }
-        },
-        "additionalProperties": false
-      }
+        "$ref": "#/$defs/SectionConfig"
+      },
+      "type": "array",
+      "description": "List of documentation sections to generate"
     },
     "readme": {
-      "type": "object",
-      "description": "Configuration for synchronizing the project README.md from documentation.",
-      "properties": {
-        "template": {
-          "type": "string",
-          "description": "Path to the README template file (relative to package root).",
-          "default": "docs/README.md.tpl",
-          "examples": ["docs/README.md.tpl", "docs/templates/README.template.md"]
-        },
-        "output": {
-          "type": "string",
-          "description": "Path to the output README file (relative to package root).",
-          "default": "README.md",
-          "examples": ["README.md"]
-        },
-        "source_section": {
-          "type": "string",
-          "description": "The 'name' of the documentation section to inject into the template.",
-          "default": "introduction",
-          "examples": ["introduction", "core-concepts"]
-        },
-        "strip_lines": {
-          "type": "integer",
-          "description": "Number of lines to strip from the top of the source documentation file before injection. Useful for removing headings, blank lines, or metadata.",
-          "default": 0,
-          "minimum": 0,
-          "examples": [0, 1, 2, 3]
-        },
-        "generate_toc": {
-          "type": "boolean",
-          "description": "Whether to automatically generate a table of contents from documentation sections. Requires <!-- DOCGEN:TOC:START --> and <!-- DOCGEN:TOC:END --> markers in the template.",
-          "default": false,
-          "examples": [false, true]
-        }
+      "$ref": "#/$defs/ReadmeConfig",
+      "description": "README synchronization configuration"
+    },
+    "sidebar": {
+      "$ref": "#/$defs/SidebarConfig",
+      "description": "Website sidebar configuration"
+    },
+    "logos": {
+      "items": {
+        "type": "string"
       },
-      "required": ["template", "output", "source_section"]
+      "type": "array",
+      "description": "Additional logo files to copy during aggregation (absolute paths with ~ expansion)"
     }
   },
-  "additionalProperties": false,
-  "examples": [
-    {
-      "enabled": true,
-      "title": "My Library",
-      "description": "A powerful Go library for testing",
-      "category": "Core Libraries",
-      "settings": {
-        "model": "gemini-1.5-flash-latest",
-        "regeneration_mode": "scratch",
-        "system_prompt": "default"
-      },
-      "sections": [
-        {
-          "name": "introduction",
-          "title": "Introduction",
-          "order": 1,
-          "prompt": "prompts/introduction.md",
-          "output": "introduction.md"
-        }
-      ]
-    }
-  ]
+  "type": "object",
+  "required": [
+    "enabled",
+    "title",
+    "description",
+    "category",
+    "sections"
+  ],
+  "title": "Grove Docgen Configuration",
+  "description": "Configuration schema for grove-docgen documentation generation."
 }
