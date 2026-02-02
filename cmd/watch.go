@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"sort"
@@ -250,8 +251,11 @@ func setupWatchForEcosystem(
 	quiet bool,
 ) error {
 	// Load ecosystem config to get workspace paths
-	groveYmlPath := filepath.Join(eco.Path, "grove.yml")
-	cfg, err := coreConfig.Load(groveYmlPath)
+	configPath, err := coreConfig.FindConfigFile(eco.Path)
+	if err != nil {
+		return fmt.Errorf("could not find config file in %s: %w", eco.Path, err)
+	}
+	cfg, err := coreConfig.Load(configPath)
 	if err != nil {
 		return err
 	}

@@ -192,10 +192,13 @@ func (a *Aggregator) buildSidebarManifest(src *docgenConfig.SidebarConfig, mode 
 // The transform parameter specifies output transformations (e.g., "astro" for website builds).
 func (a *Aggregator) aggregateEcosystem(rootDir string, m *manifest.Manifest, outputDir, mode, transform string, allowedPackages map[string]bool) error {
 	// Load the ecosystem config to get workspace paths
-	groveYmlPath := filepath.Join(rootDir, "grove.yml")
-	cfg, err := config.Load(groveYmlPath)
+	configPath, err := config.FindConfigFile(rootDir)
 	if err != nil {
-		return fmt.Errorf("could not load ecosystem config: %w", err)
+		return fmt.Errorf("could not find config file in %s: %w", rootDir, err)
+	}
+	cfg, err := config.Load(configPath)
+	if err != nil {
+		return fmt.Errorf("could not load ecosystem config from %s: %w", configPath, err)
 	}
 
 	a.logger.Debugf("Loaded ecosystem config with %d workspace patterns", len(cfg.Workspaces))
@@ -545,19 +548,10 @@ func (a *Aggregator) getPackageVersion(wsPath string) string {
 		}
 	}
 
-	// Fall back to checking grove.yml for version info
-	groveYmlPath := filepath.Join(wsPath, "grove.yml")
-	data, err := os.ReadFile(groveYmlPath)
-	if err == nil {
-		// Simple search for version field in YAML
-		lines := strings.Split(string(data), "\n")
-		for _, line := range lines {
-			if strings.HasPrefix(line, "version:") {
-				parts := strings.SplitN(line, ":", 2)
-				if len(parts) == 2 {
-					return strings.TrimSpace(parts[1])
-				}
-			}
+	// Fall back to checking grove config for version info
+	if configPath, err := config.FindConfigFile(wsPath); err == nil {
+		if cfg, err := config.Load(configPath); err == nil && cfg.Version != "" {
+			return cfg.Version
 		}
 	}
 
