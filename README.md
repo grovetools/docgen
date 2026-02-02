@@ -41,7 +41,7 @@
 See the [documentation](docs/) for detailed usage instructions:
 - [Overview](docs/01-overview.md)
 - [Examples](docs/02-examples.md)
-- [Configuration](docs/03-configuration.md)
 - [Command Reference](docs/04-command-reference.md)
+- [Configuration](docs/06-configuration.md)
 
 <!-- DOCGEN:TOC:END -->
