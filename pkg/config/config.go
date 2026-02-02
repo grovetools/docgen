@@ -82,6 +82,8 @@ type SectionConfig struct {
 	Name             string `yaml:"name"`
 	Title            string `yaml:"title"`
 	Order            int    `yaml:"order"`
+	Schemas          []SchemaInput `yaml:"schemas,omitempty"`          // List of schemas to aggregate into one page
+	DocSources       []DocSectionSource `yaml:"doc_sources,omitempty"` // For doc_sections: pull from generated docs
 	Status           string `yaml:"status,omitempty"`     // Publication status: "draft", "dev", "production" (default: "draft")
 	Prompt           string `yaml:"prompt"`               // Path to the LLM prompt file
 	Output           string `yaml:"output"`               // Output markdown file
@@ -128,6 +130,19 @@ type LogoConfig struct {
 	Spacing   float64 `yaml:"spacing,omitempty"`   // Spacing between logo and text (default: 35)
 	TextScale float64 `yaml:"text_scale,omitempty"` // Text width as proportion of logo (default: 1.1)
 	Width     float64 `yaml:"width,omitempty"`     // Output SVG width in pixels (default: 200)
+}
+
+// SchemaInput defines a single schema source when aggregating multiple schemas.
+type SchemaInput struct {
+	Path  string `yaml:"path"`            // Path to the schema file
+	Title string `yaml:"title,omitempty"` // Title for the H2 section
+}
+
+// DocSectionSource defines a source for pulling from generated package docs.
+type DocSectionSource struct {
+	Package    string   `yaml:"package"`              // Package name (must exist in configured ecosystems)
+	Doc        string   `yaml:"doc,omitempty"`        // Optional: explicit path (auto-discovers schema_to_md output if omitted)
+	Properties []string `yaml:"properties,omitempty"` // Properties for Quick Start (Full Reference includes all)
 }
 
 // Load attempts to load a docgen.config.yml file from a given directory's docs/ subdirectory.

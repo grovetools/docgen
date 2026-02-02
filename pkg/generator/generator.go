@@ -245,6 +245,12 @@ func (g *Generator) generateInPlace(packageDir string, opts GenerateOptions) err
 			}
 			continue
 		}
+		if section.Type == "doc_sections" {
+			if err := g.generateFromDocSections(packageDir, section, cfg, outputBaseDir); err != nil {
+				g.logger.WithError(err).Errorf("Doc sections generation failed for section '%s'", section.Name)
+			}
+			continue
+		}
 		if section.Type == "capture" {
 			if err := g.generateFromCapture(packageDir, section, cfg, outputBaseDir); err != nil {
 				g.logger.WithError(err).Errorf("CLI capture generation failed for section '%s'", section.Name)
@@ -309,37 +315,97 @@ func (g *Generator) generateInPlace(packageDir string, opts GenerateOptions) err
 	return nil
 }
 
-const SchemaToMarkdownSystemPrompt = `You are a technical writer tasked with creating documentation from a JSON schema.
-Convert the following plain text description of a JSON schema into a user-friendly Markdown document.
+const SchemaToMarkdownSystemPrompt = `You are a technical writer tasked with creating documentation from one or more JSON schemas.
+Convert the provided plain text descriptions of JSON schemas into a user-friendly Markdown document.
 
 **Instructions:**
 - Create a clear, well-structured document.
-- Use headings for logical sections.
-- Use Markdown tables to list properties, including their type, description, and default value.
-- For nested objects, use sub-headings and separate tables.
+- The document will likely contain multiple schema sections.
+- For each "NEW SCHEMA SECTION" provided in the input:
+  - Create a Level 2 Heading (##) using the provided "Schema Section Title".
+  - Use a simple two-column Markdown table: Property and Description.
+  - In the Description column, start with inline metadata in parentheses: (type, required/optional, default: value if any). For example: "(string, required)" or "(integer, optional, default: 3)".
+  - After the metadata, write a verbose, helpful explanation that goes beyond the schema's terse descriptions. Explain what the property does, when you might use it, and any important considerations.
+  - If a property is marked "Deprecated: true", add a bold **Deprecated** label before the metadata.
+  - For nested objects, use Level 3 sub-headings (###) and separate tables.
+  - Immediately after each H2 section's property table, include a small example TOML code block (no heading needed) showing a brief, realistic configuration snippet for that section. Keep it concise - just 3-5 lines demonstrating the key properties.
 - Do not include any preamble or explanation about your process. Your output should be only the final Markdown document.
+---
+`
+
+const DocSectionsSystemPrompt = `You are creating a configuration reference document from documentation sections.
+The input contains documentation sections and a list of selected properties for the Quick Start.
+
+**Property Selection Format:**
+Properties use dot notation: "section.property" or just "property" for top-level.
+Examples: "groves", "logging.level", "notebook.root"
+
+**Output Format (Markdown):**
+
+# Configuration Reference
+
+A brief 1-2 sentence introduction to configuring the Grove ecosystem.
+
+## Quick Start Configuration
+
+A minimal TOML example showing ONLY the properties listed in "Quick Start Properties".
+Wrap in a toml code fence. Include inline comments with descriptions VERBATIM from the docs.
+Keep it short - just these specific options.
+
+## Full Configuration Reference
+
+A comprehensive TOML example showing ALL the options from the provided documentation.
+Wrap in a toml code fence. Include inline comments that come VERBATIM from the documentation descriptions.
+Organize by section with comment headers. Show sensible default values.
+
+**Rules:**
+- Use exact wording from the docs for comments - do not paraphrase
+- All TOML must be inside fenced code blocks (triple backticks with toml)
+- No other text or explanations beyond what's specified above
 ---
 `
 
 func (g *Generator) generateFromSchema(packageDir string, section config.SectionConfig, cfg *config.DocgenConfig, outputBaseDir string) error {
 	g.logger.Infof("Generating section from schema: %s", section.Name)
 
-	if section.Source == "" {
-		return fmt.Errorf("section type 'schema_to_md' requires a 'source' file")
+	// Normalize inputs: either multiple Schemas or single Source
+	var inputs []config.SchemaInput
+	if len(section.Schemas) > 0 {
+		inputs = section.Schemas
+	} else if section.Source != "" {
+		inputs = []config.SchemaInput{{Path: section.Source}}
+	} else {
+		return fmt.Errorf("section type 'schema_to_md' requires 'schemas' list or 'source' file")
 	}
 
-	schemaPath := filepath.Join(packageDir, section.Source)
-	parser, err := schema.NewParser(schemaPath)
-	if err != nil {
-		return fmt.Errorf("failed to initialize schema parser: %w", err)
+	var sb strings.Builder
+
+	for _, input := range inputs {
+		if input.Path == "" {
+			continue
+		}
+
+		schemaPath := filepath.Join(packageDir, input.Path)
+		parser, err := schema.NewParser(schemaPath)
+		if err != nil {
+			return fmt.Errorf("failed to initialize schema parser for %s: %w", input.Path, err)
+		}
+
+		schemaText, err := parser.RenderAsText()
+		if err != nil {
+			return fmt.Errorf("failed to render schema %s as text: %w", input.Path, err)
+		}
+
+		sb.WriteString("\n--- NEW SCHEMA SECTION ---\n")
+		if input.Title != "" {
+			sb.WriteString(fmt.Sprintf("Schema Section Title: %s\n", input.Title))
+		}
+		sb.WriteString(fmt.Sprintf("Source File: %s\n", input.Path))
+		sb.WriteString(schemaText)
+		sb.WriteString("\n")
 	}
 
-	schemaText, err := parser.RenderAsText()
-	if err != nil {
-		return fmt.Errorf("failed to render schema as text: %w", err)
-	}
-
-	finalPrompt := SchemaToMarkdownSystemPrompt + schemaText
+	finalPrompt := SchemaToMarkdownSystemPrompt + sb.String()
 
 	// Determine model to use (section override or global)
 	model := cfg.Settings.Model
@@ -364,6 +430,157 @@ func (g *Generator) generateFromSchema(packageDir string, section config.Section
 	}
 	g.logger.Infof("Successfully wrote schema doc section '%s' to %s", section.Name, outputPath)
 	return nil
+}
+
+func (g *Generator) generateFromDocSections(packageDir string, section config.SectionConfig, cfg *config.DocgenConfig, outputBaseDir string) error {
+	g.logger.Infof("Generating doc sections: %s", section.Name)
+
+	if len(section.DocSources) == 0 {
+		return fmt.Errorf("section type 'doc_sections' requires 'doc_sources' list")
+	}
+
+	// Discover all ecosystems to build package path map
+	discoveryService := workspace.NewDiscoveryService(g.logger)
+	result, err := discoveryService.DiscoverAll()
+	if err != nil {
+		return fmt.Errorf("failed to discover ecosystems: %w", err)
+	}
+
+	// Build map of package name -> path
+	packagePaths := make(map[string]string)
+	for _, eco := range result.Ecosystems {
+		configPath, err := coreConfig.FindConfigFile(eco.Path)
+		if err != nil {
+			continue
+		}
+		ecoCfg, err := coreConfig.Load(configPath)
+		if err != nil {
+			continue
+		}
+
+		for _, wsPattern := range ecoCfg.Workspaces {
+			pattern := filepath.Join(eco.Path, wsPattern)
+			matches, err := filepath.Glob(pattern)
+			if err != nil {
+				continue
+			}
+			for _, match := range matches {
+				info, err := os.Stat(match)
+				if err == nil && info.IsDir() {
+					pkgName := filepath.Base(match)
+					packagePaths[pkgName] = match
+				}
+			}
+		}
+	}
+
+	// Build combined content from doc sections
+	var sb strings.Builder
+
+	for _, source := range section.DocSources {
+		pkgPath, ok := packagePaths[source.Package]
+		if !ok {
+			return fmt.Errorf("package '%s' not found in configured ecosystems", source.Package)
+		}
+
+		// Auto-discover schema doc if not specified
+		docFile := source.Doc
+		if docFile == "" {
+			docFile = g.findSchemaDoc(pkgPath)
+			if docFile == "" {
+				return fmt.Errorf("could not auto-discover schema doc for package '%s' (no schema_to_md section found)", source.Package)
+			}
+			g.logger.Debugf("Auto-discovered schema doc for %s: %s", source.Package, docFile)
+		}
+
+		// Try notebook docgen dir first, then package docs/
+		docPath := g.resolveDocPath(pkgPath, docFile)
+		if docPath == "" {
+			return fmt.Errorf("doc file '%s' not found for package '%s'", docFile, source.Package)
+		}
+
+		content, err := os.ReadFile(docPath)
+		if err != nil {
+			return fmt.Errorf("failed to read doc %s: %w", docPath, err)
+		}
+
+		// Add package info and content
+		sb.WriteString(fmt.Sprintf("\n--- PACKAGE: %s ---\n", source.Package))
+		sb.WriteString(fmt.Sprintf("Quick Start Properties: %v\n\n", source.Properties))
+		sb.WriteString(string(content))
+		sb.WriteString("\n\n")
+	}
+
+	// Send to LLM to add unified example
+	finalPrompt := DocSectionsSystemPrompt + "\n--- DOCUMENTATION SECTIONS ---\n\n" + sb.String()
+
+	model := cfg.Settings.Model
+	if section.Model != "" {
+		model = section.Model
+	}
+
+	genConfig := config.MergeGenerationConfig(cfg.Settings.GenerationConfig, section.GenerationConfig)
+
+	output, err := g.CallLLM(finalPrompt, model, genConfig, packageDir)
+	if err != nil {
+		return fmt.Errorf("LLM call failed for doc sections '%s': %w", section.Name, err)
+	}
+
+	// Write output
+	outputPath := filepath.Join(outputBaseDir, section.Output)
+	if err := os.MkdirAll(filepath.Dir(outputPath), 0755); err != nil {
+		return fmt.Errorf("failed to create output directory: %w", err)
+	}
+	if err := os.WriteFile(outputPath, []byte(output), 0644); err != nil {
+		return fmt.Errorf("failed to write doc sections output: %w", err)
+	}
+	g.logger.Infof("Successfully wrote doc sections '%s' to %s", section.Name, outputPath)
+	return nil
+}
+
+// findSchemaDoc looks for a schema_to_md section in the package's docgen config and returns its output path.
+func (g *Generator) findSchemaDoc(pkgPath string) string {
+	// Try to load the package's docgen config
+	cfg, _, err := config.LoadWithNotebook(pkgPath)
+	if err != nil {
+		return ""
+	}
+
+	// Find the first schema_to_md section
+	for _, section := range cfg.Sections {
+		if section.Type == "schema_to_md" {
+			return "docs/" + section.Output
+		}
+	}
+
+	return ""
+}
+
+// resolveDocPath finds the doc file, trying notebook location first then package docs/
+func (g *Generator) resolveDocPath(pkgPath, docFile string) string {
+	// Try notebook docgen/docs/ first
+	node, err := workspace.GetProjectByPath(pkgPath)
+	if err == nil {
+		cfg, err := coreConfig.LoadDefault()
+		if err == nil {
+			locator := workspace.NewNotebookLocator(cfg)
+			docgenDir, err := locator.GetDocgenDir(node)
+			if err == nil {
+				notebookPath := filepath.Join(docgenDir, docFile)
+				if _, err := os.Stat(notebookPath); err == nil {
+					return notebookPath
+				}
+			}
+		}
+	}
+
+	// Fallback to package path
+	pkgDocPath := filepath.Join(pkgPath, docFile)
+	if _, err := os.Stat(pkgDocPath); err == nil {
+		return pkgDocPath
+	}
+
+	return ""
 }
 
 func (g *Generator) generateFromCapture(packageDir string, section config.SectionConfig, cfg *config.DocgenConfig, outputBaseDir string) error {
@@ -688,6 +905,33 @@ func (g *Generator) generateSectionsMode(packageDir, configPath string, topCfg *
 	for _, ss := range sectionsToGenerate {
 		g.logger.Infof("Generating section: %s", qualifiedName(ss))
 
+		// Determine output directory for this section
+		outputDir := filepath.Join(ss.subDir, "docs")
+		if ss.subCfg.Settings.OutputDir != "" {
+			outputDir = filepath.Join(ss.subDir, ss.subCfg.Settings.OutputDir)
+		}
+
+		// Handle special section types that don't use prompt files
+		if ss.section.Type == "schema_to_md" {
+			if err := g.generateFromSchema(packageDir, ss.section, ss.subCfg, outputDir); err != nil {
+				g.logger.WithError(err).Errorf("Schema to Markdown generation failed for section '%s'", ss.section.Name)
+			}
+			continue
+		}
+		if ss.section.Type == "doc_sections" {
+			if err := g.generateFromDocSections(packageDir, ss.section, ss.subCfg, outputDir); err != nil {
+				g.logger.WithError(err).Errorf("Doc sections generation failed for section '%s'", ss.section.Name)
+			}
+			continue
+		}
+		if ss.section.Type == "capture" {
+			if err := g.generateFromCapture(packageDir, ss.section, ss.subCfg, outputDir); err != nil {
+				g.logger.WithError(err).Errorf("CLI capture generation failed for section '%s'", ss.section.Name)
+			}
+			continue
+		}
+
+		// Standard prompt-based generation
 		// Resolve prompt from the subdirectory's prompts/ folder
 		promptPath := filepath.Join(ss.subDir, "prompts", ss.section.Prompt)
 		promptContent, err := os.ReadFile(promptPath)
@@ -709,10 +953,6 @@ func (g *Generator) generateSectionsMode(packageDir, configPath string, topCfg *
 		}
 
 		// Handle reference mode
-		outputDir := filepath.Join(ss.subDir, "docs")
-		if ss.subCfg.Settings.OutputDir != "" {
-			outputDir = filepath.Join(ss.subDir, ss.subCfg.Settings.OutputDir)
-		}
 		if ss.subCfg.Settings.RegenerationMode == "reference" {
 			existingOutputPath := filepath.Join(outputDir, ss.section.Output)
 			if existingDocs, readErr := os.ReadFile(existingOutputPath); readErr == nil {

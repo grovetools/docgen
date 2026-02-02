@@ -39,15 +39,32 @@ func (p *Parser) RenderAsText() (string, error) {
 	}
 	builder.WriteString("\n")
 
+	// Extract required fields array
+	var required []string
+	if reqArray, ok := p.schemaData["required"].([]interface{}); ok {
+		for _, r := range reqArray {
+			if s, ok := r.(string); ok {
+				required = append(required, s)
+			}
+		}
+	}
+
 	if properties, ok := p.schemaData["properties"].(map[string]interface{}); ok {
-		p.renderProperties(&builder, properties, 0)
+		p.renderProperties(&builder, properties, required, 0)
 	}
 
 	return builder.String(), nil
 }
 
-func (p *Parser) renderProperties(builder *strings.Builder, properties map[string]interface{}, indentLevel int) {
+func (p *Parser) renderProperties(builder *strings.Builder, properties map[string]interface{}, required []string, indentLevel int) {
 	indent := strings.Repeat("  ", indentLevel)
+
+	// Build required lookup set
+	requiredSet := make(map[string]bool)
+	for _, r := range required {
+		requiredSet[r] = true
+	}
+
 	for key, val := range properties {
 		prop, ok := val.(map[string]interface{})
 		if !ok {
@@ -67,6 +84,14 @@ func (p *Parser) renderProperties(builder *strings.Builder, properties map[strin
 
 		builder.WriteString(fmt.Sprintf("%s- Property: `%s`\n", indent, key))
 		builder.WriteString(fmt.Sprintf("%s  - Type: %s\n", indent, propType))
+		if requiredSet[key] {
+			builder.WriteString(fmt.Sprintf("%s  - Required: true\n", indent))
+		} else {
+			builder.WriteString(fmt.Sprintf("%s  - Required: false\n", indent))
+		}
+		if deprecated, ok := prop["deprecated"].(bool); ok && deprecated {
+			builder.WriteString(fmt.Sprintf("%s  - Deprecated: true\n", indent))
+		}
 		if description != "" {
 			builder.WriteString(fmt.Sprintf("%s  - Description: %s\n", indent, description))
 		}
@@ -76,13 +101,22 @@ func (p *Parser) renderProperties(builder *strings.Builder, properties map[strin
 
 		if propType == "object" {
 			if nestedProps, ok := prop["properties"].(map[string]interface{}); ok {
-				p.renderProperties(builder, nestedProps, indentLevel+2)
+				// Extract nested required array
+				var nestedRequired []string
+				if reqArray, ok := prop["required"].([]interface{}); ok {
+					for _, r := range reqArray {
+						if s, ok := r.(string); ok {
+							nestedRequired = append(nestedRequired, s)
+						}
+					}
+				}
+				p.renderProperties(builder, nestedProps, nestedRequired, indentLevel+2)
 			}
 		} else if propType == "array" {
 			if items, ok := prop["items"].(map[string]interface{}); ok {
 				builder.WriteString(fmt.Sprintf("%s  - Items:\n", indent))
 				itemProps := map[string]interface{}{"item": items}
-				p.renderProperties(builder, itemProps, indentLevel+2)
+				p.renderProperties(builder, itemProps, nil, indentLevel+2)
 			}
 		}
 	}
