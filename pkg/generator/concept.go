@@ -10,7 +10,13 @@ import (
 	coreConfig "github.com/grovetools/core/config"
 	"github.com/grovetools/core/pkg/workspace"
 	"github.com/grovetools/docgen/pkg/config"
+	"gopkg.in/yaml.v3"
 )
+
+// conceptManifest represents the manifest.yaml in a concept directory
+type conceptManifest struct {
+	DocgenOrder []string `yaml:"docgen_order"`
+}
 
 // generateFromConcept copies documentation from an nb concept directory.
 // It copies all .md files found in the concept directory to the output location,
@@ -85,19 +91,36 @@ func (g *Generator) generateFromConcept(packageDir string, section config.Sectio
 		return fmt.Errorf("concept directory not found: %s", conceptDir)
 	}
 
-	// 3. Find all .md files in the concept directory
-	entries, err := os.ReadDir(conceptDir)
-	if err != nil {
-		return fmt.Errorf("could not read concept directory: %w", err)
+	// 3. Find .md files to process, respecting docgen_order if present
+	var mdFiles []string
+
+	// Try to read manifest for docgen_order
+	manifestPath := filepath.Join(conceptDir, "manifest.yaml")
+	if manifestData, err := os.ReadFile(manifestPath); err == nil {
+		var cm conceptManifest
+		if err := yaml.Unmarshal(manifestData, &cm); err == nil && len(cm.DocgenOrder) > 0 {
+			// Use explicit order from manifest - only process listed files
+			for _, f := range cm.DocgenOrder {
+				if _, err := os.Stat(filepath.Join(conceptDir, f)); err == nil {
+					mdFiles = append(mdFiles, f)
+				}
+			}
+		}
 	}
 
-	var mdFiles []string
-	for _, entry := range entries {
-		if entry.IsDir() {
-			continue
+	// Fall back to all .md files if no docgen_order
+	if len(mdFiles) == 0 {
+		entries, err := os.ReadDir(conceptDir)
+		if err != nil {
+			return fmt.Errorf("could not read concept directory: %w", err)
 		}
-		if strings.HasSuffix(entry.Name(), ".md") {
-			mdFiles = append(mdFiles, entry.Name())
+		for _, entry := range entries {
+			if entry.IsDir() {
+				continue
+			}
+			if strings.HasSuffix(entry.Name(), ".md") {
+				mdFiles = append(mdFiles, entry.Name())
+			}
 		}
 	}
 
