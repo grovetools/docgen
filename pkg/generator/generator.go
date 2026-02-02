@@ -407,6 +407,16 @@ func (g *Generator) generateFromSchema(packageDir string, section config.Section
 
 	finalPrompt := SchemaToMarkdownSystemPrompt + sb.String()
 
+	// Handle reference mode - inject existing output for LLM to update rather than regenerate
+	outputPath := filepath.Join(outputBaseDir, section.Output)
+	if cfg.Settings.RegenerationMode == "reference" {
+		if existingDocs, err := os.ReadFile(outputPath); err == nil {
+			g.logger.Debugf("Injecting reference content from %s", outputPath)
+			finalPrompt = "For your reference, here is the previous version of the documentation. Preserve any manual edits while updating with new schema information:\n\n<reference_docs>\n" +
+				string(existingDocs) + "\n</reference_docs>\n\n---\n\n" + finalPrompt
+		}
+	}
+
 	// Determine model to use (section override or global)
 	model := cfg.Settings.Model
 	if section.Model != "" {
@@ -421,7 +431,6 @@ func (g *Generator) generateFromSchema(packageDir string, section config.Section
 	}
 
 	// Write to the determined output directory
-	outputPath := filepath.Join(outputBaseDir, section.Output)
 	if err := os.MkdirAll(filepath.Dir(outputPath), 0755); err != nil {
 		return fmt.Errorf("failed to create output directory for schema doc: %w", err)
 	}
@@ -514,6 +523,16 @@ func (g *Generator) generateFromDocSections(packageDir string, section config.Se
 	// Send to LLM to add unified example
 	finalPrompt := DocSectionsSystemPrompt + "\n--- DOCUMENTATION SECTIONS ---\n\n" + sb.String()
 
+	// Handle reference mode - inject existing output for LLM to update rather than regenerate
+	outputPath := filepath.Join(outputBaseDir, section.Output)
+	if cfg.Settings.RegenerationMode == "reference" {
+		if existingDocs, err := os.ReadFile(outputPath); err == nil {
+			g.logger.Debugf("Injecting reference content from %s", outputPath)
+			finalPrompt = "For your reference, here is the previous version of the documentation. Preserve any manual edits while updating with new information:\n\n<reference_docs>\n" +
+				string(existingDocs) + "\n</reference_docs>\n\n---\n\n" + finalPrompt
+		}
+	}
+
 	model := cfg.Settings.Model
 	if section.Model != "" {
 		model = section.Model
@@ -527,7 +546,6 @@ func (g *Generator) generateFromDocSections(packageDir string, section config.Se
 	}
 
 	// Write output
-	outputPath := filepath.Join(outputBaseDir, section.Output)
 	if err := os.MkdirAll(filepath.Dir(outputPath), 0755); err != nil {
 		return fmt.Errorf("failed to create output directory: %w", err)
 	}
