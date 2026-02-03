@@ -1,3 +1,98 @@
+## v0.6.0 (2026-02-02)
+
+A major workflow overhaul introduces a notebook-first approach to documentation (def60a2), supported by a new three-level publication status system—draft, dev, and production—to manage content lifecycle (d2c7001). This includes new synchronization commands to move content between notebooks and repositories (def60a2), alongside enhanced asset resolution that prioritizes notebook locations while preserving legacy paths (2f34a1f).
+
+The new `watch` command (8d714d9) enables hot-reloading for documentation by monitoring notebook directories and incrementally rebuilding changed packages. Additionally, a new `capture` command (f74d120) allows for recursive crawling of CLI help output to generate styled documentation. Automated schema generation tools (ceb67fb) streamline the creation of configuration references.
+
+Asset management has been expanded with a new logo text generator (308b1e1) and configuration support for generating combined logo-text SVGs (251cd98). The system now also supports a `base_url` configuration for absolute media paths (af32529), ensuring assets render correctly across different hosting environments.
+
+### Features
+
+- Implement notebook-first docgen workflow with sync commands (def60a2)
+- Add publication status workflow for documentation (d2c7001)
+- Add watch command for hot reloading documentation (8d714d9)
+- Add CLI capture command for generating styled command references (f74d120)
+- Add automated schema generation and improve doc_sections (ceb67fb)
+- Add logos config and logo-with-text SVG generation (251cd98)
+- Multi-ecosystem aggregation with website sections (f7ffee8)
+- Add reference mode support for schema generation types (a379e14)
+- Add doc_sections type for consolidated config reference (98eb2b9)
+- Add base_url config for absolute media paths (af32529)
+- Support .cx/ location for docgen rules files (24bb94b)
+- Respect docgen_order in concept generator (94d7d16)
+- Add docgen concept build (8851353)
+- Resolve assets from notebook docgen directory (2f34a1f)
+- Copy video/asciicasts (91fd370)
+- Improve sync to-repo output with detailed status info (cf6c1e6)
+- Support notebook location for README templates (bbf87a2)
+
+### Bug Fixes
+
+- Default section status to draft and refactor website sections to be config-driven (0bc165b)
+- Support website sections in docgen watch (f81fa8d)
+- Section status default to draft + filter packages by sidebar config (1d02ecf)
+- Generate docs in nb (3795411)
+- Detect notebook mode for centralized notebooks (d0ab896)
+- Include dev status sections in prod mode aggregation (286ecf5)
+- Don't create empty directories for filtered packages (ff4e222)
+- Skip packages with no sections in aggregator (50a1ced)
+- Update VERSION_PKG to grovetools/core path (1ad4980)
+
+### Refactoring
+
+- Use config.FindConfigFile for TOML support (8972260)
+- Update docgen title to match package name (20205de)
+
+### File Changes
+
+```
+ .cx/docs.rules                       |   8 +
+ .github/workflows/release.yml        | 113 ++--
+ CLAUDE.md                            |  13 +
+ LICENSE                              |  21 +
+ Makefile                             |  11 +-
+ README.md                            |  59 +--
+ cmd/aggregate.go                     |  25 +-
+ cmd/capture.go                       |  85 +++
+ cmd/logo.go                          |  93 ++++
+ cmd/migrate_config.go                | 128 +++++
+ cmd/root.go                          |   5 +
+ cmd/sync.go                          |  22 +
+ cmd/sync_from_repo.go                | 148 ++++++
+ cmd/sync_to_repo.go                  | 250 +++++++++
+ cmd/watch.go                         | 894 ++++++++++++++++++++++++++++++++
+ docs/01-overview.md                  |  63 +--
+ docs/06-configuration.md             | 155 ++++++
+ docs/README.md.tpl                   |   6 -
+ docs/docgen.config.yml               |  43 --
+ docs/docs.rules                      |   1 -
+ docs/prompts/01-overview.md          |  31 --
+ docs/prompts/02-examples.md          |  23 -
+ docs/prompts/03-configuration.md     |  62 ---
+ docs/prompts/04-command-reference.md |  54 --
+ go.mod                               |  31 +-
+ go.sum                               | 110 +++-
+ grove.toml                           |  14 +
+ grove.yml                            |  10 -
+ pkg/aggregator/aggregator.go         | 964 +++++++++++++++++++++++++++++++++--
+ pkg/capture/capture.go               | 465 +++++++++++++++++
+ pkg/config/config.go                 | 215 ++++++--
+ pkg/docs/docs.json                   |  58 +--
+ pkg/generator/concept.go             | 232 +++++++++
+ pkg/generator/generator.go           | 645 +++++++++++++++++++++--
+ pkg/logo/generator.go                | 382 ++++++++++++++
+ pkg/manifest/manifest.go             |  36 +-
+ pkg/readme/synchronizer.go           | 221 ++++++--
+ pkg/schema/parser.go                 |  42 +-
+ pkg/transformer/astro.go             | 165 ++++++
+ pkg/watcher/watcher.go               | 157 ++++++
+ pkg/writer/astro.go                  |  71 +++
+ pkg/writer/writer.go                 |  30 ++
+ schema/docgen.config.schema.json     | 610 ++++++++++++++--------
+ tools/schema-generator/main.go       |  34 ++
+ 44 files changed, 5983 insertions(+), 822 deletions(-)
+```
+
 ## v1.1.1-nightly.5b5626e (2025-10-03)
 
 ## v0.1.0 (2025-10-01)
