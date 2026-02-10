@@ -54,6 +54,7 @@ type PackageManifest struct {
 	Version       string            `json:"version"`
 	RepoURL       string            `json:"repo_url,omitempty"`
 	ChangelogPath string            `json:"changelog_path,omitempty"`
+	TocDepth      int               `json:"toc_depth,omitempty"`
 	Sections      []SectionManifest `json:"sections"`
 }
 

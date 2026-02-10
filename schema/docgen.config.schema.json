@@ -304,6 +304,10 @@
           "type": "string",
           "description": "Output directory for generated docs"
         },
+        "toc_depth": {
+          "type": "integer",
+          "description": "Maximum heading level to show in Table of Contents (default: 3)"
+        },
         "temperature": {
           "type": "number",
           "maximum": 1,

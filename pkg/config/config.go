@@ -76,6 +76,7 @@ type SettingsConfig struct {
 	StructuredOutputFile string   `yaml:"structured_output_file,omitempty" jsonschema:"description=Path for JSON output"`
 	SystemPrompt         string   `yaml:"system_prompt,omitempty" jsonschema:"description=Path to system prompt file or 'default' to use built-in"`
 	OutputDir            string   `yaml:"output_dir,omitempty" jsonschema:"description=Output directory for generated docs"`
+	TocDepth             int      `yaml:"toc_depth,omitempty" jsonschema:"description=Maximum heading level to show in Table of Contents (default: 3)"`
 	GenerationConfig     `yaml:",inline"`
 }
 

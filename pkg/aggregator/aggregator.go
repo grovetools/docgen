@@ -272,6 +272,7 @@ func (a *Aggregator) aggregateEcosystem(rootDir string, m *manifest.Manifest, ou
 			DocsPath:    fmt.Sprintf("./%s", wsName),
 			Version:     version,
 			RepoURL:     repoURL,
+			TocDepth:    docCfg.Settings.TocDepth,
 		}
 
 		// Resolve docs directory (notebook or repo)
