@@ -1,3 +1,19 @@
+## v0.6.1 (2026-02-10)
+
+A new configuration option has been introduced to control the depth of the Table of Contents (TOC) in generated documentation (2c62862). This feature involves updates to the aggregator, configuration handling, manifest generation, and the validation schema.
+
+### Features
+- Add toc depth configuration option (2c62862)
+
+### File Changes
+```
+ pkg/aggregator/aggregator.go     | 1 +
+ pkg/config/config.go             | 1 +
+ pkg/manifest/manifest.go         | 1 +
+ schema/docgen.config.schema.json | 4 ++++
+ 4 files changed, 7 insertions(+)
+```
+
 ## v0.6.0 (2026-02-02)
 
 A major workflow overhaul introduces a notebook-first approach to documentation (def60a2), supported by a new three-level publication status system—draft, dev, and production—to manage content lifecycle (d2c7001). This includes new synchronization commands to move content between notebooks and repositories (def60a2), alongside enhanced asset resolution that prioritizes notebook locations while preserving legacy paths (2f34a1f).
