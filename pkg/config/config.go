@@ -92,8 +92,9 @@ type SectionConfig struct {
 	Output           string             `yaml:"output" jsonschema:"description=Output markdown filename"`
 	OutputDir        string             `yaml:"output_dir,omitempty" jsonschema:"description=Output directory name for sections mode"`
 	JSONKey          string             `yaml:"json_key,omitempty" jsonschema:"description=Key for structured JSON output"`
-	Type             string             `yaml:"type,omitempty" jsonschema:"description=Type of generation: schema_to_md (LLM-generated), schema_table (deterministic table), doc_sections, capture, or nb_concept,enum=schema_to_md,enum=schema_table,enum=doc_sections,enum=capture,enum=nb_concept"`
+	Type             string             `yaml:"type,omitempty" jsonschema:"description=Type of generation: schema_to_md (LLM-generated), schema_table (deterministic table), schema_describe (generate descriptions JSON), doc_sections, capture, or nb_concept,enum=schema_to_md,enum=schema_table,enum=schema_describe,enum=doc_sections,enum=capture,enum=nb_concept"`
 	Source           string             `yaml:"source,omitempty" jsonschema:"description=Source identifier. For schema_to_md: path to JSON schema file (deprecated: use schemas instead). For nb_concept: concept ID (e.g. my-concept or workspace:my-concept for cross-workspace)"`
+	Descriptions     string             `yaml:"descriptions,omitempty" jsonschema:"description=Path to JSON file with LLM-generated descriptions (for schema_table type)"`
 	Binary           string             `yaml:"binary,omitempty" jsonschema:"description=Binary name for capture type"`
 	Format           string             `yaml:"format,omitempty" jsonschema:"description=Output format for capture type: styled (default) or plain,enum=styled,enum=plain"`
 	Depth            int                `yaml:"depth,omitempty" jsonschema:"description=Recursion depth for capture type (default: 5)"`

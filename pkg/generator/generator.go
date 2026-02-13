@@ -2,6 +2,7 @@ package generator
 
 import (
 	"bytes"
+	"encoding/json"
 	"fmt"
 	"io"
 	"os"
@@ -251,6 +252,12 @@ func (g *Generator) generateInPlace(packageDir string, opts GenerateOptions) err
 			}
 			continue
 		}
+		if section.Type == "schema_describe" {
+			if err := g.generateSchemaDescriptions(packageDir, section, cfg, outputBaseDir); err != nil {
+				g.logger.WithError(err).Errorf("Schema descriptions generation failed for section '%s'", section.Name)
+			}
+			continue
+		}
 		if section.Type == "doc_sections" {
 			if err := g.generateFromDocSections(packageDir, section, cfg, outputBaseDir); err != nil {
 				g.logger.WithError(err).Errorf("Doc sections generation failed for section '%s'", section.Name)
@@ -338,10 +345,21 @@ Convert the provided plain text descriptions of JSON schemas into a user-friendl
   - Use a simple two-column Markdown table: Property and Description.
   - In the Description column, start with inline metadata in parentheses: (type, required/optional, default: value if any). For example: "(string, required)" or "(integer, optional, default: 3)".
   - After the metadata, write a verbose, helpful explanation that goes beyond the schema's terse descriptions. Explain what the property does, when you might use it, and any important considerations.
-  - If a property is marked "Deprecated: true", add a bold **Deprecated** label before the metadata.
   - For nested objects, use Level 3 sub-headings (###) and separate tables.
   - Immediately after each H2 section's property table, include a small example TOML code block (no heading needed) showing a brief, realistic configuration snippet for that section. Keep it concise - just 3-5 lines demonstrating the key properties.
 - Do not include any preamble or explanation about your process. Your output should be only the final Markdown document.
+
+**Status Badges (IMPORTANT):**
+At the END of each property's description, append HTML badges based on the schema metadata:
+- If "Status: ALPHA" → append: <span class="schema-badge schema-badge-alpha">ALPHA</span>
+- If "Status: BETA" → append: <span class="schema-badge schema-badge-beta">BETA</span>
+- If "Status: DEPRECATED" or "Deprecated: true" → append: <span class="schema-badge schema-badge-deprecated">DEPRECATED</span>
+- If there's a "Notice:" → append it in muted style: <span class="schema-status-msg">notice text</span>
+- If there's a "Replaced By:" → append: <span class="schema-status-msg">→ <code>replacement</code></span>
+- If "Wizard: true" → prefix the property name with ★ in the table
+
+Example description with badges:
+"(object, optional) Settings for embedded Neovim. <span class="schema-badge schema-badge-alpha">ALPHA</span> <span class="schema-status-msg">Experimental feature</span>"
 ---
 `
 
@@ -641,6 +659,18 @@ func (g *Generator) generateFromSchemaTable(packageDir string, section config.Se
 		return fmt.Errorf("section type 'schema_table' requires 'schemas' list or 'source' file")
 	}
 
+	// Load descriptions if configured
+	var descriptions map[string]string
+	if section.Descriptions != "" {
+		var err error
+		descriptions, err = g.loadDescriptions(packageDir, outputBaseDir, section.Descriptions)
+		if err != nil {
+			g.logger.WithError(err).Warnf("Could not load descriptions file, using schema descriptions")
+		} else {
+			g.logger.Infof("Loaded %d descriptions from %s", len(descriptions), section.Descriptions)
+		}
+	}
+
 	var sb strings.Builder
 
 	// Add title
@@ -671,7 +701,7 @@ func (g *Generator) generateFromSchemaTable(packageDir string, section config.Se
 		sb.WriteString("| :--- | :--- | :--- | :--- |\n")
 
 		for _, prop := range props {
-			g.writeSchemaTableRow(&sb, prop, "")
+			g.writeSchemaTableRow(&sb, prop, "", descriptions)
 		}
 		sb.WriteString("\n")
 	}
@@ -690,7 +720,8 @@ func (g *Generator) generateFromSchemaTable(packageDir string, section config.Se
 }
 
 // writeSchemaTableRow writes a single property row to the schema table, including nested properties
-func (g *Generator) writeSchemaTableRow(sb *strings.Builder, prop schema.Property, prefix string) {
+// If descriptions map is provided, it will use LLM-generated descriptions instead of schema descriptions
+func (g *Generator) writeSchemaTableRow(sb *strings.Builder, prop schema.Property, prefix string, descriptions map[string]string) {
 	// Build property name with prefix for nested fields
 	propName := prop.Name
 	if prefix != "" {
@@ -715,13 +746,19 @@ func (g *Generator) writeSchemaTableRow(sb *strings.Builder, prop schema.Propert
 	// Build description with metadata
 	var descParts []string
 
-	// Main description
-	if prop.Description != "" {
-		descParts = append(descParts, prop.Description)
+	// Main description - use LLM description if available, otherwise schema description
+	mainDesc := prop.Description
+	if descriptions != nil {
+		if llmDesc, ok := descriptions[propName]; ok && llmDesc != "" {
+			mainDesc = llmDesc
+		}
+	}
+	if mainDesc != "" {
+		descParts = append(descParts, mainDesc)
 	}
 
 	// Status badges as styled HTML spans - always show badge, skip redundant message
-	descLower := strings.ToLower(prop.Description)
+	descLower := strings.ToLower(mainDesc)
 	if prop.Status != "" && prop.Status != "stable" {
 		statusBadge := fmt.Sprintf(`<span class="schema-badge schema-badge-%s">%s</span>`, prop.Status, strings.ToUpper(prop.Status))
 		// Only add message if description doesn't already mention the replacement or similar info
@@ -760,8 +797,155 @@ func (g *Generator) writeSchemaTableRow(sb *strings.Builder, prop schema.Propert
 
 	// Write nested properties with indented prefix
 	for _, child := range prop.Properties {
-		g.writeSchemaTableRow(sb, child, propName)
+		g.writeSchemaTableRow(sb, child, propName, descriptions)
 	}
+}
+
+// generateSchemaDescriptions uses LLM to generate rich descriptions for schema properties
+// and saves them to a JSON file that can be used by schema_table.
+func (g *Generator) generateSchemaDescriptions(packageDir string, section config.SectionConfig, cfg *config.DocgenConfig, outputBaseDir string) error {
+	g.logger.Infof("Generating schema descriptions: %s", section.Name)
+
+	// Normalize inputs
+	var inputs []config.SchemaInput
+	if len(section.Schemas) > 0 {
+		inputs = section.Schemas
+	} else if section.Source != "" {
+		inputs = []config.SchemaInput{{Path: section.Source}}
+	} else {
+		return fmt.Errorf("section type 'schema_describe' requires 'schemas' list or 'source' file")
+	}
+
+	// Collect all properties from all schemas
+	var allProps []schema.Property
+	for _, input := range inputs {
+		if input.Path == "" {
+			continue
+		}
+		schemaPath := filepath.Join(packageDir, input.Path)
+		p, err := schema.NewParser(schemaPath)
+		if err != nil {
+			return fmt.Errorf("failed to parse schema %s: %w", input.Path, err)
+		}
+		props, err := p.Parse()
+		if err != nil {
+			return fmt.Errorf("failed to parse schema %s: %w", input.Path, err)
+		}
+		allProps = append(allProps, props...)
+	}
+
+	// Build prompt for LLM
+	var promptBuilder strings.Builder
+	promptBuilder.WriteString(`Generate detailed, helpful descriptions for each configuration property below.
+Output JSON with property paths as keys and description strings as values.
+Each description should:
+- Explain what the property does
+- When/why you would use it
+- Any important considerations
+Keep descriptions concise but informative (1-3 sentences).
+
+Properties to describe:
+`)
+	g.collectPropertyPaths(&promptBuilder, allProps, "")
+
+	promptBuilder.WriteString(`
+Output format (JSON only, no markdown fences):
+{
+  "property.path": "Description text here...",
+  ...
+}`)
+
+	// Call LLM
+	model := section.Model
+	if model == "" {
+		model = cfg.Settings.Model
+	}
+	if model == "" {
+		model = "gemini-2.0-flash"
+	}
+
+	genConfig := config.MergeGenerationConfig(cfg.Settings.GenerationConfig, section.GenerationConfig)
+	response, err := g.CallLLM(promptBuilder.String(), model, genConfig, packageDir)
+	if err != nil {
+		return fmt.Errorf("LLM generation failed: %w", err)
+	}
+
+	// Parse and validate JSON response
+	var descriptions map[string]string
+	// Strip markdown code fences if present
+	cleanResponse := strings.TrimSpace(response)
+	cleanResponse = strings.TrimPrefix(cleanResponse, "```json")
+	cleanResponse = strings.TrimPrefix(cleanResponse, "```")
+	cleanResponse = strings.TrimSuffix(cleanResponse, "```")
+	cleanResponse = strings.TrimSpace(cleanResponse)
+
+	if err := json.Unmarshal([]byte(cleanResponse), &descriptions); err != nil {
+		return fmt.Errorf("failed to parse LLM response as JSON: %w\nResponse: %s", err, response)
+	}
+
+	// Write output
+	outputPath := filepath.Join(outputBaseDir, section.Output)
+	if err := os.MkdirAll(filepath.Dir(outputPath), 0755); err != nil {
+		return fmt.Errorf("failed to create output directory: %w", err)
+	}
+
+	jsonBytes, err := json.MarshalIndent(descriptions, "", "  ")
+	if err != nil {
+		return fmt.Errorf("failed to marshal descriptions: %w", err)
+	}
+
+	if err := os.WriteFile(outputPath, jsonBytes, 0644); err != nil {
+		return fmt.Errorf("failed to write descriptions file: %w", err)
+	}
+
+	g.logger.Infof("Successfully wrote %d descriptions to %s", len(descriptions), outputPath)
+	return nil
+}
+
+// collectPropertyPaths recursively collects property paths for the LLM prompt
+func (g *Generator) collectPropertyPaths(sb *strings.Builder, props []schema.Property, prefix string) {
+	for _, prop := range props {
+		path := prop.Name
+		if prefix != "" {
+			path = prefix + "." + prop.Name
+		}
+		sb.WriteString(fmt.Sprintf("- %s (%s): %s\n", path, prop.Type, prop.Description))
+
+		// Recurse into nested properties
+		if len(prop.Properties) > 0 {
+			g.collectPropertyPaths(sb, prop.Properties, path)
+		}
+	}
+}
+
+// loadDescriptions loads LLM-generated descriptions from a JSON file
+// It checks outputBaseDir first (for notebook mode), then packageDir
+func (g *Generator) loadDescriptions(packageDir, outputBaseDir, descriptionsPath string) (map[string]string, error) {
+	if descriptionsPath == "" {
+		return nil, nil
+	}
+
+	// Try outputBaseDir first (where schema_describe writes to)
+	fullPath := filepath.Join(outputBaseDir, filepath.Base(descriptionsPath))
+	data, err := os.ReadFile(fullPath)
+	if err != nil {
+		// Fall back to packageDir-relative path
+		fullPath = filepath.Join(packageDir, descriptionsPath)
+		data, err = os.ReadFile(fullPath)
+		if err != nil {
+			return nil, fmt.Errorf("failed to read descriptions file (tried %s and %s): %w",
+				filepath.Join(outputBaseDir, filepath.Base(descriptionsPath)),
+				filepath.Join(packageDir, descriptionsPath), err)
+		}
+	}
+
+	var descriptions map[string]string
+	if err := json.Unmarshal(data, &descriptions); err != nil {
+		return nil, fmt.Errorf("failed to parse descriptions file: %w", err)
+	}
+
+	g.logger.Debugf("Loaded descriptions from %s", fullPath)
+	return descriptions, nil
 }
 
 func (g *Generator) generateFromCapture(packageDir string, section config.SectionConfig, cfg *config.DocgenConfig, outputBaseDir string) error {
@@ -1102,6 +1286,12 @@ func (g *Generator) generateSectionsMode(packageDir, configPath string, topCfg *
 		if ss.section.Type == "schema_table" {
 			if err := g.generateFromSchemaTable(packageDir, ss.section, ss.subCfg, outputDir); err != nil {
 				g.logger.WithError(err).Errorf("Schema table generation failed for section '%s'", ss.section.Name)
+			}
+			continue
+		}
+		if ss.section.Type == "schema_describe" {
+			if err := g.generateSchemaDescriptions(packageDir, ss.section, ss.subCfg, outputDir); err != nil {
+				g.logger.WithError(err).Errorf("Schema descriptions generation failed for section '%s'", ss.section.Name)
 			}
 			continue
 		}

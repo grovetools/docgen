@@ -188,6 +188,7 @@
           "enum": [
             "schema_to_md",
             "schema_table",
+            "schema_describe",
             "doc_sections",
             "capture",
             "nb_concept"
@@ -197,6 +198,10 @@
         "source": {
           "type": "string",
           "description": "Source identifier. For schema_to_md: path to JSON schema file (deprecated: use schemas instead). For nb_concept: concept ID (e.g. my-concept or workspace:my-concept for cross-workspace)"
+        },
+        "descriptions": {
+          "type": "string",
+          "description": "Path to JSON file with LLM-generated descriptions (for schema_table type)"
         },
         "binary": {
           "type": "string",
