@@ -187,11 +187,12 @@
           "type": "string",
           "enum": [
             "schema_to_md",
+            "schema_table",
             "doc_sections",
             "capture",
             "nb_concept"
           ],
-          "description": "Type of generation: schema_to_md"
+          "description": "Type of generation: schema_to_md (LLM-generated)"
         },
         "source": {
           "type": "string",

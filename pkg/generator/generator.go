@@ -245,6 +245,12 @@ func (g *Generator) generateInPlace(packageDir string, opts GenerateOptions) err
 			}
 			continue
 		}
+		if section.Type == "schema_table" {
+			if err := g.generateFromSchemaTable(packageDir, section, cfg, outputBaseDir); err != nil {
+				g.logger.WithError(err).Errorf("Schema table generation failed for section '%s'", section.Name)
+			}
+			continue
+		}
 		if section.Type == "doc_sections" {
 			if err := g.generateFromDocSections(packageDir, section, cfg, outputBaseDir); err != nil {
 				g.logger.WithError(err).Errorf("Doc sections generation failed for section '%s'", section.Name)
@@ -622,6 +628,142 @@ func (g *Generator) resolveDocPath(pkgPath, docFile string) string {
 	return ""
 }
 
+func (g *Generator) generateFromSchemaTable(packageDir string, section config.SectionConfig, cfg *config.DocgenConfig, outputBaseDir string) error {
+	g.logger.Infof("Generating schema table: %s", section.Name)
+
+	// Normalize inputs: either multiple Schemas or single Source
+	var inputs []config.SchemaInput
+	if len(section.Schemas) > 0 {
+		inputs = section.Schemas
+	} else if section.Source != "" {
+		inputs = []config.SchemaInput{{Path: section.Source}}
+	} else {
+		return fmt.Errorf("section type 'schema_table' requires 'schemas' list or 'source' file")
+	}
+
+	var sb strings.Builder
+
+	// Add title
+	sb.WriteString(fmt.Sprintf("# %s\n\n", section.Title))
+
+	for _, input := range inputs {
+		if input.Path == "" {
+			continue
+		}
+
+		schemaPath := filepath.Join(packageDir, input.Path)
+		p, err := schema.NewParser(schemaPath)
+		if err != nil {
+			return fmt.Errorf("failed to initialize schema parser for %s: %w", input.Path, err)
+		}
+
+		props, err := p.Parse()
+		if err != nil {
+			return fmt.Errorf("failed to parse schema %s: %w", input.Path, err)
+		}
+
+		if input.Title != "" {
+			sb.WriteString(fmt.Sprintf("## %s\n\n", input.Title))
+		}
+
+		// Generate the table with layer column
+		sb.WriteString("| Property | Type | Layer | Description |\n")
+		sb.WriteString("| :--- | :--- | :--- | :--- |\n")
+
+		for _, prop := range props {
+			g.writeSchemaTableRow(&sb, prop, "")
+		}
+		sb.WriteString("\n")
+	}
+
+	// Write output
+	outputPath := filepath.Join(outputBaseDir, section.Output)
+	if err := os.MkdirAll(filepath.Dir(outputPath), 0755); err != nil {
+		return fmt.Errorf("failed to create output directory: %w", err)
+	}
+	if err := os.WriteFile(outputPath, []byte(sb.String()), 0644); err != nil {
+		return fmt.Errorf("failed to write schema table output: %w", err)
+	}
+
+	g.logger.Infof("Successfully wrote schema table '%s' to %s", section.Name, outputPath)
+	return nil
+}
+
+// writeSchemaTableRow writes a single property row to the schema table, including nested properties
+func (g *Generator) writeSchemaTableRow(sb *strings.Builder, prop schema.Property, prefix string) {
+	// Build property name with prefix for nested fields
+	propName := prop.Name
+	if prefix != "" {
+		propName = prefix + "." + prop.Name
+	}
+
+	// Name column: wizard star, name, deprecated strikethrough
+	name := fmt.Sprintf("`%s`", propName)
+	if prop.Wizard {
+		name = "★ " + name
+	}
+	if prop.Deprecated {
+		name = "~~" + name + "~~"
+	}
+
+	// Layer column with badge-style formatting
+	layer := ""
+	if prop.Layer != "" {
+		layer = fmt.Sprintf("**%s**", strings.Title(prop.Layer))
+	}
+
+	// Build description with metadata
+	var descParts []string
+
+	// Main description
+	if prop.Description != "" {
+		descParts = append(descParts, prop.Description)
+	}
+
+	// Status badges as styled HTML spans - always show badge, skip redundant message
+	descLower := strings.ToLower(prop.Description)
+	if prop.Status != "" && prop.Status != "stable" {
+		statusBadge := fmt.Sprintf(`<span class="schema-badge schema-badge-%s">%s</span>`, prop.Status, strings.ToUpper(prop.Status))
+		// Only add message if description doesn't already mention the replacement or similar info
+		replacementMentioned := prop.StatusReplacedBy != "" && strings.Contains(descLower, strings.ToLower(prop.StatusReplacedBy))
+		if prop.StatusMessage != "" && !replacementMentioned {
+			statusBadge += fmt.Sprintf(` <span class="schema-status-msg">%s</span>`, prop.StatusMessage)
+		}
+		descParts = append(descParts, statusBadge)
+	}
+
+	// Replacement hint with code styling - skip if already in description
+	if prop.StatusReplacedBy != "" && !strings.Contains(descLower, strings.ToLower(prop.StatusReplacedBy)) {
+		descParts = append(descParts, fmt.Sprintf(`<span class="schema-status-msg">→ <code>%s</code></span>`, prop.StatusReplacedBy))
+	}
+
+	// Hint
+	if prop.Hint != "" {
+		descParts = append(descParts, fmt.Sprintf("_Hint: %s_", prop.Hint))
+	}
+
+	// Default value
+	if prop.Default != nil {
+		descParts = append(descParts, fmt.Sprintf("Default: `%v`", prop.Default))
+	}
+
+	// Required indicator
+	if prop.Required {
+		descParts = append(descParts, "**Required**")
+	}
+
+	desc := strings.Join(descParts, " · ")
+	desc = strings.ReplaceAll(desc, "\n", " ")
+	desc = strings.ReplaceAll(desc, "|", "\\|") // Escape pipes for markdown tables
+
+	sb.WriteString(fmt.Sprintf("| %s | %s | %s | %s |\n", name, prop.Type, layer, desc))
+
+	// Write nested properties with indented prefix
+	for _, child := range prop.Properties {
+		g.writeSchemaTableRow(sb, child, propName)
+	}
+}
+
 func (g *Generator) generateFromCapture(packageDir string, section config.SectionConfig, cfg *config.DocgenConfig, outputBaseDir string) error {
 	g.logger.Infof("Generating CLI capture section: %s", section.Name)
 
@@ -954,6 +1096,12 @@ func (g *Generator) generateSectionsMode(packageDir, configPath string, topCfg *
 		if ss.section.Type == "schema_to_md" {
 			if err := g.generateFromSchema(packageDir, ss.section, ss.subCfg, outputDir); err != nil {
 				g.logger.WithError(err).Errorf("Schema to Markdown generation failed for section '%s'", ss.section.Name)
+			}
+			continue
+		}
+		if ss.section.Type == "schema_table" {
+			if err := g.generateFromSchemaTable(packageDir, ss.section, ss.subCfg, outputDir); err != nil {
+				g.logger.WithError(err).Errorf("Schema table generation failed for section '%s'", ss.section.Name)
 			}
 			continue
 		}

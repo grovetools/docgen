@@ -4,12 +4,37 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"sort"
 	"strings"
 )
 
 // Parser handles parsing JSON schemas.
 type Parser struct {
 	schemaData map[string]interface{}
+}
+
+// Property represents a schema property with extended metadata.
+type Property struct {
+	Name        string      `json:"name"`
+	Type        string      `json:"type"`
+	Description string      `json:"description"`
+	Required    bool        `json:"required"`
+	Default     interface{} `json:"default,omitempty"`
+	Deprecated  bool        `json:"deprecated,omitempty"`
+	Properties  []Property  `json:"properties,omitempty"`
+	Items       *Property   `json:"items,omitempty"`
+
+	// x-* Extensions
+	Layer            string `json:"x-layer,omitempty"`
+	Priority         int    `json:"x-priority,omitempty"`
+	Wizard           bool   `json:"x-wizard,omitempty"`
+	Sensitive        bool   `json:"x-sensitive,omitempty"`
+	Hint             string `json:"x-hint,omitempty"`
+	Status           string `json:"x-status,omitempty"`
+	StatusMessage    string `json:"x-status-message,omitempty"`
+	StatusSince      string `json:"x-status-since,omitempty"`
+	StatusTarget     string `json:"x-status-target,omitempty"`
+	StatusReplacedBy string `json:"x-status-replaced-by,omitempty"`
 }
 
 // NewParser creates a new schema parser.
@@ -27,18 +52,8 @@ func NewParser(schemaPath string) (*Parser, error) {
 	return &Parser{schemaData: schemaData}, nil
 }
 
-// RenderAsText converts the loaded schema into a plain text representation.
-func (p *Parser) RenderAsText() (string, error) {
-	var builder strings.Builder
-
-	if title, ok := p.schemaData["title"].(string); ok {
-		builder.WriteString(fmt.Sprintf("Schema Title: %s\n", title))
-	}
-	if description, ok := p.schemaData["description"].(string); ok {
-		builder.WriteString(fmt.Sprintf("Schema Description: %s\n", description))
-	}
-	builder.WriteString("\n")
-
+// Parse returns the root properties defined in the schema as structured Property objects.
+func (p *Parser) Parse() ([]Property, error) {
 	// Extract required fields array
 	var required []string
 	if reqArray, ok := p.schemaData["required"].([]interface{}); ok {
@@ -50,14 +65,14 @@ func (p *Parser) RenderAsText() (string, error) {
 	}
 
 	if properties, ok := p.schemaData["properties"].(map[string]interface{}); ok {
-		p.renderProperties(&builder, properties, required, 0)
+		return p.extractProperties(properties, required), nil
 	}
 
-	return builder.String(), nil
+	return nil, nil
 }
 
-func (p *Parser) renderProperties(builder *strings.Builder, properties map[string]interface{}, required []string, indentLevel int) {
-	indent := strings.Repeat("  ", indentLevel)
+func (p *Parser) extractProperties(rawProps map[string]interface{}, required []string) []Property {
+	var props []Property
 
 	// Build required lookup set
 	requiredSet := make(map[string]bool)
@@ -65,59 +80,202 @@ func (p *Parser) renderProperties(builder *strings.Builder, properties map[strin
 		requiredSet[r] = true
 	}
 
-	for key, val := range properties {
-		prop, ok := val.(map[string]interface{})
+	for key, val := range rawProps {
+		rawProp, ok := val.(map[string]interface{})
 		if !ok {
 			continue
 		}
 
-		// Handle $ref
-		if ref, ok := prop["$ref"].(string); ok {
-			prop = p.resolveRef(ref)
-			if prop == nil {
-				continue
+		// Handle $ref resolution
+		if ref, ok := rawProp["$ref"].(string); ok {
+			resolved := p.resolveRef(ref)
+			if resolved != nil {
+				// Merge resolved props with rawProp (rawProp takes precedence for overrides)
+				merged := make(map[string]interface{})
+				for k, v := range resolved {
+					merged[k] = v
+				}
+				for k, v := range rawProp {
+					merged[k] = v
+				}
+				rawProp = merged
 			}
 		}
 
-		propType, _ := prop["type"].(string)
-		description, _ := prop["description"].(string)
+		prop := Property{
+			Name:        key,
+			Type:        getString(rawProp, "type"),
+			Description: getString(rawProp, "description"),
+			Required:    requiredSet[key],
+			Default:     rawProp["default"],
+			Deprecated:  getBool(rawProp, "deprecated"),
 
-		builder.WriteString(fmt.Sprintf("%s- Property: `%s`\n", indent, key))
-		builder.WriteString(fmt.Sprintf("%s  - Type: %s\n", indent, propType))
-		if requiredSet[key] {
-			builder.WriteString(fmt.Sprintf("%s  - Required: true\n", indent))
-		} else {
-			builder.WriteString(fmt.Sprintf("%s  - Required: false\n", indent))
-		}
-		if deprecated, ok := prop["deprecated"].(bool); ok && deprecated {
-			builder.WriteString(fmt.Sprintf("%s  - Deprecated: true\n", indent))
-		}
-		if description != "" {
-			builder.WriteString(fmt.Sprintf("%s  - Description: %s\n", indent, description))
-		}
-		if defaultValue, ok := prop["default"]; ok {
-			builder.WriteString(fmt.Sprintf("%s  - Default: %v\n", indent, defaultValue))
+			// x-* Extensions
+			Layer:            getString(rawProp, "x-layer"),
+			Priority:         getInt(rawProp, "x-priority"),
+			Wizard:           getBool(rawProp, "x-wizard"),
+			Sensitive:        getBool(rawProp, "x-sensitive"),
+			Hint:             getString(rawProp, "x-hint"),
+			Status:           getString(rawProp, "x-status"),
+			StatusMessage:    getString(rawProp, "x-status-message"),
+			StatusSince:      getString(rawProp, "x-status-since"),
+			StatusTarget:     getString(rawProp, "x-status-target"),
+			StatusReplacedBy: getString(rawProp, "x-status-replaced-by"),
 		}
 
-		if propType == "object" {
-			if nestedProps, ok := prop["properties"].(map[string]interface{}); ok {
-				// Extract nested required array
-				var nestedRequired []string
-				if reqArray, ok := prop["required"].([]interface{}); ok {
+		// Handle nested objects
+		if prop.Type == "object" {
+			if nestedRaw, ok := rawProp["properties"].(map[string]interface{}); ok {
+				var nestedReq []string
+				if reqArray, ok := rawProp["required"].([]interface{}); ok {
 					for _, r := range reqArray {
 						if s, ok := r.(string); ok {
-							nestedRequired = append(nestedRequired, s)
+							nestedReq = append(nestedReq, s)
 						}
 					}
 				}
-				p.renderProperties(builder, nestedProps, nestedRequired, indentLevel+2)
+				prop.Properties = p.extractProperties(nestedRaw, nestedReq)
 			}
-		} else if propType == "array" {
-			if items, ok := prop["items"].(map[string]interface{}); ok {
-				builder.WriteString(fmt.Sprintf("%s  - Items:\n", indent))
-				itemProps := map[string]interface{}{"item": items}
-				p.renderProperties(builder, itemProps, nil, indentLevel+2)
+		} else if prop.Type == "array" {
+			if itemsRaw, ok := rawProp["items"].(map[string]interface{}); ok {
+				itemProps := p.extractProperties(map[string]interface{}{"item": itemsRaw}, nil)
+				if len(itemProps) > 0 {
+					item := itemProps[0]
+					prop.Items = &item
+				}
 			}
+		}
+
+		props = append(props, prop)
+	}
+
+	// Sort by priority (ascending), then name
+	sort.Slice(props, func(i, j int) bool {
+		// Default priority to 999 if 0
+		p1 := props[i].Priority
+		if p1 == 0 {
+			p1 = 999
+		}
+
+		p2 := props[j].Priority
+		if p2 == 0 {
+			p2 = 999
+		}
+
+		if p1 != p2 {
+			return p1 < p2
+		}
+		return props[i].Name < props[j].Name
+	})
+
+	return props
+}
+
+// Helper functions for type-safe extraction
+func getString(m map[string]interface{}, key string) string {
+	if v, ok := m[key].(string); ok {
+		return v
+	}
+	return ""
+}
+
+func getBool(m map[string]interface{}, key string) bool {
+	if v, ok := m[key].(bool); ok {
+		return v
+	}
+	return false
+}
+
+func getInt(m map[string]interface{}, key string) int {
+	switch v := m[key].(type) {
+	case int:
+		return v
+	case float64:
+		return int(v)
+	default:
+		return 0
+	}
+}
+
+// RenderAsText converts the loaded schema into a plain text representation with x-* extensions.
+func (p *Parser) RenderAsText() (string, error) {
+	props, err := p.Parse()
+	if err != nil {
+		return "", err
+	}
+
+	var builder strings.Builder
+
+	if title, ok := p.schemaData["title"].(string); ok {
+		builder.WriteString(fmt.Sprintf("Schema Title: %s\n", title))
+	}
+	if description, ok := p.schemaData["description"].(string); ok {
+		builder.WriteString(fmt.Sprintf("Schema Description: %s\n", description))
+	}
+	builder.WriteString("\n")
+
+	p.renderPropertiesText(&builder, props, 0)
+
+	return builder.String(), nil
+}
+
+func (p *Parser) renderPropertiesText(builder *strings.Builder, props []Property, indentLevel int) {
+	indent := strings.Repeat("  ", indentLevel)
+
+	for _, prop := range props {
+		builder.WriteString(fmt.Sprintf("%s- Property: `%s`\n", indent, prop.Name))
+		builder.WriteString(fmt.Sprintf("%s  - Type: %s\n", indent, prop.Type))
+
+		// Enhanced Metadata - x-* extensions
+		if prop.Layer != "" {
+			builder.WriteString(fmt.Sprintf("%s  - Layer: %s\n", indent, prop.Layer))
+		}
+		if prop.Status != "" {
+			builder.WriteString(fmt.Sprintf("%s  - Status: %s\n", indent, strings.ToUpper(prop.Status)))
+			if prop.StatusMessage != "" {
+				builder.WriteString(fmt.Sprintf("%s  - Notice: %s\n", indent, prop.StatusMessage))
+			}
+			if prop.StatusSince != "" {
+				builder.WriteString(fmt.Sprintf("%s  - Since: %s\n", indent, prop.StatusSince))
+			}
+			if prop.StatusTarget != "" {
+				builder.WriteString(fmt.Sprintf("%s  - Target: %s\n", indent, prop.StatusTarget))
+			}
+			if prop.StatusReplacedBy != "" {
+				builder.WriteString(fmt.Sprintf("%s  - Replaced By: %s\n", indent, prop.StatusReplacedBy))
+			}
+		}
+		if prop.Deprecated {
+			builder.WriteString(fmt.Sprintf("%s  - Deprecated: true\n", indent))
+		}
+		if prop.Wizard {
+			builder.WriteString(fmt.Sprintf("%s  - Wizard: true (Common Setup)\n", indent))
+		}
+		if prop.Sensitive {
+			builder.WriteString(fmt.Sprintf("%s  - Sensitive: true\n", indent))
+		}
+		if prop.Priority > 0 {
+			builder.WriteString(fmt.Sprintf("%s  - Priority: %d\n", indent, prop.Priority))
+		}
+
+		builder.WriteString(fmt.Sprintf("%s  - Required: %v\n", indent, prop.Required))
+
+		if prop.Description != "" {
+			builder.WriteString(fmt.Sprintf("%s  - Description: %s\n", indent, prop.Description))
+		}
+		if prop.Hint != "" {
+			builder.WriteString(fmt.Sprintf("%s  - Hint: %s\n", indent, prop.Hint))
+		}
+		if prop.Default != nil {
+			builder.WriteString(fmt.Sprintf("%s  - Default: %v\n", indent, prop.Default))
+		}
+
+		// Nested handling
+		if prop.Type == "object" && len(prop.Properties) > 0 {
+			p.renderPropertiesText(builder, prop.Properties, indentLevel+2)
+		} else if prop.Type == "array" && prop.Items != nil {
+			builder.WriteString(fmt.Sprintf("%s  - Items:\n", indent))
+			p.renderPropertiesText(builder, []Property{*prop.Items}, indentLevel+2)
 		}
 	}
 }
