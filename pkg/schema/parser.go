@@ -27,7 +27,7 @@ type Property struct {
 	// x-* Extensions
 	Layer            string `json:"x-layer,omitempty"`
 	Priority         int    `json:"x-priority,omitempty"`
-	Wizard           bool   `json:"x-wizard,omitempty"`
+	Important        bool   `json:"x-important,omitempty"`
 	Sensitive        bool   `json:"x-sensitive,omitempty"`
 	Hint             string `json:"x-hint,omitempty"`
 	Status           string `json:"x-status,omitempty"`
@@ -131,7 +131,7 @@ func (p *Parser) extractProperties(rawProps map[string]interface{}, required []s
 			// x-* Extensions
 			Layer:            getString(rawProp, "x-layer"),
 			Priority:         getInt(rawProp, "x-priority"),
-			Wizard:           getBool(rawProp, "x-wizard"),
+			Important:        getBool(rawProp, "x-important"),
 			Sensitive:        getBool(rawProp, "x-sensitive"),
 			Hint:             getString(rawProp, "x-hint"),
 			Status:           getString(rawProp, "x-status"),
@@ -310,7 +310,7 @@ func (p *Parser) renderPropertiesText(builder *strings.Builder, props []Property
 		if prop.Deprecated {
 			builder.WriteString(fmt.Sprintf("%s  - Deprecated: true\n", indent))
 		}
-		if prop.Wizard {
+		if prop.Important {
 			builder.WriteString(fmt.Sprintf("%s  - Wizard: true (Common Setup)\n", indent))
 		}
 		if prop.Sensitive {

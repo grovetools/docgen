@@ -356,7 +356,7 @@ At the END of each property's description, append HTML badges based on the schem
 - If "Status: DEPRECATED" or "Deprecated: true" → append: <span class="schema-badge schema-badge-deprecated">DEPRECATED</span>
 - If there's a "Notice:" → append it in muted style: <span class="schema-status-msg">notice text</span>
 - If there's a "Replaced By:" → append: <span class="schema-status-msg">→ <code>replacement</code></span>
-- If "Wizard: true" → prefix the property name with ★ in the table
+- If "Important: true" → prefix the property name with ★ in the table
 
 Example description with badges:
 "(object, optional) Settings for embedded Neovim. <span class="schema-badge schema-badge-alpha">ALPHA</span> <span class="schema-status-msg">Experimental feature</span>"
@@ -736,7 +736,7 @@ type ConfigNode struct {
 	Deprecated       bool         `json:"deprecated,omitempty"`
 	Layer            string       `json:"layer,omitempty"`            // global, ecosystem, project
 	Priority         int          `json:"priority,omitempty"`
-	Wizard           bool         `json:"wizard,omitempty"`           // Common setup field (★)
+	Important        bool         `json:"important,omitempty"`        // Key configuration field (★)
 	Hint             string       `json:"hint,omitempty"`
 	Status           string       `json:"status,omitempty"`           // alpha, beta, stable, deprecated
 	StatusMessage    string       `json:"statusMessage,omitempty"`
@@ -890,7 +890,7 @@ func (g *Generator) schemaPropsToConfigNodes(props []schema.Property, prefix str
 			Deprecated:       prop.Deprecated,
 			Layer:            prop.Layer,
 			Priority:         prop.Priority,
-			Wizard:           prop.Wizard,
+			Important:        prop.Important,
 			Hint:             prop.Hint,
 			Status:           prop.Status,
 			StatusMessage:    prop.StatusMessage,
@@ -919,7 +919,7 @@ func (g *Generator) writeSchemaTableRow(sb *strings.Builder, prop schema.Propert
 
 	// Name column: wizard star, name, deprecated strikethrough
 	name := fmt.Sprintf("`%s`", propName)
-	if prop.Wizard {
+	if prop.Important {
 		name = "★ " + name
 	}
 	if prop.Deprecated {
