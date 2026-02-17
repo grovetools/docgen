@@ -649,6 +649,11 @@ func (g *Generator) resolveDocPath(pkgPath, docFile string) string {
 func (g *Generator) generateFromSchemaTable(packageDir string, section config.SectionConfig, cfg *config.DocgenConfig, outputBaseDir string) error {
 	g.logger.Infof("Generating schema table: %s", section.Name)
 
+	// Check for JSON format - dispatch to JSON generator
+	if section.Format == "json" {
+		return g.generateFromSchemaTableJSON(packageDir, section, cfg, outputBaseDir)
+	}
+
 	// Normalize inputs: either multiple Schemas or single Source
 	var inputs []config.SchemaInput
 	if len(section.Schemas) > 0 {
@@ -717,6 +722,190 @@ func (g *Generator) generateFromSchemaTable(packageDir string, section config.Se
 
 	g.logger.Infof("Successfully wrote schema table '%s' to %s", section.Name, outputPath)
 	return nil
+}
+
+// ConfigNode represents a configuration property in the JSON output for the website.
+// It preserves the hierarchical structure and includes all metadata for rich UI rendering.
+type ConfigNode struct {
+	Name             string       `json:"name"`
+	Path             string       `json:"path"`                       // Full dotted path (e.g., "groves.mygrove.enabled")
+	Type             string       `json:"type"`
+	Description      string       `json:"description"`
+	Required         bool         `json:"required,omitempty"`
+	Default          interface{}  `json:"default,omitempty"`
+	Deprecated       bool         `json:"deprecated,omitempty"`
+	Layer            string       `json:"layer,omitempty"`            // global, ecosystem, project
+	Priority         int          `json:"priority,omitempty"`
+	Wizard           bool         `json:"wizard,omitempty"`           // Common setup field (★)
+	Hint             string       `json:"hint,omitempty"`
+	Status           string       `json:"status,omitempty"`           // alpha, beta, stable, deprecated
+	StatusMessage    string       `json:"statusMessage,omitempty"`
+	StatusReplacedBy string       `json:"statusReplacedBy,omitempty"`
+	Children         []ConfigNode `json:"children,omitempty"`
+}
+
+// ConfigSchemaJSON is the root structure for the JSON output
+type ConfigSchemaJSON struct {
+	Title       string       `json:"title"`
+	Description string       `json:"description,omitempty"`
+	Properties  []ConfigNode `json:"properties"`
+}
+
+// generateFromSchemaTableJSON outputs the schema as structured JSON for the website component
+func (g *Generator) generateFromSchemaTableJSON(packageDir string, section config.SectionConfig, cfg *config.DocgenConfig, outputBaseDir string) error {
+	g.logger.Infof("Generating schema table (JSON format): %s", section.Name)
+
+	// Normalize inputs: either multiple Schemas or single Source
+	var inputs []config.SchemaInput
+	if len(section.Schemas) > 0 {
+		inputs = section.Schemas
+	} else if section.Source != "" {
+		inputs = []config.SchemaInput{{Path: section.Source}}
+	} else {
+		return fmt.Errorf("section type 'schema_table' requires 'schemas' list or 'source' file")
+	}
+
+	// Load descriptions if configured
+	var descriptions map[string]string
+	if section.Descriptions != "" {
+		var err error
+		descriptions, err = g.loadDescriptions(packageDir, outputBaseDir, section.Descriptions)
+		if err != nil {
+			g.logger.WithError(err).Warnf("Could not load descriptions file, using schema descriptions")
+		} else {
+			g.logger.Infof("Loaded %d descriptions from %s", len(descriptions), section.Descriptions)
+		}
+	}
+
+	// Build the JSON structure
+	result := ConfigSchemaJSON{
+		Title:      section.Title,
+		Properties: []ConfigNode{},
+	}
+
+	for _, input := range inputs {
+		if input.Path == "" {
+			continue
+		}
+
+		schemaPath := filepath.Join(packageDir, input.Path)
+		p, err := schema.NewParser(schemaPath)
+		if err != nil {
+			return fmt.Errorf("failed to initialize schema parser for %s: %w", input.Path, err)
+		}
+
+		props, err := p.Parse()
+		if err != nil {
+			return fmt.Errorf("failed to parse schema %s: %w", input.Path, err)
+		}
+
+		// Convert schema properties to ConfigNodes
+		nodes := g.schemaPropsToConfigNodes(props, "", descriptions)
+		result.Properties = append(result.Properties, nodes...)
+	}
+
+	// Determine output paths
+	// If output ends with .md, we create both .json (data) and .md (wrapper)
+	// If output ends with .json, we only create the JSON file
+	mdOutput := section.Output
+	var jsonOutput string
+
+	if strings.HasSuffix(section.Output, ".md") {
+		// Replace .md with .json for the data file
+		jsonOutput = strings.TrimSuffix(section.Output, ".md") + ".json"
+	} else if strings.HasSuffix(section.Output, ".json") {
+		jsonOutput = section.Output
+		mdOutput = "" // No markdown wrapper needed
+	} else {
+		// Default: add .json suffix
+		jsonOutput = section.Output + ".json"
+	}
+
+	// Create output directory
+	if err := os.MkdirAll(outputBaseDir, 0755); err != nil {
+		return fmt.Errorf("failed to create output directory: %w", err)
+	}
+
+	// Write JSON data file
+	jsonPath := filepath.Join(outputBaseDir, jsonOutput)
+	jsonBytes, err := json.MarshalIndent(result, "", "  ")
+	if err != nil {
+		return fmt.Errorf("failed to marshal config schema to JSON: %w", err)
+	}
+
+	if err := os.WriteFile(jsonPath, jsonBytes, 0644); err != nil {
+		return fmt.Errorf("failed to write schema table JSON output: %w", err)
+	}
+	g.logger.Infof("Successfully wrote schema table JSON '%s' to %s", section.Name, jsonPath)
+
+	// Write markdown wrapper file with config-reference code block
+	if mdOutput != "" {
+		// The JSON will be served from /data/{package}/{filename}.json
+		// Use the package directory name (workspace name) as the package identifier
+		packageName := filepath.Base(packageDir)
+
+		mdContent := fmt.Sprintf(`# %s
+
+`+"```config-reference"+`
+{"src": "/data/%s/%s"}
+`+"```"+`
+`, section.Title, packageName, jsonOutput)
+
+		mdPath := filepath.Join(outputBaseDir, mdOutput)
+		if err := os.WriteFile(mdPath, []byte(mdContent), 0644); err != nil {
+			return fmt.Errorf("failed to write schema table markdown wrapper: %w", err)
+		}
+		g.logger.Infof("Successfully wrote schema table markdown wrapper to %s", mdPath)
+	}
+
+	return nil
+}
+
+// schemaPropsToConfigNodes converts schema.Property slice to ConfigNode slice
+func (g *Generator) schemaPropsToConfigNodes(props []schema.Property, prefix string, descriptions map[string]string) []ConfigNode {
+	var nodes []ConfigNode
+
+	for _, prop := range props {
+		// Build full path
+		path := prop.Name
+		if prefix != "" {
+			path = prefix + "." + prop.Name
+		}
+
+		// Get description - prefer LLM-generated description
+		desc := prop.Description
+		if descriptions != nil {
+			if llmDesc, ok := descriptions[path]; ok && llmDesc != "" {
+				desc = llmDesc
+			}
+		}
+
+		node := ConfigNode{
+			Name:             prop.Name,
+			Path:             path,
+			Type:             prop.Type,
+			Description:      desc,
+			Required:         prop.Required,
+			Default:          prop.Default,
+			Deprecated:       prop.Deprecated,
+			Layer:            prop.Layer,
+			Priority:         prop.Priority,
+			Wizard:           prop.Wizard,
+			Hint:             prop.Hint,
+			Status:           prop.Status,
+			StatusMessage:    prop.StatusMessage,
+			StatusReplacedBy: prop.StatusReplacedBy,
+		}
+
+		// Recursively process children
+		if len(prop.Properties) > 0 {
+			node.Children = g.schemaPropsToConfigNodes(prop.Properties, path, descriptions)
+		}
+
+		nodes = append(nodes, node)
+	}
+
+	return nodes
 }
 
 // writeSchemaTableRow writes a single property row to the schema table, including nested properties

@@ -96,7 +96,7 @@ type SectionConfig struct {
 	Source           string             `yaml:"source,omitempty" jsonschema:"description=Source identifier. For schema_to_md: path to JSON schema file (deprecated: use schemas instead). For nb_concept: concept ID (e.g. my-concept or workspace:my-concept for cross-workspace)"`
 	Descriptions     string             `yaml:"descriptions,omitempty" jsonschema:"description=Path to JSON file with LLM-generated descriptions (for schema_table type)"`
 	Binary           string             `yaml:"binary,omitempty" jsonschema:"description=Binary name for capture type"`
-	Format           string             `yaml:"format,omitempty" jsonschema:"description=Output format for capture type: styled (default) or plain,enum=styled,enum=plain"`
+	Format           string             `yaml:"format,omitempty" jsonschema:"description=Output format. For capture: styled (default) or plain. For schema_table: markdown (default) or json,enum=styled,enum=plain,enum=markdown,enum=json"`
 	Depth            int                `yaml:"depth,omitempty" jsonschema:"description=Recursion depth for capture type (default: 5)"`
 	SubcommandOrder  []string           `yaml:"subcommand_order,omitempty" jsonschema:"description=Priority order for subcommands (rest alphabetical)"`
 	Model            string             `yaml:"model,omitempty" jsonschema:"description=Per-section model override"`

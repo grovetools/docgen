@@ -409,8 +409,8 @@ func (a *Aggregator) aggregateEcosystem(rootDir string, m *manifest.Manifest, ou
 				// Apply agg_strip_lines if configured for this section
 				processedData := a.applyStripLines(srcData, section.AggStripLines, wsName, section.Output)
 
-				// Apply Astro transformations if requested
-				if transform == "astro" {
+				// Apply Astro transformations if requested (skip JSON files)
+				if transform == "astro" && !strings.HasSuffix(section.Output, ".json") {
 					trans := transformer.NewAstroTransformer()
 					opts := transformer.TransformOptions{
 						PackageName: wsName,
@@ -426,6 +426,26 @@ func (a *Aggregator) aggregateEcosystem(rootDir string, m *manifest.Manifest, ou
 				if err := os.WriteFile(destFile, processedData, 0644); err != nil {
 					a.logger.WithError(err).Errorf("Failed to write %s", destFile)
 					continue
+				}
+
+				// If this is a markdown file with format: json, also copy the companion JSON file
+				if section.Format == "json" && strings.HasSuffix(section.Output, ".md") {
+					jsonFile := strings.TrimSuffix(section.Output, ".md") + ".json"
+					jsonSrcFile := filepath.Join(docsDir, jsonFile)
+					jsonDestFile := filepath.Join(distDest, jsonFile)
+
+					if _, err := os.Stat(jsonSrcFile); err == nil {
+						jsonData, err := os.ReadFile(jsonSrcFile)
+						if err != nil {
+							a.logger.WithError(err).Errorf("Failed to read companion JSON %s", jsonSrcFile)
+						} else {
+							if err := os.WriteFile(jsonDestFile, jsonData, 0644); err != nil {
+								a.logger.WithError(err).Errorf("Failed to write companion JSON %s", jsonDestFile)
+							} else {
+								a.logger.Infof("Copied companion JSON for %s/%s", wsName, jsonFile)
+							}
+						}
+					}
 				}
 			}
 		}

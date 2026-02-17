@@ -211,9 +211,11 @@
           "type": "string",
           "enum": [
             "styled",
-            "plain"
+            "plain",
+            "markdown",
+            "json"
           ],
-          "description": "Output format for capture type: styled (default) or plain"
+          "description": "Output format. For capture: styled (default) or plain. For schema_table: markdown (default) or json"
         },
         "depth": {
           "type": "integer",

@@ -65,10 +65,28 @@ func (p *Parser) Parse() ([]Property, error) {
 	}
 
 	if properties, ok := p.schemaData["properties"].(map[string]interface{}); ok {
-		return p.extractProperties(properties, required), nil
+		props := p.extractProperties(properties, required)
+		// Propagate layer from parent to children that don't have their own
+		propagateLayer(props, "")
+		return props, nil
 	}
 
 	return nil, nil
+}
+
+// propagateLayer recursively propagates the layer value from parent to children
+// that don't have their own layer specified.
+func propagateLayer(props []Property, parentLayer string) {
+	for i := range props {
+		// If this property doesn't have a layer, inherit from parent
+		if props[i].Layer == "" && parentLayer != "" {
+			props[i].Layer = parentLayer
+		}
+		// Propagate to children using this property's layer (which may be inherited)
+		if len(props[i].Properties) > 0 {
+			propagateLayer(props[i].Properties, props[i].Layer)
+		}
+	}
 }
 
 func (p *Parser) extractProperties(rawProps map[string]interface{}, required []string) []Property {
@@ -135,13 +153,57 @@ func (p *Parser) extractProperties(rawProps map[string]interface{}, required []s
 					}
 				}
 				prop.Properties = p.extractProperties(nestedRaw, nestedReq)
+			} else if addProps, ok := rawProp["additionalProperties"].(map[string]interface{}); ok {
+				// Handle map types: additionalProperties defines the value schema
+				// Resolve $ref if present
+				if ref, ok := addProps["$ref"].(string); ok {
+					resolved := p.resolveRef(ref)
+					if resolved != nil {
+						addProps = resolved
+					}
+				}
+				// Extract properties from the additionalProperties schema
+				if addPropsProps, ok := addProps["properties"].(map[string]interface{}); ok {
+					var addPropsReq []string
+					if reqArray, ok := addProps["required"].([]interface{}); ok {
+						for _, r := range reqArray {
+							if s, ok := r.(string); ok {
+								addPropsReq = append(addPropsReq, s)
+							}
+						}
+					}
+					prop.Properties = p.extractProperties(addPropsProps, addPropsReq)
+				}
 			}
 		} else if prop.Type == "array" {
 			if itemsRaw, ok := rawProp["items"].(map[string]interface{}); ok {
-				itemProps := p.extractProperties(map[string]interface{}{"item": itemsRaw}, nil)
-				if len(itemProps) > 0 {
-					item := itemProps[0]
-					prop.Items = &item
+				// Resolve $ref if present
+				if ref, ok := itemsRaw["$ref"].(string); ok {
+					resolved := p.resolveRef(ref)
+					if resolved != nil {
+						itemsRaw = resolved
+					}
+				}
+				// Extract properties from items schema if it's an object
+				if itemsType, ok := itemsRaw["type"].(string); ok && itemsType == "object" {
+					if itemsProps, ok := itemsRaw["properties"].(map[string]interface{}); ok {
+						var itemsReq []string
+						if reqArray, ok := itemsRaw["required"].([]interface{}); ok {
+							for _, r := range reqArray {
+								if s, ok := r.(string); ok {
+									itemsReq = append(itemsReq, s)
+								}
+							}
+						}
+						prop.Properties = p.extractProperties(itemsProps, itemsReq)
+					}
+				} else {
+					// Non-object items: create a simple item property
+					itemProps := p.extractProperties(map[string]interface{}{"item": itemsRaw}, nil)
+					if len(itemProps) > 0 {
+						item := itemProps[0]
+						prop.Items = &item
+					}
 				}
 			}
 		}
