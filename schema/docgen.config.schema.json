@@ -6,26 +6,36 @@
       "properties": {
         "package": {
           "type": "string",
-          "description": "Package name (must exist in configured ecosystems)"
+          "description": "Package name (must exist in configured ecosystems)",
+          "x-layer": "project",
+          "x-priority": "36"
         },
         "doc": {
           "type": "string",
-          "description": "Explicit path to doc file (auto-discovers schema_to_md output if omitted)"
+          "description": "Explicit path to doc file (auto-discovers schema_to_md output if omitted)",
+          "x-layer": "project",
+          "x-priority": "37"
         },
         "title": {
           "type": "string",
-          "description": "H2 section title (e.g."
+          "description": "H2 section title (e.g.",
+          "x-layer": "project",
+          "x-priority": "38"
         },
         "description": {
           "type": "string",
-          "description": "Description of what this configuration context is for"
+          "description": "Description of what this configuration context is for",
+          "x-layer": "project",
+          "x-priority": "39"
         },
         "properties": {
           "items": {
             "type": "string"
           },
           "type": "array",
-          "description": "Properties to document in this section (dot notation supported)"
+          "description": "Properties to document in this section (dot notation supported)",
+          "x-layer": "project",
+          "x-priority": "40"
         }
       },
       "type": "object",
@@ -37,35 +47,51 @@
       "properties": {
         "input": {
           "type": "string",
-          "description": "Path to input logo SVG (relative to base_url root or absolute)"
+          "description": "Path to input logo SVG (relative to base_url root or absolute)",
+          "x-layer": "project",
+          "x-priority": "46"
         },
         "output": {
           "type": "string",
-          "description": "Path for output logo-with-text SVG"
+          "description": "Path for output logo-with-text SVG",
+          "x-layer": "project",
+          "x-priority": "47"
         },
         "text": {
           "type": "string",
-          "description": "Text to display below logo"
+          "description": "Text to display below logo",
+          "x-layer": "project",
+          "x-priority": "48"
         },
         "font": {
           "type": "string",
-          "description": "Path to TTF/OTF font file"
+          "description": "Path to TTF/OTF font file",
+          "x-layer": "project",
+          "x-priority": "49"
         },
         "color": {
           "type": "string",
-          "description": "Text color (hex)"
+          "description": "Text color (hex)",
+          "x-layer": "project",
+          "x-priority": "50"
         },
         "spacing": {
           "type": "number",
-          "description": "Spacing between logo and text (default: 35)"
+          "description": "Spacing between logo and text (default: 35)",
+          "x-layer": "project",
+          "x-priority": "51"
         },
         "text_scale": {
           "type": "number",
-          "description": "Text width as proportion of logo (default: 1.1)"
+          "description": "Text width as proportion of logo (default: 1.1)",
+          "x-layer": "project",
+          "x-priority": "52"
         },
         "width": {
           "type": "number",
-          "description": "Output SVG width in pixels (default: 200)"
+          "description": "Output SVG width in pixels (default: 200)",
+          "x-layer": "project",
+          "x-priority": "53"
         }
       },
       "type": "object",
@@ -80,31 +106,45 @@
       "properties": {
         "template": {
           "type": "string",
-          "description": "Path to the README template"
+          "description": "Path to the README template",
+          "x-layer": "project",
+          "x-priority": "40"
         },
         "output": {
           "type": "string",
-          "description": "Path to the output README file"
+          "description": "Path to the output README file",
+          "x-layer": "project",
+          "x-priority": "41"
         },
         "source_section": {
           "type": "string",
-          "description": "The name of the section to inject into the template"
+          "description": "The name of the section to inject into the template",
+          "x-layer": "project",
+          "x-priority": "42"
         },
         "strip_lines": {
           "type": "integer",
-          "description": "Number of lines to strip from the top of source file (default: 0)"
+          "description": "Number of lines to strip from the top of source file (default: 0)",
+          "x-layer": "project",
+          "x-priority": "45"
         },
         "generate_toc": {
           "type": "boolean",
-          "description": "Whether to generate a table of contents from sections"
+          "description": "Whether to generate a table of contents from sections",
+          "x-layer": "project",
+          "x-priority": "43"
         },
         "base_url": {
           "type": "string",
-          "description": "Base URL for converting root-relative paths to absolute URLs"
+          "description": "Base URL for converting root-relative paths to absolute URLs",
+          "x-layer": "project",
+          "x-priority": "44"
         },
         "logo": {
           "$ref": "#/$defs/LogoConfig",
-          "description": "Optional logo generation configuration"
+          "description": "Optional logo generation configuration",
+          "x-layer": "project",
+          "x-priority": "46"
         }
       },
       "type": "object",
@@ -118,11 +158,15 @@
       "properties": {
         "path": {
           "type": "string",
-          "description": "Path to the schema file"
+          "description": "Path to the schema file",
+          "x-layer": "project",
+          "x-priority": "35"
         },
         "title": {
           "type": "string",
-          "description": "Title for the H2 section"
+          "description": "Title for the H2 section",
+          "x-layer": "project",
+          "x-priority": "36"
         }
       },
       "type": "object",
@@ -134,29 +178,39 @@
       "properties": {
         "name": {
           "type": "string",
-          "description": "Unique identifier for this section"
+          "description": "Unique identifier for this section",
+          "x-layer": "project",
+          "x-priority": "30"
         },
         "title": {
           "type": "string",
-          "description": "Display title for the section"
+          "description": "Display title for the section",
+          "x-layer": "project",
+          "x-priority": "31"
         },
         "order": {
           "type": "integer",
-          "description": "Order in which the section appears"
+          "description": "Order in which the section appears",
+          "x-layer": "project",
+          "x-priority": "32"
         },
         "schemas": {
           "items": {
             "$ref": "#/$defs/SchemaInput"
           },
           "type": "array",
-          "description": "List of schemas to aggregate into one page (for schema_to_md type)"
+          "description": "List of schemas to aggregate into one page (for schema_to_md type)",
+          "x-layer": "project",
+          "x-priority": "35"
         },
         "doc_sources": {
           "items": {
             "$ref": "#/$defs/DocSectionSource"
           },
           "type": "array",
-          "description": "Sources for pulling from generated package docs (for doc_sections type)"
+          "description": "Sources for pulling from generated package docs (for doc_sections type)",
+          "x-layer": "project",
+          "x-priority": "36"
         },
         "status": {
           "type": "string",
@@ -165,23 +219,33 @@
             "dev",
             "production"
           ],
-          "description": "Publication status: draft"
+          "description": "Publication status: draft",
+          "x-layer": "project",
+          "x-priority": "33"
         },
         "prompt": {
           "type": "string",
-          "description": "Path to the LLM prompt file"
+          "description": "Path to the LLM prompt file",
+          "x-layer": "project",
+          "x-priority": "37"
         },
         "output": {
           "type": "string",
-          "description": "Output markdown filename"
+          "description": "Output markdown filename",
+          "x-layer": "project",
+          "x-priority": "34"
         },
         "output_dir": {
           "type": "string",
-          "description": "Output directory name for sections mode"
+          "description": "Output directory name for sections mode",
+          "x-layer": "project",
+          "x-priority": "34"
         },
         "json_key": {
           "type": "string",
-          "description": "Key for structured JSON output"
+          "description": "Key for structured JSON output",
+          "x-layer": "project",
+          "x-priority": "38"
         },
         "type": {
           "type": "string",
@@ -193,19 +257,27 @@
             "capture",
             "nb_concept"
           ],
-          "description": "Type of generation: schema_to_md (LLM-generated)"
+          "description": "Type of generation: schema_to_md (LLM-generated)",
+          "x-layer": "project",
+          "x-priority": "30"
         },
         "source": {
           "type": "string",
-          "description": "Source identifier. For schema_to_md: path to JSON schema file (deprecated: use schemas instead). For nb_concept: concept ID (e.g. my-concept or workspace:my-concept for cross-workspace)"
+          "description": "Source identifier. For schema_to_md: path to JSON schema file (deprecated: use schemas instead). For nb_concept: concept ID (e.g. my-concept or workspace:my-concept for cross-workspace)",
+          "x-layer": "project",
+          "x-priority": "35"
         },
         "descriptions": {
           "type": "string",
-          "description": "Path to JSON file with LLM-generated descriptions (for schema_table type)"
+          "description": "Path to JSON file with LLM-generated descriptions (for schema_table type)",
+          "x-layer": "project",
+          "x-priority": "39"
         },
         "binary": {
           "type": "string",
-          "description": "Binary name for capture type"
+          "description": "Binary name for capture type",
+          "x-layer": "project",
+          "x-priority": "36"
         },
         "format": {
           "type": "string",
@@ -215,48 +287,66 @@
             "markdown",
             "json"
           ],
-          "description": "Output format. For capture: styled (default) or plain. For schema_table: markdown (default) or json"
+          "description": "Output format. For capture: styled (default) or plain. For schema_table: markdown (default) or json",
+          "x-layer": "project",
+          "x-priority": "37"
         },
         "depth": {
           "type": "integer",
-          "description": "Recursion depth for capture type (default: 5)"
+          "description": "Recursion depth for capture type (default: 5)",
+          "x-layer": "project",
+          "x-priority": "38"
         },
         "subcommand_order": {
           "items": {
             "type": "string"
           },
           "type": "array",
-          "description": "Priority order for subcommands (rest alphabetical)"
+          "description": "Priority order for subcommands (rest alphabetical)",
+          "x-layer": "project",
+          "x-priority": "39"
         },
         "model": {
           "type": "string",
-          "description": "Per-section model override"
+          "description": "Per-section model override",
+          "x-layer": "project",
+          "x-priority": "25"
         },
         "agg_strip_lines": {
           "type": "integer",
-          "description": "Number of lines to strip from the top during aggregation"
+          "description": "Number of lines to strip from the top during aggregation",
+          "x-layer": "project",
+          "x-priority": "40"
         },
         "temperature": {
           "type": "number",
           "maximum": 1,
           "minimum": 0,
-          "description": "Controls randomness in generation (0.0-1.0)"
+          "description": "Controls randomness in generation (0.0-1.0)",
+          "x-layer": "project",
+          "x-priority": "25"
         },
         "top_p": {
           "type": "number",
           "maximum": 1,
           "minimum": 0,
-          "description": "Nucleus sampling parameter (0.0-1.0)"
+          "description": "Nucleus sampling parameter (0.0-1.0)",
+          "x-layer": "project",
+          "x-priority": "26"
         },
         "top_k": {
           "type": "integer",
           "minimum": 1,
-          "description": "Top-k sampling parameter"
+          "description": "Top-k sampling parameter",
+          "x-layer": "project",
+          "x-priority": "27"
         },
         "max_output_tokens": {
           "type": "integer",
           "minimum": 1,
-          "description": "Maximum length of generated content"
+          "description": "Maximum length of generated content",
+          "x-layer": "project",
+          "x-priority": "28"
         }
       },
       "type": "object",
@@ -271,7 +361,9 @@
       "properties": {
         "model": {
           "type": "string",
-          "description": "LLM model to use for generation"
+          "description": "LLM model to use for generation",
+          "x-layer": "project",
+          "x-priority": "20"
         },
         "output_mode": {
           "type": "string",
@@ -279,14 +371,18 @@
             "package",
             "sections"
           ],
-          "description": "Output mode: package (default) or sections for website content"
+          "description": "Output mode: package (default) or sections for website content",
+          "x-layer": "project",
+          "x-priority": "21"
         },
         "ecosystems": {
           "items": {
             "type": "string"
           },
           "type": "array",
-          "description": "List of ecosystem names to aggregate from"
+          "description": "List of ecosystem names to aggregate from",
+          "x-layer": "ecosystem",
+          "x-priority": "22"
         },
         "regeneration_mode": {
           "type": "string",
@@ -294,49 +390,69 @@
             "scratch",
             "reference"
           ],
-          "description": "Regeneration mode: scratch or reference"
+          "description": "Regeneration mode: scratch or reference",
+          "x-layer": "project",
+          "x-priority": "23"
         },
         "rules_file": {
           "type": "string",
-          "description": "Custom rules file for cx generate"
+          "description": "Custom rules file for cx generate",
+          "x-layer": "project",
+          "x-priority": "24"
         },
         "structured_output_file": {
           "type": "string",
-          "description": "Path for JSON output"
+          "description": "Path for JSON output",
+          "x-layer": "project",
+          "x-priority": "29"
         },
         "system_prompt": {
           "type": "string",
-          "description": "Path to system prompt file or 'default' to use built-in"
+          "description": "Path to system prompt file or 'default' to use built-in",
+          "x-layer": "project",
+          "x-priority": "25"
         },
         "output_dir": {
           "type": "string",
-          "description": "Output directory for generated docs"
+          "description": "Output directory for generated docs",
+          "x-layer": "project",
+          "x-priority": "26"
         },
         "toc_depth": {
           "type": "integer",
-          "description": "Maximum heading level to show in Table of Contents (default: 3)"
+          "description": "Maximum heading level to show in Table of Contents (default: 3)",
+          "x-layer": "project",
+          "x-priority": "27"
         },
         "temperature": {
           "type": "number",
           "maximum": 1,
           "minimum": 0,
-          "description": "Controls randomness in generation (0.0-1.0)"
+          "description": "Controls randomness in generation (0.0-1.0)",
+          "x-layer": "project",
+          "x-priority": "25"
         },
         "top_p": {
           "type": "number",
           "maximum": 1,
           "minimum": 0,
-          "description": "Nucleus sampling parameter (0.0-1.0)"
+          "description": "Nucleus sampling parameter (0.0-1.0)",
+          "x-layer": "project",
+          "x-priority": "26"
         },
         "top_k": {
           "type": "integer",
           "minimum": 1,
-          "description": "Top-k sampling parameter"
+          "description": "Top-k sampling parameter",
+          "x-layer": "project",
+          "x-priority": "27"
         },
         "max_output_tokens": {
           "type": "integer",
           "minimum": 1,
-          "description": "Maximum length of generated content"
+          "description": "Maximum length of generated content",
+          "x-layer": "project",
+          "x-priority": "28"
         }
       },
       "type": "object"
@@ -345,18 +461,24 @@
       "properties": {
         "icon": {
           "type": "string",
-          "description": "Nerd font icon for the category"
+          "description": "Nerd font icon for the category",
+          "x-layer": "ecosystem",
+          "x-priority": "51"
         },
         "flat": {
           "type": "boolean",
-          "description": "If true"
+          "description": "If true",
+          "x-layer": "ecosystem",
+          "x-priority": "52"
         },
         "packages": {
           "items": {
             "type": "string"
           },
           "type": "array",
-          "description": "Order of packages within this category"
+          "description": "Order of packages within this category",
+          "x-layer": "ecosystem",
+          "x-priority": "53"
         }
       },
       "type": "object"
@@ -368,28 +490,36 @@
             "type": "string"
           },
           "type": "array",
-          "description": "Order of categories in sidebar"
+          "description": "Order of categories in sidebar",
+          "x-layer": "ecosystem",
+          "x-priority": "50"
         },
         "categories": {
           "additionalProperties": {
             "$ref": "#/$defs/SidebarCategory"
           },
           "type": "object",
-          "description": "Category configuration (icon"
+          "description": "Category configuration (icon",
+          "x-layer": "ecosystem",
+          "x-priority": "51"
         },
         "packages": {
           "additionalProperties": {
             "$ref": "#/$defs/SidebarPackage"
           },
           "type": "object",
-          "description": "Package configuration (icon"
+          "description": "Package configuration (icon",
+          "x-layer": "ecosystem",
+          "x-priority": "52"
         },
         "package_category_override": {
           "additionalProperties": {
             "type": "string"
           },
           "type": "object",
-          "description": "Remap packages to different categories"
+          "description": "Remap packages to different categories",
+          "x-layer": "ecosystem",
+          "x-priority": "53"
         }
       },
       "type": "object"
@@ -398,11 +528,15 @@
       "properties": {
         "icon": {
           "type": "string",
-          "description": "Nerd font icon for the package"
+          "description": "Nerd font icon for the package",
+          "x-layer": "ecosystem",
+          "x-priority": "52"
         },
         "color": {
           "type": "string",
-          "description": "Color name (green"
+          "description": "Color name (green",
+          "x-layer": "ecosystem",
+          "x-priority": "53"
         },
         "status": {
           "type": "string",
@@ -411,7 +545,9 @@
             "dev",
             "production"
           ],
-          "description": "Publication status: draft"
+          "description": "Publication status: draft",
+          "x-layer": "ecosystem",
+          "x-priority": "54"
         }
       },
       "type": "object"
@@ -420,45 +556,63 @@
   "properties": {
     "enabled": {
       "type": "boolean",
-      "description": "Whether documentation generation is enabled for this package"
+      "description": "Whether documentation generation is enabled for this package",
+      "x-layer": "project",
+      "x-priority": "10"
     },
     "title": {
       "type": "string",
-      "description": "Title of the package documentation"
+      "description": "Title of the package documentation",
+      "x-layer": "project",
+      "x-priority": "11"
     },
     "description": {
       "type": "string",
-      "description": "Brief description of the package"
+      "description": "Brief description of the package",
+      "x-layer": "project",
+      "x-priority": "12"
     },
     "category": {
       "type": "string",
-      "description": "Category for grouping in documentation sidebar"
+      "description": "Category for grouping in documentation sidebar",
+      "x-layer": "project",
+      "x-priority": "15"
     },
     "settings": {
       "$ref": "#/$defs/SettingsConfig",
-      "description": "Generator-wide settings"
+      "description": "Generator-wide settings",
+      "x-layer": "project",
+      "x-priority": "20"
     },
     "sections": {
       "items": {
         "$ref": "#/$defs/SectionConfig"
       },
       "type": "array",
-      "description": "List of documentation sections to generate"
+      "description": "List of documentation sections to generate",
+      "x-layer": "project",
+      "x-priority": "30"
     },
     "readme": {
       "$ref": "#/$defs/ReadmeConfig",
-      "description": "README synchronization configuration"
+      "description": "README synchronization configuration",
+      "x-layer": "project",
+      "x-priority": "40"
     },
     "sidebar": {
       "$ref": "#/$defs/SidebarConfig",
-      "description": "Website sidebar configuration"
+      "description": "Website sidebar configuration",
+      "x-layer": "ecosystem",
+      "x-priority": "50"
     },
     "logos": {
       "items": {
         "type": "string"
       },
       "type": "array",
-      "description": "Additional logo files to copy during aggregation (absolute paths with ~ expansion)"
+      "description": "Additional logo files to copy during aggregation (absolute paths with ~ expansion)",
+      "x-layer": "project",
+      "x-priority": "45"
     }
   },
   "type": "object",
