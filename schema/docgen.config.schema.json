@@ -253,6 +253,7 @@
             "schema_to_md",
             "schema_table",
             "schema_describe",
+            "schema_examples",
             "doc_sections",
             "capture",
             "nb_concept"
@@ -270,6 +271,22 @@
         "descriptions": {
           "type": "string",
           "description": "Path to JSON file with LLM-generated descriptions (for schema_table type)",
+          "x-layer": "project",
+          "x-priority": "39"
+        },
+        "examples": {
+          "type": "string",
+          "description": "Path to JSON file with LLM-generated examples (for schema_table type with format: json)",
+          "x-layer": "project",
+          "x-priority": "39"
+        },
+        "examples_format": {
+          "type": "string",
+          "enum": [
+            "toml",
+            "yaml"
+          ],
+          "description": "Format of examples: toml (default) or yaml",
           "x-layer": "project",
           "x-priority": "39"
         },
@@ -311,6 +328,12 @@
           "description": "Per-section model override",
           "x-layer": "project",
           "x-priority": "25"
+        },
+        "rules_file": {
+          "type": "string",
+          "description": "Path to a cx rules file for gathering context (for schema_describe and schema_examples types)",
+          "x-layer": "project",
+          "x-priority": "26"
         },
         "agg_strip_lines": {
           "type": "integer",

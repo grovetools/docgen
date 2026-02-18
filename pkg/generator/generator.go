@@ -258,6 +258,12 @@ func (g *Generator) generateInPlace(packageDir string, opts GenerateOptions) err
 			}
 			continue
 		}
+		if section.Type == "schema_examples" {
+			if err := g.generateSchemaExamples(packageDir, section, cfg, outputBaseDir); err != nil {
+				g.logger.WithError(err).Errorf("Schema examples generation failed for section '%s'", section.Name)
+			}
+			continue
+		}
 		if section.Type == "doc_sections" {
 			if err := g.generateFromDocSections(packageDir, section, cfg, outputBaseDir); err != nil {
 				g.logger.WithError(err).Errorf("Doc sections generation failed for section '%s'", section.Name)
@@ -361,6 +367,57 @@ At the END of each property's description, append HTML badges based on the schem
 Example description with badges:
 "(object, optional) Settings for embedded Neovim. <span class="schema-badge schema-badge-alpha">ALPHA</span> <span class="schema-status-msg">Experimental feature</span>"
 ---
+`
+
+const SchemaExamplesSystemPromptTOML = `You are generating example TOML configurations for the documented tool.
+
+**Input Context:**
+- Source code/documentation to understand usage patterns.
+- List of configuration properties with types.
+
+**Output Format:**
+Return a JSON object where keys are property paths and values are objects containing an 'example' (TOML snippet) and a 'description'.
+
+JSON Output Structure:
+{
+  "property.path": {
+    "example": "key = \"value\"",
+    "description": "Brief explanation of the example."
+  }
+}
+
+**Guidelines:**
+- Use realistic values (not "foo", "bar").
+- Use proper TOML syntax (handle nested tables [table] vs inline dictionaries {}).
+- Provide comments in the TOML snippet if helpful.
+- For lists, show multiple items.
+- Focus on common use cases.
+`
+
+const SchemaExamplesSystemPromptYAML = `You are generating example YAML configurations for markdown frontmatter.
+
+**Input Context:**
+- Source code/documentation to understand usage patterns.
+- List of configuration properties with types.
+
+**Output Format:**
+Return a JSON object where keys are property paths and values are objects containing an 'example' (YAML frontmatter snippet) and a 'description'.
+
+JSON Output Structure:
+{
+  "property.path": {
+    "example": "key: value",
+    "description": "Brief explanation of the example."
+  }
+}
+
+**Guidelines:**
+- Use realistic values (not "foo", "bar").
+- Use proper YAML syntax for frontmatter (key: value format).
+- For lists, use YAML array syntax (- item or [item1, item2]).
+- For nested objects, use proper indentation.
+- Do NOT include the --- fences, just the YAML content.
+- Focus on common use cases.
 `
 
 const DocSectionsSystemPrompt = `You are creating a configuration reference document with multiple sections.
@@ -844,12 +901,25 @@ func (g *Generator) generateFromSchemaTableJSON(packageDir string, section confi
 		// Use the package directory name (workspace name) as the package identifier
 		packageName := filepath.Base(packageDir)
 
+		// Build the config-reference JSON
+		configRefJSON := fmt.Sprintf(`{"src": "/data/%s/%s"`, packageName, jsonOutput)
+		if section.Examples != "" {
+			// Extract just the filename from the examples path
+			examplesFile := filepath.Base(section.Examples)
+			configRefJSON += fmt.Sprintf(`, "examplesSrc": "/data/%s/%s"`, packageName, examplesFile)
+			// Include format if specified (default is toml)
+			if section.ExamplesFormat != "" {
+				configRefJSON += fmt.Sprintf(`, "examplesFormat": "%s"`, section.ExamplesFormat)
+			}
+		}
+		configRefJSON += "}"
+
 		mdContent := fmt.Sprintf(`# %s
 
 `+"```config-reference"+`
-{"src": "/data/%s/%s"}
+%s
 `+"```"+`
-`, section.Title, packageName, jsonOutput)
+`, section.Title, configRefJSON)
 
 		mdPath := filepath.Join(outputBaseDir, mdOutput)
 		if err := os.WriteFile(mdPath, []byte(mdContent), 0644); err != nil {
@@ -1025,6 +1095,14 @@ func (g *Generator) generateSchemaDescriptions(packageDir string, section config
 
 	// Build prompt for LLM
 	var promptBuilder strings.Builder
+
+	// Setup rules file if specified (grove llm will handle context injection)
+	if section.RulesFile != "" {
+		if err := g.setupRulesFile(packageDir, section.RulesFile); err != nil {
+			g.logger.WithError(err).Warnf("Failed to setup rules file %s", section.RulesFile)
+		}
+	}
+
 	promptBuilder.WriteString(`Generate detailed, helpful descriptions for each configuration property below.
 Output JSON with property paths as keys and description strings as values.
 Each description should:
@@ -1050,7 +1128,7 @@ Output format (JSON only, no markdown fences):
 		model = cfg.Settings.Model
 	}
 	if model == "" {
-		model = "gemini-2.0-flash"
+		model = "gemini-3-pro-preview"
 	}
 
 	genConfig := config.MergeGenerationConfig(cfg.Settings.GenerationConfig, section.GenerationConfig)
@@ -1088,6 +1166,122 @@ Output format (JSON only, no markdown fences):
 	}
 
 	g.logger.Infof("Successfully wrote %d descriptions to %s", len(descriptions), outputPath)
+	return nil
+}
+
+// generateSchemaExamples generates realistic TOML/YAML examples for schema properties.
+func (g *Generator) generateSchemaExamples(packageDir string, section config.SectionConfig, cfg *config.DocgenConfig, outputBaseDir string) error {
+	g.logger.Infof("Generating schema examples: %s", section.Name)
+
+	// Normalize inputs
+	var inputs []config.SchemaInput
+	if len(section.Schemas) > 0 {
+		inputs = section.Schemas
+	} else if section.Source != "" {
+		inputs = []config.SchemaInput{{Path: section.Source}}
+	} else {
+		return fmt.Errorf("section type 'schema_examples' requires 'schemas' list or 'source' file")
+	}
+
+	// Collect all properties
+	var allProps []schema.Property
+	for _, input := range inputs {
+		if input.Path == "" {
+			continue
+		}
+		schemaPath := filepath.Join(packageDir, input.Path)
+		p, err := schema.NewParser(schemaPath)
+		if err != nil {
+			return fmt.Errorf("failed to parse schema %s: %w", input.Path, err)
+		}
+		props, err := p.Parse()
+		if err != nil {
+			return fmt.Errorf("failed to parse schema %s: %w", input.Path, err)
+		}
+		allProps = append(allProps, props...)
+	}
+
+	// Build Prompt
+	var promptBuilder strings.Builder
+
+	// Setup rules file if specified (grove llm will handle context injection)
+	if section.RulesFile != "" {
+		if err := g.setupRulesFile(packageDir, section.RulesFile); err != nil {
+			g.logger.WithError(err).Warnf("Failed to setup rules file %s", section.RulesFile)
+		}
+	}
+
+	// Select prompt based on format (default: toml)
+	exampleFormat := section.Format
+	if exampleFormat == "" {
+		exampleFormat = "toml"
+	}
+	if exampleFormat == "yaml" {
+		promptBuilder.WriteString(SchemaExamplesSystemPromptYAML)
+	} else {
+		promptBuilder.WriteString(SchemaExamplesSystemPromptTOML)
+	}
+	promptBuilder.WriteString("\n\n## Properties to Generate Examples For\n")
+	g.collectPropertyPaths(&promptBuilder, allProps, "")
+
+	promptBuilder.WriteString(`
+Output format (JSON only, no markdown fences):
+{
+  "property.path": {
+    "example": "...",
+    "description": "..."
+  }
+}
+`)
+
+	// Call LLM
+	model := section.Model
+	if model == "" {
+		model = cfg.Settings.Model
+	}
+	if model == "" {
+		model = "gemini-3-pro-preview"
+	}
+
+	genConfig := config.MergeGenerationConfig(cfg.Settings.GenerationConfig, section.GenerationConfig)
+	response, err := g.CallLLM(promptBuilder.String(), model, genConfig, packageDir)
+	if err != nil {
+		return fmt.Errorf("LLM generation failed: %w", err)
+	}
+
+	// Parse Response (Expects JSON map[string]struct{Example, Description})
+	type ExampleEntry struct {
+		Example     string `json:"example"`
+		Description string `json:"description"`
+	}
+	var examples map[string]ExampleEntry
+
+	cleanResponse := strings.TrimSpace(response)
+	cleanResponse = strings.TrimPrefix(cleanResponse, "```json")
+	cleanResponse = strings.TrimPrefix(cleanResponse, "```")
+	cleanResponse = strings.TrimSuffix(cleanResponse, "```")
+	cleanResponse = strings.TrimSpace(cleanResponse)
+
+	if err := json.Unmarshal([]byte(cleanResponse), &examples); err != nil {
+		return fmt.Errorf("failed to parse LLM response as JSON: %w", err)
+	}
+
+	// Write Output
+	outputPath := filepath.Join(outputBaseDir, section.Output)
+	if err := os.MkdirAll(filepath.Dir(outputPath), 0755); err != nil {
+		return fmt.Errorf("failed to create output directory: %w", err)
+	}
+
+	jsonBytes, err := json.MarshalIndent(examples, "", "  ")
+	if err != nil {
+		return fmt.Errorf("failed to marshal examples: %w", err)
+	}
+
+	if err := os.WriteFile(outputPath, jsonBytes, 0644); err != nil {
+		return fmt.Errorf("failed to write examples file: %w", err)
+	}
+
+	g.logger.Infof("Successfully wrote %d examples to %s", len(examples), outputPath)
 	return nil
 }
 
@@ -1177,6 +1371,67 @@ func (g *Generator) generateFromCapture(packageDir string, section config.Sectio
 	return nil
 }
 
+// generateContextFromRules runs 'cx generate' with a specific rules file and returns the content.
+func (g *Generator) generateContextFromRules(packageDir, rulesFile string) (string, error) {
+	// Resolve rules file path
+	var rulesPath string
+	if filepath.IsAbs(rulesFile) {
+		rulesPath = rulesFile
+	} else {
+		rulesPath = filepath.Join(packageDir, rulesFile)
+	}
+
+	if _, err := os.Stat(rulesPath); err != nil {
+		return "", fmt.Errorf("rules file not found: %s", rulesPath)
+	}
+
+	// We need to temporarily overwrite .grove/rules, run cx generate, then restore.
+	groveDir := filepath.Join(packageDir, ".grove")
+	if err := os.MkdirAll(groveDir, 0755); err != nil {
+		return "", err
+	}
+
+	destRules := filepath.Join(groveDir, "rules")
+
+	// Backup existing rules
+	var backupRules []byte
+	if content, err := os.ReadFile(destRules); err == nil {
+		backupRules = content
+	}
+
+	// Copy new rules
+	newRules, err := os.ReadFile(rulesPath)
+	if err != nil {
+		return "", err
+	}
+	if err := os.WriteFile(destRules, newRules, 0644); err != nil {
+		return "", err
+	}
+
+	// Restore rules defer
+	defer func() {
+		if backupRules != nil {
+			os.WriteFile(destRules, backupRules, 0644)
+		} else {
+			os.Remove(destRules)
+		}
+	}()
+
+	// Run cx generate
+	if err := g.BuildContext(packageDir); err != nil {
+		return "", err
+	}
+
+	// Read context file
+	contextPath := filepath.Join(groveDir, "context")
+	content, err := os.ReadFile(contextPath)
+	if err != nil {
+		return "", err
+	}
+
+	return string(content), nil
+}
+
 func (g *Generator) setupRulesFile(packageDir, rulesFile string) error {
 	// Read the specified rules file
 	// If the rules file path starts with .cx/ or is an absolute path, use it directly
@@ -1223,9 +1478,9 @@ func (g *Generator) BuildContext(packageDir string) error {
 
 // CallLLM makes an LLM request with the given prompt and configuration
 func (g *Generator) CallLLM(promptContent, model string, genConfig config.GenerationConfig, workDir string) (string, error) {
-	// Use provided model or default to gemini-2.0-flash
+	// Use provided model or default to gemini-3-pro-preview
 	if model == "" {
-		model = "gemini-2.0-flash"
+		model = "gemini-3-pro-preview"
 	}
 
 	// Create a temporary file for the prompt
@@ -1248,6 +1503,7 @@ func (g *Generator) CallLLM(promptContent, model string, genConfig config.Genera
 		"request",
 		"--file", promptFile.Name(),
 		"--model", model,
+		"--regenerate", // Ensure context is regenerated with current rules
 		"--yes",
 	}
 
@@ -1481,6 +1737,12 @@ func (g *Generator) generateSectionsMode(packageDir, configPath string, topCfg *
 		if ss.section.Type == "schema_describe" {
 			if err := g.generateSchemaDescriptions(packageDir, ss.section, ss.subCfg, outputDir); err != nil {
 				g.logger.WithError(err).Errorf("Schema descriptions generation failed for section '%s'", ss.section.Name)
+			}
+			continue
+		}
+		if ss.section.Type == "schema_examples" {
+			if err := g.generateSchemaExamples(packageDir, ss.section, ss.subCfg, outputDir); err != nil {
+				g.logger.WithError(err).Errorf("Schema examples generation failed for section '%s'", ss.section.Name)
 			}
 			continue
 		}
