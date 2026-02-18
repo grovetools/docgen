@@ -1221,6 +1221,12 @@ func (g *Generator) generateSchemaExamples(packageDir string, section config.Sec
 	} else {
 		promptBuilder.WriteString(SchemaExamplesSystemPromptTOML)
 	}
+
+	// Add TOML section header instruction if specified
+	if section.TomlSection != "" && exampleFormat != "yaml" {
+		promptBuilder.WriteString(fmt.Sprintf("\n\n**IMPORTANT:** All TOML examples MUST start with the section header `[%s]` on its own line, followed by the property. For example:\n```\n[%s]\nproperty = value\n```\n", section.TomlSection, section.TomlSection))
+	}
+
 	promptBuilder.WriteString("\n\n## Properties to Generate Examples For\n")
 	g.collectPropertyPaths(&promptBuilder, allProps, "")
 

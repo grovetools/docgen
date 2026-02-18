@@ -290,6 +290,12 @@
           "x-layer": "project",
           "x-priority": "39"
         },
+        "toml_section": {
+          "type": "string",
+          "description": "TOML section name to wrap examples in (e.g. 'nav' produces [nav] header). For schema_examples type with format: toml",
+          "x-layer": "project",
+          "x-priority": "39"
+        },
         "binary": {
           "type": "string",
           "description": "Binary name for capture type",
