@@ -1,3 +1,38 @@
+## v0.6.2 (2026-02-19)
+
+This release introduces a comprehensive suite of tools for generating high-quality schema documentation. A new `schema_table` section type (e5ea0e4) provides deterministic markdown table generation with support for nested properties and custom `x-*` extensions. This is complemented by `schema_describe` (0c9ef77), which leverages LLMs to generate rich descriptions stored in JSON sidecars, and `schema_examples` (5ca3012), which generates realistic TOML or YAML snippets. Additionally, the system now supports structured JSON output for website integration (abebfa6) and enhanced integration with `doc_sections` (7be0fd4).
+
+### Features
+
+* Support schema_table JSON in doc_sections (7be0fd4)
+* Add toml_section config for schema_examples (f1f5adb)
+* Add schema_examples section type for generating TOML/YAML examples (5ca3012)
+* Add x-layer and x-priority to docgen config schema (0d5ecd0)
+* Add JSON output format for schema_table and nested property extraction (abebfa6)
+* Add schema_describe section type and descriptions support (0c9ef77)
+* Add schema_table section type with x-* extension support (e5ea0e4)
+
+### Code Refactoring
+
+* Rename x-wizard to x-important (d6a92e8)
+
+### File Changes
+
+```
+ docs/05-cli-reference.md         | 430 ++++++++++++++++++
+ docs/06-configuration.json       | 608 +++++++++++++++++++++++++
+ docs/06-configuration.md         | 156 +------
+ docs/docgen.descriptions.json    |  83 ++++
+ docs/docgen.examples.json        | 154 +++++++
+ pkg/aggregator/aggregator.go     |  24 +-
+ pkg/config/config.go             | 149 +++---
+ pkg/docs/docs.json               |  17 +
+ pkg/generator/generator.go       | 945 +++++++++++++++++++++++++++++++++++++--
+ pkg/schema/parser.go             | 324 +++++++++++---
+ schema/docgen.config.schema.json | 345 ++++++++++----
+ 11 files changed, 2848 insertions(+), 387 deletions(-)
+```
+
 ## v0.6.1 (2026-02-10)
 
 A new configuration option has been introduced to control the depth of the Table of Contents (TOC) in generated documentation (2c62862). This feature involves updates to the aggregator, configuration handling, manifest generation, and the validation schema.
