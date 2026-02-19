@@ -1,0 +1,154 @@
+{
+  "category": {
+    "example": "category: \"Development Tools\"",
+    "description": "Groups this package under 'Development Tools' in the documentation sidebar."
+  },
+  "description": {
+    "example": "description: \"A CLI tool for managing cloud resources.\"",
+    "description": "Provides a brief description of the package."
+  },
+  "enabled": {
+    "example": "enabled: true",
+    "description": "Enables documentation generation for this package."
+  },
+  "logos": {
+    "example": "logos:\n  - \"~/assets/logo-dark.svg\"\n  - \"~/assets/logo-light.svg\"",
+    "description": "Specifies additional logo files to include in the build output."
+  },
+  "readme": {
+    "example": "readme:\n  template: \"README.md.tpl\"\n  output: \"README.md\"\n  source_section: \"introduction\"",
+    "description": "Configures how the project's README.md is synchronized with documentation."
+  },
+  "readme.base_url": {
+    "example": "base_url: \"https://github.com/org/repo/blob/main/\"",
+    "description": "Base URL used to convert relative paths to absolute URLs in the README."
+  },
+  "readme.generate_toc": {
+    "example": "generate_toc: true",
+    "description": "Automatically generates a table of contents in the README."
+  },
+  "readme.logo": {
+    "example": "logo:\n  input: \"logo.svg\"\n  text: \"grove docgen\"\n  output: \"logo-with-text.svg\"",
+    "description": "Configures automatic generation of a logo-with-text asset."
+  },
+  "readme.output": {
+    "example": "output: \"README.md\"",
+    "description": "Path where the generated README file will be written."
+  },
+  "readme.source_section": {
+    "example": "source_section: \"introduction\"",
+    "description": "Specifies which documentation section to inject into the README template."
+  },
+  "readme.strip_lines": {
+    "example": "strip_lines: 2",
+    "description": "Removes the first 2 lines (often the title) from the source section before injection."
+  },
+  "readme.template": {
+    "example": "template: \"README.md.tpl\"",
+    "description": "Path to the template file used to generate the README."
+  },
+  "sections": {
+    "example": "sections:\n  - name: \"introduction\"\n    title: \"Introduction\"\n    output: \"01-intro.md\"\n    prompt: \"intro.md\"",
+    "description": "Defines the individual documentation sections to generate."
+  },
+  "sections.binary": {
+    "example": "binary: \"grove\"",
+    "description": "Name of the binary to execute for 'capture' type generation."
+  },
+  "sections.descriptions": {
+    "example": "descriptions: \"docs/descriptions.json\"",
+    "description": "Path to a JSON file containing pre-generated descriptions for schema tables."
+  },
+  "sections.name": {
+    "example": "name: \"configuration\"",
+    "description": "Unique identifier for the section."
+  },
+  "sections.output": {
+    "example": "output: \"02-configuration.md\"",
+    "description": "Filename for the generated markdown output."
+  },
+  "sections.prompt": {
+    "example": "prompt: \"config_prompt.md\"",
+    "description": "Path to the prompt file used to instruct the LLM for this section."
+  },
+  "sections.schemas": {
+    "example": "schemas:\n  - path: \"core/config.json\"\n    title: \"Core Settings\"\n  - path: \"plugin/config.json\"\n    title: \"Plugin Settings\"",
+    "description": "Lists multiple schemas to aggregate into a single documentation page."
+  },
+  "sections.source": {
+    "example": "source: \"config/schema.json\"",
+    "description": "Path to the source file (schema) or concept ID for generation."
+  },
+  "sections.subcommand_order": {
+    "example": "subcommand_order:\n  - \"init\"\n  - \"build\"\n  - \"deploy\"",
+    "description": "Defines the display order of subcommands in the captured CLI reference."
+  },
+  "sections.title": {
+    "example": "title: \"Configuration Reference\"",
+    "description": "Title used in headers and navigation."
+  },
+  "sections.type": {
+    "example": "type: \"schema_to_md\"",
+    "description": "Specifies the generation strategy (e.g., schema_to_md, capture, doc_sections)."
+  },
+  "settings": {
+    "example": "settings:\n  model: \"gemini-1.5-pro-latest\"\n  output_mode: \"package\"\n  regeneration_mode: \"reference\"",
+    "description": "Configures global settings for the documentation generator."
+  },
+  "settings.ecosystems": {
+    "example": "ecosystems:\n  - \"grove-core\"\n  - \"grove-tools\"",
+    "description": "Lists the ecosystems to aggregate documentation from."
+  },
+  "settings.model": {
+    "example": "model: \"gemini-1.5-pro-latest\"",
+    "description": "Specifies the LLM model to use for generating documentation."
+  },
+  "settings.output_dir": {
+    "example": "output_dir: \"docs\"",
+    "description": "Sets the directory where generated markdown files will be saved."
+  },
+  "settings.output_mode": {
+    "example": "output_mode: \"package\"",
+    "description": "Sets the output mode to 'package' (standard) or 'sections' (website content)."
+  },
+  "settings.regeneration_mode": {
+    "example": "regeneration_mode: \"reference\"",
+    "description": "Uses existing files as a reference when regenerating documentation."
+  },
+  "settings.rules_file": {
+    "example": "rules_file: \"docs/context.rules\"",
+    "description": "Points to a custom .gitignore-style rules file for gathering context."
+  },
+  "settings.structured_output_file": {
+    "example": "structured_output_file: \"docs/data.json\"",
+    "description": "Outputs parsed documentation to a JSON file for programmatic use."
+  },
+  "settings.system_prompt": {
+    "example": "system_prompt: \"docs/prompts/system.md\"",
+    "description": "Specifies a custom system prompt file to guide the LLM's style."
+  },
+  "settings.temperature": {
+    "example": "temperature: 0.7",
+    "description": "Sets the randomness of the LLM generation (0.0 to 1.0)."
+  },
+  "settings.toc_depth": {
+    "example": "toc_depth: 3",
+    "description": "Limits the table of contents to 3 levels deep."
+  },
+  "sidebar": {
+    "example": "sidebar:\n  category_order:\n    - \"Getting Started\"\n    - \"Core Concepts\"\n    - \"Reference\"",
+    "description": "Configures the website sidebar structure and ordering."
+  },
+  "sidebar.categories": {
+    "example": "categories:\n  \"Core Concepts\":\n    icon: \"mdi:book-open-variant\"\n    flat: false",
+    "description": "Customizes icons and layout for sidebar categories."
+  },
+  "sidebar.packages": {
+    "example": "packages:\n  \"my-package\":\n    icon: \"mdi:package-variant\"\n    color: \"blue\"\n    status: \"beta\"",
+    "description": "Customizes icons, colors, and status badges for packages in the sidebar."
+  },
+  "title": {
+    "example": "title: \"My Awesome Tool\"",
+    "description": "Sets the title of the package documentation."
+  }
+}

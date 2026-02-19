@@ -1,0 +1,608 @@
+{
+  "title": "Configuration",
+  "properties": [
+    {
+      "name": "category",
+      "path": "category",
+      "type": "string",
+      "description": "Defines the group label under which this package will appear in the documentation sidebar. Use this to organize related packages (e.g., \"Core Tools\", \"Integrations\") together in the generated website.",
+      "required": true,
+      "layer": "project"
+    },
+    {
+      "name": "description",
+      "path": "description",
+      "type": "string",
+      "description": "A brief summary of the package's purpose. This text is displayed in package listings, search results, and the website's navigation menus.",
+      "required": true,
+      "layer": "project"
+    },
+    {
+      "name": "enabled",
+      "path": "enabled",
+      "type": "boolean",
+      "description": "Controls whether documentation generation and aggregation is active for this package. Set to `false` to temporarily exclude a package from the build process without deleting its configuration.",
+      "required": true,
+      "layer": "project"
+    },
+    {
+      "name": "logos",
+      "path": "logos",
+      "type": "array",
+      "description": "A list of additional logo file paths (absolute or relative with `~` expansion) to copy to the output directory during aggregation. Use this to ensure assets referenced in your documentation or READMEs are available in the website build.",
+      "layer": "project"
+    },
+    {
+      "name": "readme",
+      "path": "readme",
+      "type": "object",
+      "description": "Configuration for automatically synchronizing the project's README.md with generated documentation. This ensures your source repository's README stays up-to-date with your formal documentation.",
+      "layer": "project",
+      "children": [
+        {
+          "name": "base_url",
+          "path": "readme.base_url",
+          "type": "string",
+          "description": "The absolute base URL used to rewrite root-relative paths (starting with `/`) in the generated README. Essential for ensuring links and image references work correctly when rendered on platforms like GitHub.",
+          "layer": "project"
+        },
+        {
+          "name": "generate_toc",
+          "path": "readme.generate_toc",
+          "type": "boolean",
+          "description": "If true, generates and injects a Table of Contents into the README at the `\u003c!-- DOCGEN:TOC:START --\u003e` marker. Useful for long READMEs to improve navigation.",
+          "layer": "project"
+        },
+        {
+          "name": "logo",
+          "path": "readme.logo",
+          "type": "object",
+          "description": "Configuration settings for generating a combined logo-plus-text SVG header for the README. This allows you to create consistent branding assets directly from your documentation build.",
+          "layer": "project",
+          "children": [
+            {
+              "name": "color",
+              "path": "readme.logo.color",
+              "type": "string",
+              "description": "The hex color code for the text in the generated logo. If omitted, the generator attempts to auto-detect a dominant color from the input SVG.",
+              "layer": "project"
+            },
+            {
+              "name": "font",
+              "path": "readme.logo.font",
+              "type": "string",
+              "description": "Path to the TrueType (TTF) or OpenType (OTF) font file used to render the text. This is required to convert text to SVG paths, ensuring consistent rendering without client-side font dependencies.",
+              "required": true,
+              "layer": "project"
+            },
+            {
+              "name": "input",
+              "path": "readme.logo.input",
+              "type": "string",
+              "description": "Path to the source logo SVG file. Can be an absolute path or relative to the package root.",
+              "required": true,
+              "layer": "project"
+            },
+            {
+              "name": "output",
+              "path": "readme.logo.output",
+              "type": "string",
+              "description": "The destination path for the generated combined logo SVG. Typically saved within the `docs/images` directory.",
+              "required": true,
+              "layer": "project"
+            },
+            {
+              "name": "spacing",
+              "path": "readme.logo.spacing",
+              "type": "number",
+              "description": "The vertical space (in pixels) between the logo icon and the text below it. Adjust this to fine-tune the visual balance of the generated header.",
+              "layer": "project"
+            },
+            {
+              "name": "text",
+              "path": "readme.logo.text",
+              "type": "string",
+              "description": "The text string to display below the logo icon, usually the project or tool name.",
+              "required": true,
+              "layer": "project"
+            },
+            {
+              "name": "text_scale",
+              "path": "readme.logo.text_scale",
+              "type": "number",
+              "description": "A multiplier to adjust the width of the text relative to the logo width. Defaults to 1.1; adjust if the text appears too wide or too narrow compared to the icon.",
+              "layer": "project"
+            },
+            {
+              "name": "width",
+              "path": "readme.logo.width",
+              "type": "number",
+              "description": "The final width (in pixels) of the generated SVG. The height is calculated automatically to maintain the aspect ratio.",
+              "layer": "project"
+            }
+          ]
+        },
+        {
+          "name": "output",
+          "path": "readme.output",
+          "type": "string",
+          "description": "The file path where the synchronized README content will be written, typically `README.md` at the project root.",
+          "required": true,
+          "layer": "project"
+        },
+        {
+          "name": "source_section",
+          "path": "readme.source_section",
+          "type": "string",
+          "description": "The `name` of the documentation section defined in `sections` to use as the main body of the README. This allows you to write your overview once and publish it to both the website and the repository root.",
+          "required": true,
+          "layer": "project"
+        },
+        {
+          "name": "strip_lines",
+          "path": "readme.strip_lines",
+          "type": "integer",
+          "description": "The number of lines to remove from the beginning of the source section before injecting it into the template. Useful for removing titles or frontmatter that are already handled by the README template.",
+          "layer": "project"
+        },
+        {
+          "name": "template",
+          "path": "readme.template",
+          "type": "string",
+          "description": "Path to the Markdown template file (e.g., `docs/README.md.tpl`) containing static content and injection markers (e.g., `\u003c!-- DOCGEN:OVERVIEW:START --\u003e`).",
+          "required": true,
+          "layer": "project"
+        }
+      ]
+    },
+    {
+      "name": "sections",
+      "path": "sections",
+      "type": "array",
+      "description": "A list of distinct documentation units to generate. Each section represents a specific file or output (e.g., an overview, a CLI reference, or a configuration guide).",
+      "required": true,
+      "layer": "project",
+      "children": [
+        {
+          "name": "agg_strip_lines",
+          "path": "sections.agg_strip_lines",
+          "type": "integer",
+          "description": "The number of lines to strip from the top of the generated markdown file during the aggregation phase (website build). Useful for removing H1 titles that conflict with website layouts.",
+          "layer": "project"
+        },
+        {
+          "name": "binary",
+          "path": "sections.binary",
+          "type": "string",
+          "description": "For `capture` type sections, specifies the name or path of the binary executable to run (e.g., `grove`). The tool must be available in the system PATH.",
+          "layer": "project"
+        },
+        {
+          "name": "depth",
+          "path": "sections.depth",
+          "type": "integer",
+          "description": "For `capture` type sections, limits the recursion depth when traversing CLI subcommands. Defaults to 5.",
+          "layer": "project"
+        },
+        {
+          "name": "descriptions",
+          "path": "sections.descriptions",
+          "type": "string",
+          "description": "Path to a JSON file containing LLM-generated property descriptions. Used by `schema_table` sections to populate the description column with richer content than the raw schema provides.",
+          "layer": "project"
+        },
+        {
+          "name": "doc_sources",
+          "path": "sections.doc_sources",
+          "type": "array",
+          "description": "For `doc_sections` type, defines a list of source references to aggregate. Each source points to a specific package and document to pull content from.",
+          "layer": "project",
+          "children": [
+            {
+              "name": "description",
+              "path": "sections.doc_sources.description",
+              "type": "string",
+              "description": "A contextual description of what this specific configuration source represents. Used to generate introductory text for the aggregated section.",
+              "layer": "project"
+            },
+            {
+              "name": "doc",
+              "path": "sections.doc_sources.doc",
+              "type": "string",
+              "description": "The filename of the documentation within the target package to read. If omitted, the tool attempts to auto-discover the main schema documentation.",
+              "layer": "project"
+            },
+            {
+              "name": "package",
+              "path": "sections.doc_sources.package",
+              "type": "string",
+              "description": "The name of the package containing the source documentation. This package must exist within one of the configured ecosystems.",
+              "required": true,
+              "layer": "project"
+            },
+            {
+              "name": "properties",
+              "path": "sections.doc_sources.properties",
+              "type": "array",
+              "description": "A list of specific property paths (in dot notation) to include in the generated documentation. Allows for selective documentation of configuration subsets.",
+              "layer": "project"
+            },
+            {
+              "name": "title",
+              "path": "sections.doc_sources.title",
+              "type": "string",
+              "description": "The H2 heading title to use for this source's content in the generated output.",
+              "layer": "project"
+            }
+          ]
+        },
+        {
+          "name": "examples",
+          "path": "sections.examples",
+          "type": "string",
+          "description": "Path to a JSON file containing LLM-generated usage examples. Used by `schema_table` sections (json format) to enrich the structured data output.",
+          "layer": "project"
+        },
+        {
+          "name": "examples_format",
+          "path": "sections.examples_format",
+          "type": "string",
+          "description": "Specifies the format of the examples in the output. Options are `toml` (default) or `yaml`.",
+          "layer": "project"
+        },
+        {
+          "name": "format",
+          "path": "sections.format",
+          "type": "string",
+          "description": "Controls the output format for specific section types. For `capture`, `styled` includes HTML colors while `plain` is markdown code blocks. For `schema_table`, `json` outputs structured data instead of a markdown table.",
+          "layer": "project"
+        },
+        {
+          "name": "json_key",
+          "path": "sections.json_key",
+          "type": "string",
+          "description": "Overrides the key used for this section in the `structured_output_file`. If not set, the section `name` is used.",
+          "layer": "project"
+        },
+        {
+          "name": "max_output_tokens",
+          "path": "sections.max_output_tokens",
+          "type": "integer",
+          "description": "Limits the length of the LLM's response for this specific section. Increase this for long, detailed documentation tasks.",
+          "layer": "project"
+        },
+        {
+          "name": "model",
+          "path": "sections.model",
+          "type": "string",
+          "description": "Overrides the global LLM model setting for this specific section. Useful for using a more capable model for complex sections like schema analysis.",
+          "layer": "project"
+        },
+        {
+          "name": "name",
+          "path": "sections.name",
+          "type": "string",
+          "description": "A unique identifier for the section. Used for internal referencing and as the default key in structured JSON output.",
+          "required": true,
+          "layer": "project"
+        },
+        {
+          "name": "order",
+          "path": "sections.order",
+          "type": "integer",
+          "description": "A numeric value determining the sequence of this section relative to others in the final output or navigation.",
+          "required": true,
+          "layer": "project"
+        },
+        {
+          "name": "output",
+          "path": "sections.output",
+          "type": "string",
+          "description": "The filename for the generated output (e.g., `01-overview.md`). Relative to the `docs` directory or the section's `output_dir`.",
+          "required": true,
+          "layer": "project"
+        },
+        {
+          "name": "output_dir",
+          "path": "sections.output_dir",
+          "type": "string",
+          "description": "Overrides the default output directory for this specific section. Useful in `sections` mode to organize content into subdirectories.",
+          "layer": "project"
+        },
+        {
+          "name": "prompt",
+          "path": "sections.prompt",
+          "type": "string",
+          "description": "Path to the prompt file (relative to `docs/prompts` or notebook prompts dir) containing instructions for the LLM.",
+          "layer": "project"
+        },
+        {
+          "name": "rules_file",
+          "path": "sections.rules_file",
+          "type": "string",
+          "description": "Path to a specific `.gitignore`-style rules file for this section. Used to build a tailored context for the LLM.",
+          "layer": "project"
+        },
+        {
+          "name": "schemas",
+          "path": "sections.schemas",
+          "type": "array",
+          "description": "For `schema_*` types, a list of input schemas to process. Allows aggregating multiple schema files into a single documentation page.",
+          "layer": "project",
+          "children": [
+            {
+              "name": "path",
+              "path": "sections.schemas.path",
+              "type": "string",
+              "description": "Path to the JSON schema file relative to the package root.",
+              "required": true,
+              "layer": "project"
+            },
+            {
+              "name": "title",
+              "path": "sections.schemas.title",
+              "type": "string",
+              "description": "An optional title for the schema section. If provided, creates a heading before the schema's documentation.",
+              "layer": "project"
+            }
+          ]
+        },
+        {
+          "name": "source",
+          "path": "sections.source",
+          "type": "string",
+          "description": "The source identifier for the generator. For `nb_concept` type, this is the Concept ID (e.g. `my-concept`). Legacy usage: path to a single schema file.",
+          "layer": "project"
+        },
+        {
+          "name": "status",
+          "path": "sections.status",
+          "type": "string",
+          "description": "The publication status of this section (`draft`, `dev`, `production`). Controls visibility in different build modes (e.g., drafts are excluded from production builds).",
+          "layer": "project"
+        },
+        {
+          "name": "subcommand_order",
+          "path": "sections.subcommand_order",
+          "type": "array",
+          "description": "For `capture` type, a list of subcommand names to prioritize in the output order. Unlisted commands appear alphabetically after these.",
+          "layer": "project"
+        },
+        {
+          "name": "temperature",
+          "path": "sections.temperature",
+          "type": "number",
+          "description": "Controls the randomness of the LLM output (0.0 to 1.0) for this section. Lower values are more deterministic; higher values are more creative.",
+          "layer": "project"
+        },
+        {
+          "name": "title",
+          "path": "sections.title",
+          "type": "string",
+          "description": "The human-readable title of the section, used in navigation and page headings.",
+          "required": true,
+          "layer": "project"
+        },
+        {
+          "name": "toml_section",
+          "path": "sections.toml_section",
+          "type": "string",
+          "description": "For `schema_examples` with TOML format, specifies a table header (e.g., `[nav]`) to wrap the generated examples in.",
+          "layer": "project"
+        },
+        {
+          "name": "top_k",
+          "path": "sections.top_k",
+          "type": "integer",
+          "description": "The top-k sampling parameter for the LLM generation for this section.",
+          "layer": "project"
+        },
+        {
+          "name": "top_p",
+          "path": "sections.top_p",
+          "type": "number",
+          "description": "The nucleus sampling (top-p) parameter for the LLM generation for this section.",
+          "layer": "project"
+        },
+        {
+          "name": "type",
+          "path": "sections.type",
+          "type": "string",
+          "description": "Specifies the generator logic to use. Common types include `schema_to_md` (LLM docs), `schema_table` (deterministic reference), `capture` (CLI help), and `doc_sections` (aggregation).",
+          "layer": "project"
+        }
+      ]
+    },
+    {
+      "name": "settings",
+      "path": "settings",
+      "type": "object",
+      "description": "Global configuration settings that apply to the entire documentation generation process for this package.",
+      "layer": "project",
+      "children": [
+        {
+          "name": "ecosystems",
+          "path": "settings.ecosystems",
+          "type": "array",
+          "description": "A list of ecosystem names to search when resolving cross-package references or aggregating content. Defaults to the current ecosystem if empty.",
+          "layer": "ecosystem"
+        },
+        {
+          "name": "max_output_tokens",
+          "path": "settings.max_output_tokens",
+          "type": "integer",
+          "description": "The global default limit for LLM response length. Can be overridden per section.",
+          "layer": "project"
+        },
+        {
+          "name": "model",
+          "path": "settings.model",
+          "type": "string",
+          "description": "The default LLM model to use for all sections (e.g., `gemini-1.5-pro`). Can be overridden per section.",
+          "layer": "project"
+        },
+        {
+          "name": "output_dir",
+          "path": "settings.output_dir",
+          "type": "string",
+          "description": "The directory where generated documentation files are saved. Defaults to `docs`.",
+          "layer": "project"
+        },
+        {
+          "name": "output_mode",
+          "path": "settings.output_mode",
+          "type": "string",
+          "description": "Determines how the package is treated during aggregation. `package` (default) treats it as a standalone doc unit; `sections` treats it as a collection of website content sections (e.g., overview, concepts).",
+          "layer": "project"
+        },
+        {
+          "name": "regeneration_mode",
+          "path": "settings.regeneration_mode",
+          "type": "string",
+          "description": "Controls how existing files affect generation. `scratch` generates fresh; `reference` injects the existing file into the prompt, asking the LLM to update it while preserving manual edits.",
+          "layer": "project"
+        },
+        {
+          "name": "rules_file",
+          "path": "settings.rules_file",
+          "type": "string",
+          "description": "The default rules file used to gather code context for LLM prompts. Defaults to `docs/docs.rules` if not specified.",
+          "layer": "project"
+        },
+        {
+          "name": "structured_output_file",
+          "path": "settings.structured_output_file",
+          "type": "string",
+          "description": "If set, generates a single JSON file containing the parsed content of all Markdown sections. Useful for feeding documentation into other tools or search indexes.",
+          "layer": "project"
+        },
+        {
+          "name": "system_prompt",
+          "path": "settings.system_prompt",
+          "type": "string",
+          "description": "Path to a custom system prompt file, or `default` to use the built-in technical writing guidelines. Sets the baseline persona and constraints for the LLM.",
+          "layer": "project"
+        },
+        {
+          "name": "temperature",
+          "path": "settings.temperature",
+          "type": "number",
+          "description": "The global default temperature (randomness) setting for LLM generation.",
+          "layer": "project"
+        },
+        {
+          "name": "toc_depth",
+          "path": "settings.toc_depth",
+          "type": "integer",
+          "description": "The maximum heading level to include in the generated Table of Contents for the website sidebar or manifest. Defaults to 3.",
+          "layer": "project"
+        },
+        {
+          "name": "top_k",
+          "path": "settings.top_k",
+          "type": "integer",
+          "description": "The global default top-k sampling parameter.",
+          "layer": "project"
+        },
+        {
+          "name": "top_p",
+          "path": "settings.top_p",
+          "type": "number",
+          "description": "The global default nucleus sampling (top-p) parameter.",
+          "layer": "project"
+        }
+      ]
+    },
+    {
+      "name": "sidebar",
+      "path": "sidebar",
+      "type": "object",
+      "description": "Configuration for the website sidebar structure. Primarily used in the root `grove-website` configuration to define the global navigation.",
+      "layer": "ecosystem",
+      "children": [
+        {
+          "name": "categories",
+          "path": "sidebar.categories",
+          "type": "object",
+          "description": "Defines the specific display settings (icon, grouping) for sidebar categories.",
+          "layer": "ecosystem",
+          "children": [
+            {
+              "name": "flat",
+              "path": "sidebar.categories.flat",
+              "type": "boolean",
+              "description": "If true, lists items in this category directly without a collapsible parent folder.",
+              "layer": "ecosystem"
+            },
+            {
+              "name": "icon",
+              "path": "sidebar.categories.icon",
+              "type": "string",
+              "description": "The Nerd Font icon name to display next to the category label.",
+              "layer": "ecosystem"
+            },
+            {
+              "name": "packages",
+              "path": "sidebar.categories.packages",
+              "type": "array",
+              "description": "An explicit list of package names defining the order they should appear within this category.",
+              "layer": "ecosystem"
+            }
+          ]
+        },
+        {
+          "name": "category_order",
+          "path": "sidebar.category_order",
+          "type": "array",
+          "description": "An array defining the display order of top-level categories in the sidebar.",
+          "layer": "ecosystem"
+        },
+        {
+          "name": "package_category_override",
+          "path": "sidebar.package_category_override",
+          "type": "object",
+          "description": "A map allowing you to move specific packages into different categories than defined in their own `docgen.config.yml`.",
+          "layer": "ecosystem"
+        },
+        {
+          "name": "packages",
+          "path": "sidebar.packages",
+          "type": "object",
+          "description": "Configuration for customizing the appearance of specific packages in the sidebar.",
+          "layer": "ecosystem",
+          "children": [
+            {
+              "name": "color",
+              "path": "sidebar.packages.color",
+              "type": "string",
+              "description": "A color name (e.g., `green`, `blue`) used for the package's status indicator or icon accent.",
+              "layer": "ecosystem"
+            },
+            {
+              "name": "icon",
+              "path": "sidebar.packages.icon",
+              "type": "string",
+              "description": "The Nerd Font icon name to display for this specific package.",
+              "layer": "ecosystem"
+            },
+            {
+              "name": "status",
+              "path": "sidebar.packages.status",
+              "type": "string",
+              "description": "Overrides the publication status for the package in the sidebar (e.g., `beta`, `deprecated`).",
+              "layer": "ecosystem"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "title",
+      "path": "title",
+      "type": "string",
+      "description": "The display name of the package. This is used as the top-level heading in the documentation sidebar and website.",
+      "required": true,
+      "layer": "project"
+    }
+  ]
+}

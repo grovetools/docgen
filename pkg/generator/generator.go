@@ -585,27 +585,22 @@ func (g *Generator) generateFromDocSections(packageDir string, section config.Se
 		}
 
 		// Auto-discover schema doc if not specified
-		docFile := source.Doc
-		if docFile == "" {
-			docFile = g.findSchemaDoc(pkgPath)
-			if docFile == "" {
-				return fmt.Errorf("could not auto-discover schema doc for package '%s' (no schema_to_md section found)", source.Package)
+		var docInfo *SchemaDocInfo
+		if source.Doc == "" {
+			docInfo = g.findSchemaDocInfo(pkgPath)
+			if docInfo == nil {
+				return fmt.Errorf("could not auto-discover schema doc for package '%s' (no schema_to_md or schema_table section found)", source.Package)
 			}
-			g.logger.Debugf("Auto-discovered schema doc for %s: %s", source.Package, docFile)
+			g.logger.Debugf("Auto-discovered schema doc for %s: %s (type: %s)", source.Package, docInfo.MarkdownPath, docInfo.Type)
+		} else {
+			// Explicit doc path specified
+			docInfo = &SchemaDocInfo{
+				MarkdownPath: source.Doc,
+				Type:         "explicit",
+			}
 		}
 
-		// Try notebook docgen dir first, then package docs/
-		docPath := g.resolveDocPath(pkgPath, docFile)
-		if docPath == "" {
-			return fmt.Errorf("doc file '%s' not found for package '%s'", docFile, source.Package)
-		}
-
-		content, err := os.ReadFile(docPath)
-		if err != nil {
-			return fmt.Errorf("failed to read doc %s: %w", docPath, err)
-		}
-
-		// Add section info and content
+		// Add section info
 		sb.WriteString("\n--- SECTION ---\n")
 		if source.Title != "" {
 			sb.WriteString(fmt.Sprintf("Title: %s\n", source.Title))
@@ -615,10 +610,44 @@ func (g *Generator) generateFromDocSections(packageDir string, section config.Se
 		if source.Description != "" {
 			sb.WriteString(fmt.Sprintf("Description: %s\n", source.Description))
 		}
-		sb.WriteString(fmt.Sprintf("Properties: %v\n", source.Properties))
+		sb.WriteString(fmt.Sprintf("Properties to include: %v\n", source.Properties))
 		sb.WriteString(fmt.Sprintf("Package: %s\n\n", source.Package))
-		sb.WriteString("--- SOURCE DOCUMENTATION ---\n")
-		sb.WriteString(string(content))
+
+		// For schema_table with JSON, read the structured data files
+		if docInfo.Type == "schema_table" && docInfo.JSONPath != "" {
+			// Read the configuration JSON (has full property tree with descriptions)
+			if jsonPath := g.resolveDocPath(pkgPath, docInfo.JSONPath); jsonPath != "" {
+				if jsonContent, err := os.ReadFile(jsonPath); err == nil {
+					sb.WriteString("--- CONFIGURATION DATA (JSON) ---\n")
+					sb.WriteString(string(jsonContent))
+					sb.WriteString("\n")
+				}
+			}
+
+			// Read examples JSON if available
+			if docInfo.ExamplesPath != "" {
+				if examplesPath := g.resolveDocPath(pkgPath, docInfo.ExamplesPath); examplesPath != "" {
+					if examplesContent, err := os.ReadFile(examplesPath); err == nil {
+						sb.WriteString("--- EXAMPLES (JSON) ---\n")
+						sb.WriteString(string(examplesContent))
+						sb.WriteString("\n")
+					}
+				}
+			}
+		} else {
+			// Fall back to reading markdown content
+			docPath := g.resolveDocPath(pkgPath, docInfo.MarkdownPath)
+			if docPath == "" {
+				return fmt.Errorf("doc file '%s' not found for package '%s'", docInfo.MarkdownPath, source.Package)
+			}
+
+			content, err := os.ReadFile(docPath)
+			if err != nil {
+				return fmt.Errorf("failed to read doc %s: %w", docPath, err)
+			}
+			sb.WriteString("--- SOURCE DOCUMENTATION ---\n")
+			sb.WriteString(string(content))
+		}
 		sb.WriteString("\n--- END SOURCE ---\n\n")
 	}
 
@@ -658,22 +687,81 @@ func (g *Generator) generateFromDocSections(packageDir string, section config.Se
 	return nil
 }
 
-// findSchemaDoc looks for a schema_to_md section in the package's docgen config and returns its output path.
+// SchemaDocInfo contains paths to schema documentation files
+type SchemaDocInfo struct {
+	// MarkdownPath is the path to the markdown file (for schema_to_md or schema_table)
+	MarkdownPath string
+	// JSONPath is the path to the JSON data file (for schema_table with format: json)
+	JSONPath string
+	// DescriptionsPath is the path to the descriptions JSON file
+	DescriptionsPath string
+	// ExamplesPath is the path to the examples JSON file
+	ExamplesPath string
+	// Type is "schema_to_md" or "schema_table"
+	Type string
+}
+
+// findSchemaDoc looks for a schema_to_md or schema_table section in the package's docgen config.
 func (g *Generator) findSchemaDoc(pkgPath string) string {
+	info := g.findSchemaDocInfo(pkgPath)
+	if info == nil {
+		return ""
+	}
+	return info.MarkdownPath
+}
+
+// findSchemaDocInfo looks for schema documentation sections and returns detailed info.
+func (g *Generator) findSchemaDocInfo(pkgPath string) *SchemaDocInfo {
 	// Try to load the package's docgen config
 	cfg, _, err := config.LoadWithNotebook(pkgPath)
 	if err != nil {
-		return ""
+		return nil
 	}
 
-	// Find the first schema_to_md section
-	for _, section := range cfg.Sections {
-		if section.Type == "schema_to_md" {
-			return "docs/" + section.Output
+	// Look for schema_table first (preferred), then schema_to_md
+	var schemaTableSection *config.SectionConfig
+	var schemaToMdSection *config.SectionConfig
+
+	for i := range cfg.Sections {
+		section := &cfg.Sections[i]
+		if section.Type == "schema_table" && schemaTableSection == nil {
+			schemaTableSection = section
+		}
+		if section.Type == "schema_to_md" && schemaToMdSection == nil {
+			schemaToMdSection = section
 		}
 	}
 
-	return ""
+	// Prefer schema_table
+	if schemaTableSection != nil {
+		info := &SchemaDocInfo{
+			MarkdownPath: "docs/" + schemaTableSection.Output,
+			Type:         "schema_table",
+		}
+		// If format is json, there's a companion JSON file
+		if schemaTableSection.Format == "json" {
+			jsonFile := strings.TrimSuffix(schemaTableSection.Output, ".md") + ".json"
+			info.JSONPath = "docs/" + jsonFile
+		}
+		// Check for descriptions and examples references
+		if schemaTableSection.Descriptions != "" {
+			info.DescriptionsPath = "docs/" + schemaTableSection.Descriptions
+		}
+		if schemaTableSection.Examples != "" {
+			info.ExamplesPath = "docs/" + schemaTableSection.Examples
+		}
+		return info
+	}
+
+	// Fall back to schema_to_md
+	if schemaToMdSection != nil {
+		return &SchemaDocInfo{
+			MarkdownPath: "docs/" + schemaToMdSection.Output,
+			Type:         "schema_to_md",
+		}
+	}
+
+	return nil
 }
 
 // resolveDocPath finds the doc file, trying notebook location first then package docs/
