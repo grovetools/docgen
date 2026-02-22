@@ -44,6 +44,7 @@ type BindingEntry struct {
 	Keys        []string `json:"Keys"`
 	Description string   `json:"Description"`
 	Enabled     bool     `json:"Enabled"`
+	ConfigKey   string   `json:"ConfigKey"`
 }
 
 // generateFromTUIKeymaps generates markdown documentation from TUI keybinding registry.
@@ -218,6 +219,9 @@ func (g *Generator) generateFromTUIKeymaps(packageDir string, section config.Sec
 				}
 				sb.WriteString("\n")
 			}
+
+			// Append TOML configuration example block
+			sb.WriteString(g.generateTUIConfigExample(tui))
 		}
 	}
 
@@ -231,6 +235,52 @@ func (g *Generator) generateFromTUIKeymaps(packageDir string, section config.Sec
 
 	g.logger.Infof("Successfully wrote TUI keymaps '%s' to %s", section.Name, outputPath)
 	return nil
+}
+
+// generateTUIConfigExample generates a copy-pasteable TOML block for a TUI's keybindings.
+func (g *Generator) generateTUIConfigExample(tui TUIRegistryEntry) string {
+	var sb strings.Builder
+	sb.WriteString("### Configuration\n\n")
+	sb.WriteString("Override these keybindings in `grove.toml`:\n\n")
+	sb.WriteString("```toml\n")
+
+	// Calculate override path namespace (e.g. flow-status -> flow.status)
+	shortName := strings.TrimPrefix(tui.Name, tui.Package+"-")
+	sb.WriteString(fmt.Sprintf("[tui.keybindings.%s.%s]\n", tui.Package, shortName))
+
+	for _, section := range tui.Sections {
+		hasBindings := false
+		for _, b := range section.Bindings {
+			if b.Enabled {
+				hasBindings = true
+				break
+			}
+		}
+		if !hasBindings {
+			continue
+		}
+
+		sb.WriteString(fmt.Sprintf("# %s\n", section.Name))
+		for _, binding := range section.Bindings {
+			if !binding.Enabled {
+				continue
+			}
+			cKey := binding.ConfigKey
+			if cKey == "" {
+				cKey = strings.ReplaceAll(strings.ToLower(binding.Name), " ", "_")
+			}
+
+			var quotedKeys []string
+			for _, k := range binding.Keys {
+				quotedKeys = append(quotedKeys, fmt.Sprintf("\"%s\"", k))
+			}
+			sb.WriteString(fmt.Sprintf("%s = [%s]\n", cKey, strings.Join(quotedKeys, ", ")))
+		}
+		sb.WriteString("\n")
+	}
+
+	sb.WriteString("```\n\n")
+	return sb.String()
 }
 
 // generateTUIDescriptions uses LLM to generate rich descriptions for TUIs
