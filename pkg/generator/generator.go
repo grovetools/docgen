@@ -282,6 +282,18 @@ func (g *Generator) generateInPlace(packageDir string, opts GenerateOptions) err
 			}
 			continue
 		}
+		if section.Type == "tui_keymaps" {
+			if err := g.generateFromTUIKeymaps(packageDir, section, cfg, outputBaseDir); err != nil {
+				g.logger.WithError(err).Errorf("TUI keymaps generation failed for section '%s'", section.Name)
+			}
+			continue
+		}
+		if section.Type == "tui_describe" {
+			if err := g.generateTUIDescriptions(packageDir, section, cfg, outputBaseDir); err != nil {
+				g.logger.WithError(err).Errorf("TUI descriptions generation failed for section '%s'", section.Name)
+			}
+			continue
+		}
 		g.logger.Infof("Generating section: %s", section.Name)
 
 		// Use the new prompt resolution method that checks notebook first
@@ -1849,6 +1861,18 @@ func (g *Generator) generateSectionsMode(packageDir, configPath string, topCfg *
 		if ss.section.Type == "capture" {
 			if err := g.generateFromCapture(packageDir, ss.section, ss.subCfg, outputDir); err != nil {
 				g.logger.WithError(err).Errorf("CLI capture generation failed for section '%s'", ss.section.Name)
+			}
+			continue
+		}
+		if ss.section.Type == "tui_keymaps" {
+			if err := g.generateFromTUIKeymaps(packageDir, ss.section, ss.subCfg, outputDir); err != nil {
+				g.logger.WithError(err).Errorf("TUI keymaps generation failed for section '%s'", ss.section.Name)
+			}
+			continue
+		}
+		if ss.section.Type == "tui_describe" {
+			if err := g.generateTUIDescriptions(packageDir, ss.section, ss.subCfg, outputDir); err != nil {
+				g.logger.WithError(err).Errorf("TUI descriptions generation failed for section '%s'", ss.section.Name)
 			}
 			continue
 		}

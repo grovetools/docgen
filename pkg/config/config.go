@@ -92,7 +92,8 @@ type SectionConfig struct {
 	Output           string             `yaml:"output" jsonschema:"description=Output markdown filename" jsonschema_extras:"x-layer=project,x-priority=34"`
 	OutputDir        string             `yaml:"output_dir,omitempty" jsonschema:"description=Output directory name for sections mode" jsonschema_extras:"x-layer=project,x-priority=34"`
 	JSONKey          string             `yaml:"json_key,omitempty" jsonschema:"description=Key for structured JSON output" jsonschema_extras:"x-layer=project,x-priority=38"`
-	Type             string             `yaml:"type,omitempty" jsonschema:"description=Type of generation: schema_to_md (LLM-generated), schema_table (deterministic table), schema_describe (generate descriptions JSON), schema_examples (generate example TOML snippets), doc_sections, capture, or nb_concept,enum=schema_to_md,enum=schema_table,enum=schema_describe,enum=schema_examples,enum=doc_sections,enum=capture,enum=nb_concept" jsonschema_extras:"x-layer=project,x-priority=30"`
+	Type             string             `yaml:"type,omitempty" jsonschema:"description=Type of generation: schema_to_md (LLM-generated), schema_table (deterministic table), schema_describe (generate descriptions JSON), schema_examples (generate example TOML snippets), doc_sections, capture, nb_concept, tui_keymaps, or tui_describe,enum=schema_to_md,enum=schema_table,enum=schema_describe,enum=schema_examples,enum=doc_sections,enum=capture,enum=nb_concept,enum=tui_keymaps,enum=tui_describe" jsonschema_extras:"x-layer=project,x-priority=30"`
+	TUIs             []TUIEntry         `yaml:"tuis,omitempty" jsonschema:"description=List of TUIs to include for tui_keymaps type. Each entry can be a string (TUI name) or object with name and command fields" jsonschema_extras:"x-layer=project,x-priority=40"`
 	Source           string             `yaml:"source,omitempty" jsonschema:"description=Source identifier. For schema_to_md: path to JSON schema file (deprecated: use schemas instead). For nb_concept: concept ID (e.g. my-concept or workspace:my-concept for cross-workspace)" jsonschema_extras:"x-layer=project,x-priority=35"`
 	Descriptions     string             `yaml:"descriptions,omitempty" jsonschema:"description=Path to JSON file with LLM-generated descriptions (for schema_table type)" jsonschema_extras:"x-layer=project,x-priority=39"`
 	Examples         string             `yaml:"examples,omitempty" jsonschema:"description=Path to JSON file with LLM-generated examples (for schema_table type with format: json)" jsonschema_extras:"x-layer=project,x-priority=39"`
@@ -106,6 +107,45 @@ type SectionConfig struct {
 	RulesFile        string             `yaml:"rules_file,omitempty" jsonschema:"description=Path to a cx rules file for gathering context (for schema_describe and schema_examples types)" jsonschema_extras:"x-layer=project,x-priority=26"`
 	AggStripLines    int                `yaml:"agg_strip_lines,omitempty" jsonschema:"description=Number of lines to strip from the top during aggregation" jsonschema_extras:"x-layer=project,x-priority=40"`
 	GenerationConfig `yaml:",inline"`
+}
+
+// TUIEntry represents a TUI configuration for tui_keymaps generation.
+// It can be unmarshaled from either a string (just the name) or an object with name and command.
+type TUIEntry struct {
+	Name           string          `yaml:"name" jsonschema:"description=TUI name from the registry (e.g. flow-status)"`
+	Command        string          `yaml:"command,omitempty" jsonschema:"description=Command to open this TUI (e.g. flow tmux status)"`
+	CLIDocsURL     string          `yaml:"cli_docs_url,omitempty" jsonschema:"description=URL to CLI reference docs for this command (e.g. /docs/flow/13-cli-reference/#flow-plan-init)"`
+	Screenshot     string          `yaml:"screenshot,omitempty" jsonschema:"description=Path to screenshot image (e.g. ./images/flow-status.png)"`
+	ScreenshotDark string          `yaml:"screenshot_dark,omitempty" jsonschema:"description=Path to dark mode screenshot (optional)"`
+	Video          string          `yaml:"video,omitempty" jsonschema:"description=Path to mp4 video (e.g. ./videos/flow-status.mp4)"`
+	Asciinema      *AsciinemaEntry `yaml:"asciinema,omitempty" jsonschema:"description=Asciinema cast configuration"`
+}
+
+// AsciinemaEntry represents asciinema player configuration.
+type AsciinemaEntry struct {
+	Src      string `yaml:"src" jsonschema:"description=Path to .cast file (e.g. ./asciicasts/demo.cast)"`
+	Poster   string `yaml:"poster,omitempty" jsonschema:"description=Poster frame (e.g. npt:10 for 10 seconds in)"`
+	AutoPlay bool   `yaml:"autoPlay,omitempty" jsonschema:"description=Auto-play the recording"`
+	Loop     bool   `yaml:"loop,omitempty" jsonschema:"description=Loop the recording"`
+}
+
+// UnmarshalYAML implements custom unmarshaling to support both string and object formats.
+func (t *TUIEntry) UnmarshalYAML(unmarshal func(interface{}) error) error {
+	// Try string first
+	var name string
+	if err := unmarshal(&name); err == nil {
+		t.Name = name
+		return nil
+	}
+
+	// Try object format
+	type tuiEntryAlias TUIEntry
+	var obj tuiEntryAlias
+	if err := unmarshal(&obj); err != nil {
+		return err
+	}
+	*t = TUIEntry(obj)
+	return nil
 }
 
 // GetStatus returns the effective status for a section, defaulting to "draft" if not set.
