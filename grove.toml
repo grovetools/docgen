@@ -8,7 +8,7 @@ name = "docgen"
 path = "./bin/docgen"
 
 [context]
-default_rules_path = ".cx/dev-no-tests.rules"
+default_rules = "dev-no-tests"
 
 [agent.providers.claude]
 args = ["--dangerously-skip-permissions --chrome"]
