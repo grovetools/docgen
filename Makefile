@@ -18,7 +18,7 @@ LDFLAGS = -ldflags="\
 -X '$(VERSION_PKG).Branch=$(GIT_BRANCH)' \
 -X '$(VERSION_PKG).BuildDate=$(BUILD_DATE)'"
 
-.PHONY: all build test clean fmt vet lint run check dev build-all generate-docs schema help
+.PHONY: all build test clean fmt fmt-check vet lint run check dev build-all generate-docs schema help
 
 all: build
 
@@ -44,7 +44,15 @@ clean:
 
 fmt:
 	@echo "Formatting code..."
-	@go fmt ./...
+	@gofumpt -w .
+
+fmt-check:
+	@unformatted="$$(gofumpt -l . 2>/dev/null)"; \
+	if [ -n "$$unformatted" ]; then \
+		echo "Unformatted files (run 'make fmt'):"; \
+		echo "$$unformatted" | sed 's/^/  /'; \
+		exit 1; \
+	fi
 
 vet:
 	@echo "Running go vet..."
@@ -61,7 +69,7 @@ lint:
 run: build
 	@$(BIN_DIR)/$(BINARY_NAME) $(ARGS)
 
-check: fmt vet lint test
+check: schema fmt-check vet lint test
 
 dev:
 	@mkdir -p $(BIN_DIR)
