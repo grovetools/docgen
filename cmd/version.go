@@ -15,7 +15,7 @@ func newVersionCmd() *cobra.Command {
 		Use:   "version",
 		Short: "Print the version information for this binary",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			
+
 			info := version.GetInfo()
 
 			if jsonOutput {

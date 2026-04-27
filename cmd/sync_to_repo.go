@@ -234,13 +234,13 @@ func copyFile(src, dst string) error {
 	if err != nil {
 		return err
 	}
-	defer srcFile.Close()
+	defer srcFile.Close() //nolint:errcheck // best-effort close after read
 
 	dstFile, err := os.Create(dst)
 	if err != nil {
 		return err
 	}
-	defer dstFile.Close()
+	defer dstFile.Close() //nolint:errcheck // best-effort close after write
 
 	if _, err := io.Copy(dstFile, srcFile); err != nil {
 		return err

@@ -7,6 +7,9 @@ import (
 	"regexp"
 	"strings"
 
+	"golang.org/x/text/cases"
+	"golang.org/x/text/language"
+
 	coreConfig "github.com/grovetools/core/config"
 	"github.com/grovetools/core/pkg/workspace"
 	"github.com/grovetools/docgen/pkg/config"
@@ -175,7 +178,7 @@ order: %d
 
 		// Write output
 		outputPath := filepath.Join(outputBaseDir, outputDir, mdFile)
-		if err := os.MkdirAll(filepath.Dir(outputPath), 0755); err != nil {
+		if err := os.MkdirAll(filepath.Dir(outputPath), 0755); err != nil { //nolint:gosec // internal doc tool
 			g.logger.Errorf("Failed to create output directory for %s: %v", mdFile, err)
 			continue
 		}
@@ -224,7 +227,7 @@ func formatTitle(name string) string {
 		if acronym, ok := acronyms[lower]; ok {
 			parts[i] = acronym
 		} else {
-			parts[i] = strings.Title(lower)
+			parts[i] = cases.Title(language.English).String(lower)
 		}
 	}
 

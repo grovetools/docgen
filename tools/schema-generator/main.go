@@ -5,8 +5,8 @@ import (
 	"log"
 	"os"
 
-	"github.com/invopop/jsonschema"
 	"github.com/grovetools/docgen/pkg/config"
+	"github.com/invopop/jsonschema"
 )
 
 func main() {
@@ -26,7 +26,7 @@ func main() {
 	}
 
 	// Write to schema directory
-	if err := os.WriteFile("schema/docgen.config.schema.json", data, 0644); err != nil {
+	if err := os.WriteFile("schema/docgen.config.schema.json", data, 0644); err != nil { //nolint:gosec // fixed output path
 		log.Fatalf("Error writing schema file: %v", err)
 	}
 

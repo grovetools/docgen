@@ -12,6 +12,11 @@ linters:
 linters-settings:
   nakedret:
     max-func-lines: 30
+  gosec:
+    excludes:
+      - G301 # directory permissions — internal doc tool, 0755 is fine
+      - G304 # file inclusion via variable — all paths from trusted config
+      - G306 # WriteFile permissions — internal doc tool, 0644 is fine
 
 issues:
   exclude-use-default: false

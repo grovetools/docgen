@@ -61,4 +61,3 @@ The goal is to inform, not to impress. Let the functionality speak for itself.
 
 ---
 `
-

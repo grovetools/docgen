@@ -71,7 +71,7 @@ func (w *RecursiveWatcher) HandleNewDirectory(event fsnotify.Event, workspacePat
 	}
 
 	// New directory created - add it and all subdirectories to the watcher
-	w.AddRecursive(event.Name, workspacePath)
+	_ = w.AddRecursive(event.Name, workspacePath)
 	return true
 }
 

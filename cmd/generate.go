@@ -9,7 +9,7 @@ import (
 
 func newGenerateCmd() *cobra.Command {
 	var sections []string
-	
+
 	cmd := &cobra.Command{
 		Use:   "generate",
 		Short: "Generate documentation for the current package",
@@ -34,13 +34,13 @@ Examples:
 				}
 				return gen.GenerateWithOptions(cwd, opts)
 			}
-			
+
 			// Otherwise generate all sections
 			return gen.Generate(cwd)
 		},
 	}
-	
+
 	cmd.Flags().StringSliceVarP(&sections, "section", "s", nil, "Generate only specified sections (by name)")
-	
+
 	return cmd
 }

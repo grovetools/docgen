@@ -47,7 +47,7 @@ func InitWithOptions(projectType string, opts InitOptions, logger *logrus.Logger
 
 	// 2. Create destination directories
 	logger.Debugf("Creating directory: %s", promptsDir)
-	if err := os.MkdirAll(promptsDir, 0755); err != nil {
+	if err := os.MkdirAll(promptsDir, 0755); err != nil { //nolint:gosec // internal scaffold tool
 		return fmt.Errorf("failed to create directories: %w", err)
 	}
 
@@ -77,7 +77,7 @@ func InitWithOptions(projectType string, opts InitOptions, logger *logrus.Logger
 			// Create a basic rules file
 			rulesContent := `*
 `
-			if err := os.WriteFile(rulesPath, []byte(rulesContent), 0644); err != nil {
+			if err := os.WriteFile(rulesPath, []byte(rulesContent), 0644); err != nil { //nolint:gosec // internal scaffold tool
 				return fmt.Errorf("failed to create rules file: %w", err)
 			}
 			logger.Infof("* Created rules file: %s", filepath.Join("docs", opts.RulesFile))
@@ -125,7 +125,7 @@ func copyFileFromFS(src, dest string) error {
 	if err != nil {
 		return fmt.Errorf("failed to read embedded file %s: %w", src, err)
 	}
-	if err := os.WriteFile(dest, content, 0644); err != nil {
+	if err := os.WriteFile(dest, content, 0644); err != nil { //nolint:gosec // internal scaffold tool
 		return fmt.Errorf("failed to write file %s: %w", dest, err)
 	}
 	return nil
@@ -140,7 +140,7 @@ func copyAndCustomizeConfig(src, dest string, opts InitOptions) error {
 
 	// If no options are provided, just write the file as-is
 	if opts == (InitOptions{}) {
-		return os.WriteFile(dest, content, 0644)
+		return os.WriteFile(dest, content, 0644) //nolint:gosec // internal scaffold tool
 	}
 
 	// Parse the YAML
@@ -184,9 +184,9 @@ func copyAndCustomizeConfig(src, dest string, opts InitOptions) error {
 
 	// Add the schema comment back at the top
 	finalContent := "# yaml-language-server: $schema=https://raw.githubusercontent.com/mattsolo1/grove-docgen/main/schema/docgen.config.schema.json\n" + string(updatedContent)
-	
+
 	// Clean up the YAML formatting
 	finalContent = strings.ReplaceAll(finalContent, "\n    ", "\n  ")
 
-	return os.WriteFile(dest, []byte(finalContent), 0644)
+	return os.WriteFile(dest, []byte(finalContent), 0644) //nolint:gosec // internal scaffold tool
 }

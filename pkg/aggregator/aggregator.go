@@ -11,6 +11,9 @@ import (
 	"strings"
 	"time"
 
+	"golang.org/x/text/cases"
+	"golang.org/x/text/language"
+
 	"github.com/grovetools/core/config"
 	"github.com/grovetools/core/pkg/workspace"
 	"github.com/grovetools/docgen/pkg/capture"
@@ -126,7 +129,7 @@ func (a *Aggregator) Aggregate(outputDir string, mode string, transform string) 
 	m.GeneratedAt = time.Now()
 
 	// Ensure output directory exists
-	if err := os.MkdirAll(outputDir, 0755); err != nil {
+	if err := os.MkdirAll(outputDir, 0755); err != nil { //nolint:gosec // internal doc tool
 		return fmt.Errorf("failed to create output directory: %w", err)
 	}
 
@@ -308,7 +311,7 @@ func (a *Aggregator) aggregateEcosystem(rootDir string, m *manifest.Manifest, ou
 		// Copy only the markdown output files specified in the config, not everything in docs/
 		// Create output directory only if we have sections to copy
 		distDest := filepath.Join(outputDir, wsName)
-		if err := os.MkdirAll(distDest, 0755); err != nil {
+		if err := os.MkdirAll(distDest, 0755); err != nil { //nolint:gosec // internal doc tool
 			a.logger.WithError(err).Errorf("Failed to create output directory for %s", wsName)
 			continue
 		}
@@ -351,7 +354,7 @@ func (a *Aggregator) aggregateEcosystem(rootDir string, m *manifest.Manifest, ou
 
 				// Apply Astro transformations if requested
 				if transform == "astro" {
-					srcData, err := os.ReadFile(destFile)
+					srcData, err := os.ReadFile(destFile) //nolint:gosec // path from config
 					if err != nil {
 						a.logger.WithError(err).Errorf("Failed to read captured file %s", destFile)
 						continue
@@ -368,7 +371,7 @@ func (a *Aggregator) aggregateEcosystem(rootDir string, m *manifest.Manifest, ou
 					}
 					processedData := trans.TransformStandardDoc(srcData, opts)
 
-					if err := os.WriteFile(destFile, processedData, 0644); err != nil {
+					if err := os.WriteFile(destFile, processedData, 0644); err != nil { //nolint:gosec // internal doc tool output
 						a.logger.WithError(err).Errorf("Failed to write transformed %s", destFile)
 						continue
 					}
@@ -388,7 +391,7 @@ func (a *Aggregator) aggregateEcosystem(rootDir string, m *manifest.Manifest, ou
 					// Add a header to indicate this is a placeholder
 					placeholder := fmt.Sprintf("# %s\n\n*Note: This is a placeholder generated from the prompt file. Full documentation is pending.*\n\n---\n\n%s", section.Title, string(promptData))
 
-					if err := os.WriteFile(destFile, []byte(placeholder), 0644); err != nil {
+					if err := os.WriteFile(destFile, []byte(placeholder), 0644); err != nil { //nolint:gosec // internal doc tool output
 						a.logger.WithError(err).Errorf("Failed to write placeholder %s", destFile)
 						continue
 					}
@@ -400,7 +403,7 @@ func (a *Aggregator) aggregateEcosystem(rootDir string, m *manifest.Manifest, ou
 				// Copy the actual documentation file
 				a.logger.Infof("Copying documentation for %s/%s", wsName, section.Output)
 
-				srcData, err := os.ReadFile(srcFile)
+				srcData, err := os.ReadFile(srcFile) //nolint:gosec // path from config
 				if err != nil {
 					a.logger.WithError(err).Errorf("Failed to read %s", srcFile)
 					continue
@@ -423,7 +426,7 @@ func (a *Aggregator) aggregateEcosystem(rootDir string, m *manifest.Manifest, ou
 					processedData = trans.TransformStandardDoc(processedData, opts)
 				}
 
-				if err := os.WriteFile(destFile, processedData, 0644); err != nil {
+				if err := os.WriteFile(destFile, processedData, 0644); err != nil { //nolint:gosec // internal doc tool output
 					a.logger.WithError(err).Errorf("Failed to write %s", destFile)
 					continue
 				}
@@ -435,11 +438,11 @@ func (a *Aggregator) aggregateEcosystem(rootDir string, m *manifest.Manifest, ou
 					jsonDestFile := filepath.Join(distDest, jsonFile)
 
 					if _, err := os.Stat(jsonSrcFile); err == nil {
-						jsonData, err := os.ReadFile(jsonSrcFile)
+						jsonData, err := os.ReadFile(jsonSrcFile) //nolint:gosec // path from config
 						if err != nil {
 							a.logger.WithError(err).Errorf("Failed to read companion JSON %s", jsonSrcFile)
 						} else {
-							if err := os.WriteFile(jsonDestFile, jsonData, 0644); err != nil {
+							if err := os.WriteFile(jsonDestFile, jsonData, 0644); err != nil { //nolint:gosec // internal doc tool output
 								a.logger.WithError(err).Errorf("Failed to write companion JSON %s", jsonDestFile)
 							} else {
 								a.logger.Infof("Copied companion JSON for %s/%s", wsName, jsonFile)
@@ -486,7 +489,7 @@ func (a *Aggregator) aggregateEcosystem(rootDir string, m *manifest.Manifest, ou
 		// Copy additional logo files specified in logos: config
 		if len(docCfg.Logos) > 0 {
 			imagesDestPath := filepath.Join(distDest, "images")
-			if err := os.MkdirAll(imagesDestPath, 0755); err != nil {
+			if err := os.MkdirAll(imagesDestPath, 0755); err != nil { //nolint:gosec // internal doc tool
 				a.logger.WithError(err).Errorf("Failed to create images directory for logos: %s", wsName)
 			} else {
 				for _, logoPath := range docCfg.Logos {
@@ -527,7 +530,7 @@ func (a *Aggregator) aggregateEcosystem(rootDir string, m *manifest.Manifest, ou
 			changelogDest := filepath.Join(distDest, "CHANGELOG.md")
 
 			// Copy the CHANGELOG.md file
-			changelogData, err := os.ReadFile(changelogSrc)
+			changelogData, err := os.ReadFile(changelogSrc) //nolint:gosec // path from workspace
 			if err != nil {
 				a.logger.WithError(err).Errorf("Failed to read CHANGELOG.md for %s", wsName)
 			} else {
@@ -545,7 +548,7 @@ func (a *Aggregator) aggregateEcosystem(rootDir string, m *manifest.Manifest, ou
 					changelogData = trans.TransformStandardDoc(changelogData, opts)
 				}
 
-				if err := os.WriteFile(changelogDest, changelogData, 0644); err != nil {
+				if err := os.WriteFile(changelogDest, changelogData, 0644); err != nil { //nolint:gosec // internal doc tool output
 					a.logger.WithError(err).Errorf("Failed to write CHANGELOG.md for %s", wsName)
 				} else {
 					// Update the manifest with the changelog path
@@ -603,7 +606,7 @@ func (a *Aggregator) getRepoURL(wsPath string) string {
 	}
 	// Remove .git suffix if present
 	url = strings.TrimSuffix(url, ".git")
-	
+
 	return url
 }
 
@@ -696,7 +699,7 @@ func (a *Aggregator) resolvePromptForWorkspace(wsPath, promptFile string) ([]byt
 		// Fallback: Can't resolve workspace, use legacy path
 		a.logger.Debugf("Could not resolve workspace for %s, trying legacy path", wsPath)
 		legacyPath := filepath.Join(wsPath, "docs", "prompts", promptFile)
-		return os.ReadFile(legacyPath)
+		return os.ReadFile(legacyPath) //nolint:gosec // path from workspace
 	}
 
 	// 2. Try notebook path first
@@ -707,7 +710,7 @@ func (a *Aggregator) resolvePromptForWorkspace(wsPath, promptFile string) ([]byt
 
 		if err == nil {
 			notebookPath := filepath.Join(notebookPromptsDir, promptBaseName)
-			if data, err := os.ReadFile(notebookPath); err == nil {
+			if data, err := os.ReadFile(notebookPath); err == nil { //nolint:gosec // path from notebook
 				a.logger.Debugf("Loaded prompt '%s' from notebook: %s", promptBaseName, notebookPath)
 				return data, nil
 			}
@@ -717,7 +720,7 @@ func (a *Aggregator) resolvePromptForWorkspace(wsPath, promptFile string) ([]byt
 	// 3. Fallback to legacy path
 	legacyPath := filepath.Join(wsPath, "docs", "prompts", promptFile)
 	a.logger.Debugf("Prompt not found in notebook, trying legacy path: %s", legacyPath)
-	return os.ReadFile(legacyPath)
+	return os.ReadFile(legacyPath) //nolint:gosec // path from workspace
 }
 
 // applyStripLines removes specified number of lines from the beginning of content during aggregation
@@ -725,7 +728,7 @@ func (a *Aggregator) applyStripLines(content []byte, aggStripLines int, packageN
 	if aggStripLines <= 0 {
 		return content
 	}
-	
+
 	lines := strings.Split(string(content), "\n")
 	if len(lines) > aggStripLines {
 		// Join the remaining lines after stripping
@@ -734,7 +737,7 @@ func (a *Aggregator) applyStripLines(content []byte, aggStripLines int, packageN
 		return []byte(stripped)
 	} else {
 		// If file has fewer lines than agg_strip_lines, result is empty
-		a.logger.Warnf("Source file %s/%s has fewer lines (%d) than agg_strip_lines setting (%d)", 
+		a.logger.Warnf("Source file %s/%s has fewer lines (%d) than agg_strip_lines setting (%d)",
 			packageName, sectionOutput, len(lines), aggStripLines)
 		return []byte("")
 	}
@@ -752,17 +755,17 @@ func copyDir(src, dst string) error {
 			return os.MkdirAll(dstPath, info.Mode())
 		}
 
-		srcFile, err := os.Open(path)
+		srcFile, err := os.Open(path) //nolint:gosec // path from workspace
 		if err != nil {
 			return err
 		}
-		defer srcFile.Close()
+		defer srcFile.Close() //nolint:errcheck // best-effort close after read
 
-		dstFile, err := os.Create(dstPath)
+		dstFile, err := os.Create(dstPath) //nolint:gosec // path from workspace
 		if err != nil {
 			return err
 		}
-		defer dstFile.Close()
+		defer dstFile.Close() //nolint:errcheck // best-effort close after write
 
 		_, err = io.Copy(dstFile, srcFile)
 		return err
@@ -840,7 +843,7 @@ func (a *Aggregator) processWebsiteSections(wsPath string, cfg *docgenConfig.Doc
 
 		// Create output directory for this section
 		destDir := filepath.Join(outputDir, sectionName)
-		if err := os.MkdirAll(destDir, 0755); err != nil {
+		if err := os.MkdirAll(destDir, 0755); err != nil { //nolint:gosec // internal doc tool
 			a.logger.Errorf("Failed to create dest dir %s: %v", destDir, err)
 			continue
 		}
@@ -892,7 +895,7 @@ func (a *Aggregator) processWebsiteSections(wsPath string, cfg *docgenConfig.Doc
 			}
 
 			// Read file content
-			content, err := os.ReadFile(srcFile)
+			content, err := os.ReadFile(srcFile) //nolint:gosec // path from config
 			if err != nil {
 				a.logger.Warnf("Failed to read %s: %v", sec.Output, err)
 				continue
@@ -910,7 +913,7 @@ func (a *Aggregator) processWebsiteSections(wsPath string, cfg *docgenConfig.Doc
 
 			// Write file
 			destPath := filepath.Join(destDir, sec.Output)
-			if err := os.WriteFile(destPath, content, 0644); err != nil {
+			if err := os.WriteFile(destPath, content, 0644); err != nil { //nolint:gosec // internal doc tool output
 				a.logger.Warnf("Failed to write %s: %v", sec.Output, err)
 				continue
 			}
@@ -1040,7 +1043,7 @@ func (a *Aggregator) aggregateConcepts(wsPath string, wsName string, docCfg *doc
 
 		// 6. Create output directory: {dist}/{pkg}/concepts/{concept-id}/
 		conceptDestDir := filepath.Join(distDest, "concepts", conceptID)
-		if err := os.MkdirAll(conceptDestDir, 0755); err != nil {
+		if err := os.MkdirAll(conceptDestDir, 0755); err != nil { //nolint:gosec // internal doc tool
 			a.logger.Errorf("Failed to create concept output dir: %v", err)
 			continue
 		}
@@ -1117,80 +1120,11 @@ func formatConceptTitle(name string) string {
 		if acronym, ok := acronyms[lower]; ok {
 			parts[i] = acronym
 		} else {
-			parts[i] = strings.Title(lower)
+			parts[i] = cases.Title(language.English).String(lower)
 		}
 	}
 
 	return strings.Join(parts, " ")
-}
-
-// parseFrontmatter extracts status, title, and order from markdown frontmatter
-func parseFrontmatter(path string) (status, title string, order int) {
-	status = docgenConfig.StatusProduction // Default
-	title = ""
-	order = 0
-
-	content, err := os.ReadFile(path)
-	if err != nil {
-		return
-	}
-
-	s := string(content)
-	if !strings.HasPrefix(s, "---\n") {
-		// No frontmatter, try to extract order from filename (e.g., "01-intro.md" -> 1)
-		order = extractOrderFromFilename(filepath.Base(path))
-		return
-	}
-
-	end := strings.Index(s[4:], "\n---")
-	if end == -1 {
-		return
-	}
-
-	frontmatter := s[4 : end+4]
-	lines := strings.Split(frontmatter, "\n")
-	for _, line := range lines {
-		line = strings.TrimSpace(line)
-		if strings.HasPrefix(line, "status:") {
-			parts := strings.SplitN(line, ":", 2)
-			if len(parts) == 2 {
-				status = strings.TrimSpace(parts[1])
-				// Remove quotes if present
-				status = strings.Trim(status, "\"'")
-			}
-		} else if strings.HasPrefix(line, "title:") {
-			parts := strings.SplitN(line, ":", 2)
-			if len(parts) == 2 {
-				title = strings.TrimSpace(parts[1])
-				title = strings.Trim(title, "\"'")
-			}
-		} else if strings.HasPrefix(line, "order:") {
-			parts := strings.SplitN(line, ":", 2)
-			if len(parts) == 2 {
-				fmt.Sscanf(strings.TrimSpace(parts[1]), "%d", &order)
-			}
-		}
-	}
-
-	// If no order in frontmatter, try filename
-	if order == 0 {
-		order = extractOrderFromFilename(filepath.Base(path))
-	}
-
-	return
-}
-
-// extractOrderFromFilename extracts order from filenames like "01-intro.md" -> 1
-func extractOrderFromFilename(filename string) int {
-	// Remove extension
-	name := strings.TrimSuffix(filename, filepath.Ext(filename))
-
-	// Try to parse leading number
-	var order int
-	if _, err := fmt.Sscanf(name, "%d-", &order); err == nil {
-		return order
-	}
-	return 0
 }
 
 // copyFile copies a single file from src to dst
@@ -1199,13 +1133,13 @@ func copyFile(src, dst string) error {
 	if err != nil {
 		return err
 	}
-	defer srcFile.Close()
+	defer srcFile.Close() //nolint:errcheck // best-effort close after read
 
 	dstFile, err := os.Create(dst)
 	if err != nil {
 		return err
 	}
-	defer dstFile.Close()
+	defer dstFile.Close() //nolint:errcheck // best-effort close after write
 
 	_, err = io.Copy(dstFile, srcFile)
 	return err

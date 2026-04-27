@@ -2,7 +2,6 @@ package logo
 
 import (
 	"bytes"
-	"encoding/xml"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -154,8 +153,8 @@ func (g *Generator) Generate(cfg Config) error {
 
 	// Calculate new dimensions - add space for text below logo
 	scaledSpacing := cfg.Spacing / scaleY
-	topPadding := 20.0    // Padding at top to prevent clipping
-	bottomPadding := 50.0 // Extra padding between logo and text
+	topPadding := 20.0                                                                           // Padding at top to prevent clipping
+	bottomPadding := 50.0                                                                        // Extra padding between logo and text
 	newVBHeight := topPadding + vbH + scaledSpacing + bottomPadding + scaledTextHeightFinal + 10 // extra padding
 
 	// Use specified width and calculate height to maintain aspect ratio
@@ -208,12 +207,12 @@ func (g *Generator) Generate(cfg Config) error {
 	buf.WriteString("</svg>\n")
 
 	// Ensure output directory exists
-	if err := os.MkdirAll(filepath.Dir(cfg.OutputPath), 0755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(cfg.OutputPath), 0755); err != nil { //nolint:gosec // internal doc tool
 		return fmt.Errorf("failed to create output directory: %w", err)
 	}
 
 	// Write the output file
-	if err := os.WriteFile(cfg.OutputPath, buf.Bytes(), 0644); err != nil {
+	if err := os.WriteFile(cfg.OutputPath, buf.Bytes(), 0644); err != nil { //nolint:gosec // internal doc tool output
 		return fmt.Errorf("failed to write output SVG: %w", err)
 	}
 
@@ -250,7 +249,7 @@ func (g *Generator) generateTextPathSVG(text string, face *canvas.FontFace, hexC
 	var buf bytes.Buffer
 	svgRenderer := svg.New(&buf, c.W, c.H, nil)
 	c.RenderTo(svgRenderer)
-	svgRenderer.Close()
+	_ = svgRenderer.Close()
 
 	// Extract just the path elements from the SVG output
 	svgContent := buf.String()
@@ -269,7 +268,7 @@ func extractPathElements(svgContent string) string {
 
 // parseSVG reads an SVG file and extracts its dimensions and inner content.
 func (g *Generator) parseSVG(path string) (*SVGDimensions, error) {
-	data, err := os.ReadFile(path)
+	data, err := os.ReadFile(path) //nolint:gosec // path from user config
 	if err != nil {
 		return nil, err
 	}
@@ -336,15 +335,6 @@ func stripInkscapeMetadata(content string) string {
 	content = inkscapeAttrRe.ReplaceAllString(content, "")
 
 	return content
-}
-
-// xmlEscape escapes special XML characters in a string.
-func xmlEscape(s string) string {
-	var buf bytes.Buffer
-	if err := xml.EscapeText(&buf, []byte(s)); err != nil {
-		return s
-	}
-	return buf.String()
 }
 
 // extractDominantColor extracts the first non-black, non-white hex color from SVG content.

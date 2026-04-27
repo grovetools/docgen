@@ -79,7 +79,7 @@ func runWatch(websiteDir, mode string, debounce time.Duration, quiet bool) error
 	if err != nil {
 		return errorf("failed to create watcher: %w", err)
 	}
-	defer w.Close()
+	defer w.Close() //nolint:errcheck // best-effort close on exit
 
 	// Create Astro writer
 	astroWriter := writer.NewAstro(websiteDir)
@@ -411,7 +411,7 @@ func rebuildPackage(pkg *watchedPackage, w *writer.AstroWriter, mode string, loc
 	}
 
 	// Filter sections by status
-	var sectionsToProcess []config.SectionConfig
+	sectionsToProcess := make([]config.SectionConfig, 0, len(docCfg.Sections))
 	for _, section := range docCfg.Sections {
 		status := section.GetStatus()
 		if status == config.StatusDraft {
@@ -736,27 +736,6 @@ func transformWebsiteSection(content []byte, sectionName, category string) []byt
 	return trans.TransformWebsiteSection(content, opts)
 }
 
-// parseStatus extracts status from frontmatter
-func parseStatus(content string) string {
-	if !strings.HasPrefix(content, "---\n") {
-		return config.StatusProduction
-	}
-	end := strings.Index(content[4:], "\n---")
-	if end == -1 {
-		return config.StatusProduction
-	}
-	frontmatter := content[4 : end+4]
-	for _, line := range strings.Split(frontmatter, "\n") {
-		if strings.HasPrefix(line, "status:") {
-			parts := strings.SplitN(line, ":", 2)
-			if len(parts) == 2 {
-				return strings.Trim(strings.TrimSpace(parts[1]), "\"'")
-			}
-		}
-	}
-	return config.StatusProduction
-}
-
 // copyAssets copies images, asciicasts, and videos to the website public directory
 func copyAssets(docgenDir, pkgName string, w *writer.AstroWriter) {
 	assetTypes := []string{"images", "asciicasts", "videos"}
@@ -766,7 +745,7 @@ func copyAssets(docgenDir, pkgName string, w *writer.AstroWriter) {
 			continue
 		}
 
-		filepath.Walk(srcDir, func(path string, info os.FileInfo, err error) error {
+		_ = filepath.Walk(srcDir, func(path string, info os.FileInfo, err error) error {
 			if err != nil || info.IsDir() {
 				return nil
 			}
@@ -775,7 +754,7 @@ func copyAssets(docgenDir, pkgName string, w *writer.AstroWriter) {
 				return nil
 			}
 			filename := filepath.Base(path)
-			w.WriteAsset(pkgName, assetType, filename, data)
+			_ = w.WriteAsset(pkgName, assetType, filename, data)
 			return nil
 		})
 	}
@@ -792,7 +771,7 @@ func copyLogos(logos []string, pkgName string, w *writer.AstroWriter) {
 			continue
 		}
 		filename := filepath.Base(expandedPath)
-		w.WriteAsset(pkgName, "images", filename, data)
+		_ = w.WriteAsset(pkgName, "images", filename, data)
 	}
 }
 
@@ -816,7 +795,7 @@ func copyWebsiteSectionAssets(srcDir, sectionName string, w *writer.AstroWriter)
 			continue
 		}
 
-		filepath.Walk(assetDir, func(path string, info os.FileInfo, err error) error {
+		_ = filepath.Walk(assetDir, func(path string, info os.FileInfo, err error) error {
 			if err != nil || info.IsDir() {
 				return nil
 			}
@@ -825,7 +804,7 @@ func copyWebsiteSectionAssets(srcDir, sectionName string, w *writer.AstroWriter)
 				return nil
 			}
 			filename := filepath.Base(path)
-			w.WriteAsset(sectionName, assetType, filename, data)
+			_ = w.WriteAsset(sectionName, assetType, filename, data)
 			return nil
 		})
 	}
@@ -854,7 +833,7 @@ func updateManifestSidebar(pkgName string, docCfg *config.DocgenConfig, mode str
 	if err != nil {
 		return
 	}
-	os.WriteFile(manifestPath, data, 0644)
+	_ = os.WriteFile(manifestPath, data, 0644)
 }
 
 // getPackageVersion gets version from git tags

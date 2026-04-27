@@ -86,8 +86,8 @@ Example:
 	cmd.Flags().Float64Var(&width, "width", 200, "Output SVG width in pixels")
 	cmd.Flags().StringVarP(&output, "output", "o", "", "Output path (defaults to input-with-text.svg)")
 
-	cmd.MarkFlagRequired("text")
-	cmd.MarkFlagRequired("font")
+	_ = cmd.MarkFlagRequired("text")
+	_ = cmd.MarkFlagRequired("font")
 
 	return cmd
 }

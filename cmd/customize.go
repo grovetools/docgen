@@ -19,7 +19,7 @@ import (
 
 func newCustomizeCmd() *cobra.Command {
 	var recipeType string
-	
+
 	cmd := &cobra.Command{
 		Use:   "customize [subcommand]",
 		Short: "Create a customized documentation plan using grove-flow",
@@ -46,7 +46,6 @@ Examples:
   docgen customize --recipe-type prompts  # Create plan with prompts recipe
   flow run                                # Run the plan after creation`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			
 
 			// Check if this is the print-recipes subcommand
 			if len(args) > 0 && args[0] == "print-recipes" {
@@ -82,18 +81,18 @@ Examples:
 				ulog.Info("Valid options are: agent, prompts").Emit()
 				return fmt.Errorf("invalid recipe type: %s", recipeType)
 			}
-			
+
 			// Determine the plan name
 			projectName := filepath.Base(cwd)
 			planName := fmt.Sprintf("%s-%s", recipeName, projectName)
-			
+
 			// Build the flow command arguments
 			args = []string{
 				"plan", "init", planName,
 				"--recipe", recipeName,
 				"--recipe-cmd", "docgen recipe print",
 			}
-			
+
 			// Add recipe variables from the configuration
 			if cfg.Settings.Model != "" {
 				args = append(args, "--recipe-vars", fmt.Sprintf("model=%s", cfg.Settings.Model))
@@ -125,7 +124,7 @@ Examples:
 					}
 				}
 			}
-			
+
 			ulog.Info("Creating customization plan").
 				Field("plan_name", planName).
 				Field("recipe_type", recipeType).
@@ -169,17 +168,17 @@ Examples:
 			return nil
 		},
 	}
-	
+
 	// Add flags
 	cmd.Flags().StringVarP(&recipeType, "recipe-type", "r", "agent", "Recipe type to use: 'agent' or 'prompts'")
-	
+
 	return cmd
 }
 
 // loadDocgenConfig loads the docgen.config.yml from the specified directory
 func loadDocgenConfig(dir string) (*config.DocgenConfig, error) {
 	configPath := filepath.Join(dir, "docs", config.ConfigFileName)
-	
+
 	data, err := os.ReadFile(configPath)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -187,18 +186,18 @@ func loadDocgenConfig(dir string) (*config.DocgenConfig, error) {
 		}
 		return nil, fmt.Errorf("failed to read docgen.config.yml: %w", err)
 	}
-	
+
 	var cfg config.DocgenConfig
 	if err := yaml.Unmarshal(data, &cfg); err != nil {
 		return nil, fmt.Errorf("failed to parse docgen.config.yml: %w", err)
 	}
-	
+
 	return &cfg, nil
 }
 
 // printRecipes prints all available recipes in JSON format (for grove-flow integration)
 func printRecipes() error {
-	
+
 	collection := make(recipes.RecipeCollection)
 
 	// Load the docgen-customize-agent recipe

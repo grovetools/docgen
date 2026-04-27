@@ -103,7 +103,6 @@ func (e *Enricher) Enrich(projectDir, schemaPath string, inPlace bool) error {
 		return fmt.Errorf("failed to marshal updated schema: %w", err)
 	}
 
-	
 	if inPlace {
 		if err := os.WriteFile(schemaPath, updatedData, 0644); err != nil {
 			return fmt.Errorf("failed to write updated schema file: %w", err)
@@ -268,7 +267,7 @@ func (e *Enricher) generateDescriptionsBatch(projectDir string, properties []pro
 	}
 
 	// Extract just descriptions to return
-	var descriptions []string
+	descriptions := make([]string, 0, len(results))
 	for _, result := range results {
 		descriptions = append(descriptions, result.Description)
 	}

@@ -203,7 +203,7 @@ func Load(dir string) (*DocgenConfig, error) {
 
 // LoadFromPath loads a docgen config from a specific file path.
 func LoadFromPath(configPath string) (*DocgenConfig, error) {
-	data, err := os.ReadFile(configPath)
+	data, err := os.ReadFile(configPath) //nolint:gosec // path from trusted config discovery
 	if err != nil {
 		return nil, fmt.Errorf("failed to read %s: %w", configPath, err)
 	}
@@ -232,7 +232,7 @@ func LoadWithNotebook(repoDir string) (*DocgenConfig, string, error) {
 				notebookConfigPath := filepath.Join(docgenDir, ConfigFileName)
 				if _, statErr := os.Stat(notebookConfigPath); statErr == nil {
 					// 3. Config exists in notebook, load it
-					data, readErr := os.ReadFile(notebookConfigPath)
+					data, readErr := os.ReadFile(notebookConfigPath) //nolint:gosec // path from trusted notebook discovery
 					if readErr != nil {
 						return nil, "", fmt.Errorf("failed to read %s: %w", notebookConfigPath, readErr)
 					}
@@ -254,7 +254,7 @@ func LoadWithNotebook(repoDir string) (*DocgenConfig, string, error) {
 		return nil, "", os.ErrNotExist
 	}
 
-	data, err := os.ReadFile(repoConfigPath)
+	data, err := os.ReadFile(repoConfigPath) //nolint:gosec // path from trusted config discovery
 	if err != nil {
 		return nil, "", fmt.Errorf("failed to read %s: %w", repoConfigPath, err)
 	}
@@ -270,7 +270,7 @@ func LoadWithNotebook(repoDir string) (*DocgenConfig, string, error) {
 // MergeGenerationConfig merges section-specific overrides with global defaults
 func MergeGenerationConfig(global, section GenerationConfig) GenerationConfig {
 	merged := GenerationConfig{}
-	
+
 	// Start with global settings
 	if global.Temperature != nil {
 		temp := *global.Temperature
@@ -288,7 +288,7 @@ func MergeGenerationConfig(global, section GenerationConfig) GenerationConfig {
 		maxTokens := *global.MaxOutputTokens
 		merged.MaxOutputTokens = &maxTokens
 	}
-	
+
 	// Override with section-specific settings
 	if section.Temperature != nil {
 		merged.Temperature = section.Temperature
@@ -302,6 +302,6 @@ func MergeGenerationConfig(global, section GenerationConfig) GenerationConfig {
 	if section.MaxOutputTokens != nil {
 		merged.MaxOutputTokens = section.MaxOutputTokens
 	}
-	
+
 	return merged
 }

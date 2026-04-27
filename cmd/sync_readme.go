@@ -22,7 +22,7 @@ This command reads a template file (e.g., README.md.tpl), injects a specified do
 
 It provides a single source of truth for your project's overview, keeping the README in sync with your formal documentation.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			
+
 			cwd, err := os.Getwd()
 			if err != nil {
 				return fmt.Errorf("failed to get current working directory: %w", err)

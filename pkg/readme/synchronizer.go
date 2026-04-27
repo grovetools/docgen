@@ -156,7 +156,7 @@ func (s *Synchronizer) Sync(packageDir string) error {
 	} else {
 		// Rewrite media paths for the README context
 		rewrittenSource := rewriteMediaPathsForReadme(string(sourceContent), cfg.Readme.BaseURL)
-		
+
 		prefix := composedContent[:startIdx+len(startMarker)]
 		suffix := composedContent[endIdx:]
 		composedContent = prefix + "\n\n" + strings.TrimSpace(rewrittenSource) + "\n\n" + suffix
@@ -393,7 +393,7 @@ func (s *Synchronizer) generateTOC(cfg *config.DocgenConfig, packageDir string) 
 		outputDir = "docs"
 	}
 
-	var tocLines []string
+	tocLines := make([]string, 0, len(cfg.Sections)+1)
 	tocLines = append(tocLines, "See the [documentation]("+outputDir+"/) for detailed usage instructions:")
 
 	// Sort sections by order
@@ -421,40 +421,4 @@ func (s *Synchronizer) generateTOC(cfg *config.DocgenConfig, packageDir string) 
 	}
 
 	return strings.Join(tocLines, "\n"), nil
-}
-
-// extractDescription attempts to extract a brief description from a documentation file.
-func (s *Synchronizer) extractDescription(filePath, title string) string {
-	content, err := os.ReadFile(filePath)
-	if err != nil {
-		return ""
-	}
-
-	lines := strings.Split(string(content), "\n")
-	
-	// Skip the title line and empty lines, look for the first substantial line
-	for _, line := range lines {
-		line = strings.TrimSpace(line)
-		
-		// Skip title lines (starting with #)
-		if strings.HasPrefix(line, "#") {
-			continue
-		}
-		
-		// Skip empty lines
-		if line == "" {
-			continue
-		}
-		
-		// Take the first substantial line as description
-		if len(line) > 20 { // Only use if it's substantial
-			// Truncate if too long
-			if len(line) > 80 {
-				line = line[:77] + "..."
-			}
-			return line
-		}
-	}
-	
-	return ""
 }

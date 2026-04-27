@@ -9,6 +9,9 @@ import (
 	"path/filepath"
 	"strings"
 
+	"golang.org/x/text/cases"
+	"golang.org/x/text/language"
+
 	coreConfig "github.com/grovetools/core/config"
 	"github.com/grovetools/core/logging"
 	"github.com/grovetools/core/pkg/workspace"
@@ -211,11 +214,11 @@ func (g *Generator) generateInPlace(packageDir string, opts GenerateOptions) err
 		for _, name := range opts.Sections {
 			requestedSections[name] = true
 		}
-		
+
 		// Filter sections and validate
 		var filteredSections []config.SectionConfig
 		var invalidSections []string
-		
+
 		for _, section := range cfg.Sections {
 			// Check if this section was requested
 			if requestedSections[section.Name] {
@@ -223,20 +226,20 @@ func (g *Generator) generateInPlace(packageDir string, opts GenerateOptions) err
 				delete(requestedSections, section.Name) // Remove from map to track found sections
 			}
 		}
-		
+
 		// Check for any requested sections that weren't found
 		for name := range requestedSections {
 			invalidSections = append(invalidSections, name)
 		}
-		
+
 		if len(invalidSections) > 0 {
 			return fmt.Errorf("sections not found in config: %v", invalidSections)
 		}
-		
+
 		sectionsToGenerate = filteredSections
 		g.logger.Infof("Generating %d of %d sections: %v", len(sectionsToGenerate), len(cfg.Sections), opts.Sections)
 	}
-	
+
 	// 5. Generate each section
 	for _, section := range sectionsToGenerate {
 		// Handle different generation types
@@ -336,7 +339,7 @@ func (g *Generator) generateInPlace(packageDir string, opts GenerateOptions) err
 
 		// 6. Write output to the determined output directory
 		outputPath := filepath.Join(outputBaseDir, section.Output)
-		if err := os.MkdirAll(filepath.Dir(outputPath), 0755); err != nil {
+		if err := os.MkdirAll(filepath.Dir(outputPath), 0755); err != nil { //nolint:gosec // internal doc tool
 			return fmt.Errorf("failed to create output directory: %w", err)
 		}
 		if err := os.WriteFile(outputPath, []byte(output), 0644); err != nil {
@@ -535,7 +538,7 @@ func (g *Generator) generateFromSchema(packageDir string, section config.Section
 	}
 
 	// Write to the determined output directory
-	if err := os.MkdirAll(filepath.Dir(outputPath), 0755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(outputPath), 0755); err != nil { //nolint:gosec // internal doc tool
 		return fmt.Errorf("failed to create output directory for schema doc: %w", err)
 	}
 	if err := os.WriteFile(outputPath, []byte(output), 0644); err != nil {
@@ -689,7 +692,7 @@ func (g *Generator) generateFromDocSections(packageDir string, section config.Se
 	}
 
 	// Write output
-	if err := os.MkdirAll(filepath.Dir(outputPath), 0755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(outputPath), 0755); err != nil { //nolint:gosec // internal doc tool
 		return fmt.Errorf("failed to create output directory: %w", err)
 	}
 	if err := os.WriteFile(outputPath, []byte(output), 0644); err != nil {
@@ -711,15 +714,6 @@ type SchemaDocInfo struct {
 	ExamplesPath string
 	// Type is "schema_to_md" or "schema_table"
 	Type string
-}
-
-// findSchemaDoc looks for a schema_to_md or schema_table section in the package's docgen config.
-func (g *Generator) findSchemaDoc(pkgPath string) string {
-	info := g.findSchemaDocInfo(pkgPath)
-	if info == nil {
-		return ""
-	}
-	return info.MarkdownPath
 }
 
 // findSchemaDocInfo looks for schema documentation sections and returns detailed info.
@@ -885,17 +879,17 @@ func (g *Generator) generateFromSchemaTable(packageDir string, section config.Se
 // It preserves the hierarchical structure and includes all metadata for rich UI rendering.
 type ConfigNode struct {
 	Name             string       `json:"name"`
-	Path             string       `json:"path"`                       // Full dotted path (e.g., "groves.mygrove.enabled")
+	Path             string       `json:"path"` // Full dotted path (e.g., "groves.mygrove.enabled")
 	Type             string       `json:"type"`
 	Description      string       `json:"description"`
 	Required         bool         `json:"required,omitempty"`
 	Default          interface{}  `json:"default,omitempty"`
 	Deprecated       bool         `json:"deprecated,omitempty"`
-	Layer            string       `json:"layer,omitempty"`            // global, ecosystem, project
+	Layer            string       `json:"layer,omitempty"` // global, ecosystem, project
 	Priority         int          `json:"priority,omitempty"`
-	Important        bool         `json:"important,omitempty"`        // Key configuration field (★)
+	Important        bool         `json:"important,omitempty"` // Key configuration field (★)
 	Hint             string       `json:"hint,omitempty"`
-	Status           string       `json:"status,omitempty"`           // alpha, beta, stable, deprecated
+	Status           string       `json:"status,omitempty"` // alpha, beta, stable, deprecated
 	StatusMessage    string       `json:"statusMessage,omitempty"`
 	StatusReplacedBy string       `json:"statusReplacedBy,omitempty"`
 	Children         []ConfigNode `json:"children,omitempty"`
@@ -1033,7 +1027,7 @@ func (g *Generator) generateFromSchemaTableJSON(packageDir string, section confi
 
 // schemaPropsToConfigNodes converts schema.Property slice to ConfigNode slice
 func (g *Generator) schemaPropsToConfigNodes(props []schema.Property, prefix string, descriptions map[string]string) []ConfigNode {
-	var nodes []ConfigNode
+	nodes := make([]ConfigNode, 0, len(props))
 
 	for _, prop := range props {
 		// Build full path
@@ -1099,7 +1093,7 @@ func (g *Generator) writeSchemaTableRow(sb *strings.Builder, prop schema.Propert
 	// Layer column with badge-style formatting
 	layer := ""
 	if prop.Layer != "" {
-		layer = fmt.Sprintf("**%s**", strings.Title(prop.Layer))
+		layer = fmt.Sprintf("**%s**", cases.Title(language.English).String(prop.Layer))
 	}
 
 	// Build description with metadata
@@ -1477,67 +1471,6 @@ func (g *Generator) generateFromCapture(packageDir string, section config.Sectio
 	return nil
 }
 
-// generateContextFromRules runs 'cx generate' with a specific rules file and returns the content.
-func (g *Generator) generateContextFromRules(packageDir, rulesFile string) (string, error) {
-	// Resolve rules file path
-	var rulesPath string
-	if filepath.IsAbs(rulesFile) {
-		rulesPath = rulesFile
-	} else {
-		rulesPath = filepath.Join(packageDir, rulesFile)
-	}
-
-	if _, err := os.Stat(rulesPath); err != nil {
-		return "", fmt.Errorf("rules file not found: %s", rulesPath)
-	}
-
-	// We need to temporarily overwrite .grove/rules, run cx generate, then restore.
-	groveDir := filepath.Join(packageDir, ".grove")
-	if err := os.MkdirAll(groveDir, 0755); err != nil {
-		return "", err
-	}
-
-	destRules := filepath.Join(groveDir, "rules")
-
-	// Backup existing rules
-	var backupRules []byte
-	if content, err := os.ReadFile(destRules); err == nil {
-		backupRules = content
-	}
-
-	// Copy new rules
-	newRules, err := os.ReadFile(rulesPath)
-	if err != nil {
-		return "", err
-	}
-	if err := os.WriteFile(destRules, newRules, 0644); err != nil {
-		return "", err
-	}
-
-	// Restore rules defer
-	defer func() {
-		if backupRules != nil {
-			os.WriteFile(destRules, backupRules, 0644)
-		} else {
-			os.Remove(destRules)
-		}
-	}()
-
-	// Run cx generate
-	if err := g.BuildContext(packageDir); err != nil {
-		return "", err
-	}
-
-	// Read context file
-	contextPath := filepath.Join(groveDir, "context")
-	content, err := os.ReadFile(contextPath)
-	if err != nil {
-		return "", err
-	}
-
-	return string(content), nil
-}
-
 func (g *Generator) setupRulesFile(packageDir, rulesFile string) error {
 	// Read the specified rules file
 	// If the rules file path starts with .cx/ or is an absolute path, use it directly
@@ -1594,7 +1527,7 @@ func (g *Generator) CallLLM(promptContent, model string, genConfig config.Genera
 	if err != nil {
 		return "", fmt.Errorf("failed to create temp prompt file: %w", err)
 	}
-	defer os.Remove(promptFile.Name())
+	defer os.Remove(promptFile.Name()) //nolint:errcheck // best-effort temp cleanup
 
 	if _, err := promptFile.WriteString(promptContent); err != nil {
 		return "", fmt.Errorf("failed to write to temp prompt file: %w", err)
@@ -1706,9 +1639,9 @@ func (g *Generator) generateSectionsMode(packageDir, configPath string, topCfg *
 
 	// Discover subdirectories with their own docgen.config.yml
 	type subSection struct {
-		subDir    string              // subdirectory path (e.g., .../docgen/overview)
-		subCfg    *config.DocgenConfig
-		section   config.SectionConfig
+		subDir  string // subdirectory path (e.g., .../docgen/overview)
+		subCfg  *config.DocgenConfig
+		section config.SectionConfig
 	}
 
 	var allSections []subSection
@@ -1941,33 +1874,4 @@ func (g *Generator) generateSectionsMode(packageDir, configPath string, topCfg *
 	}
 
 	return nil
-}
-
-func copyDir(src, dst string) error {
-	return filepath.Walk(src, func(path string, info os.FileInfo, err error) error {
-		if err != nil {
-			return err
-		}
-		relPath, _ := filepath.Rel(src, path)
-		dstPath := filepath.Join(dst, relPath)
-
-		if info.IsDir() {
-			return os.MkdirAll(dstPath, info.Mode())
-		}
-
-		srcFile, err := os.Open(path)
-		if err != nil {
-			return err
-		}
-		defer srcFile.Close()
-
-		dstFile, err := os.Create(dstPath)
-		if err != nil {
-			return err
-		}
-		defer dstFile.Close()
-
-		_, err = io.Copy(dstFile, srcFile)
-		return err
-	})
 }

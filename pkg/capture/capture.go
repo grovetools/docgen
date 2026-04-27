@@ -77,7 +77,7 @@ func (c *Capturer) Capture(binaryPath, outputPath string, opts Options) error {
 		content = c.render(root)
 	}
 
-	if err := os.WriteFile(outputPath, []byte(content), 0644); err != nil {
+	if err := os.WriteFile(outputPath, []byte(content), 0644); err != nil { //nolint:gosec // internal doc tool output
 		return fmt.Errorf("failed to write output file: %w", err)
 	}
 
@@ -100,7 +100,7 @@ func (c *Capturer) crawl(node *CommandNode, currentDepth, maxDepth int, forceCol
 
 	// Set environment to force standard width to avoid wrapping issues in docs
 	// COLUMNS=80 is standard for documentation
-	cmd := exec.Command(binary, cmdArgs...)
+	cmd := exec.Command(binary, cmdArgs...) //nolint:gosec // intentional: captures CLI help output
 	env := append(os.Environ(), "COLUMNS=80")
 	if forceColor {
 		// Force color output for tools that check TTY

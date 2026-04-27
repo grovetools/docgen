@@ -24,9 +24,9 @@ func New(logger *logrus.Logger) *Parser {
 
 // MarkdownSection represents a parsed markdown section
 type MarkdownSection struct {
-	Title       string
-	Content     string
-	CodeBlocks  []string
+	Title      string
+	Content    string
+	CodeBlocks []string
 }
 
 // ParsedDocs represents the complete parsed documentation
@@ -57,57 +57,57 @@ func (p *Parser) GenerateJSON(packageDir string, cfg *config.DocgenConfig) error
 	}
 
 	p.logger.Info("Generating structured JSON from markdown files...")
-	
+
 	docs := &ParsedDocs{
 		Sections: make(map[string]interface{}),
 	}
-	
+
 	// Process each section dynamically
 	for _, section := range cfg.Sections {
 		mdPath := filepath.Join(packageDir, "docs", section.Output)
-		
+
 		// Check if markdown file exists
 		if _, err := os.Stat(mdPath); os.IsNotExist(err) {
 			p.logger.Warnf("Markdown file %s does not exist, skipping", mdPath)
 			continue
 		}
-		
-		content, err := os.ReadFile(mdPath)
+
+		content, err := os.ReadFile(mdPath) //nolint:gosec // path from config
 		if err != nil {
 			p.logger.WithError(err).Errorf("Failed to read markdown file %s", mdPath)
 			continue
 		}
-		
+
 		// Use section name as key
 		key := section.Name
 		if section.JSONKey != "" {
 			key = section.JSONKey
 		}
-		
+
 		// Parse the markdown content into structured data
 		parsedSection := p.parseSection(string(content), section.Title)
 		docs.Sections[key] = parsedSection
-		
+
 		p.logger.Debugf("Parsed section '%s' with %d subsections", key, len(parsedSection.Subsections))
 	}
-	
+
 	// Write JSON output
 	outputPath := filepath.Join(packageDir, cfg.Settings.StructuredOutputFile)
-	
+
 	// Ensure directory exists
-	if err := os.MkdirAll(filepath.Dir(outputPath), 0755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(outputPath), 0755); err != nil { //nolint:gosec // internal doc tool
 		return fmt.Errorf("failed to create output directory: %w", err)
 	}
-	
+
 	jsonData, err := json.MarshalIndent(docs, "", "  ")
 	if err != nil {
 		return fmt.Errorf("failed to marshal JSON: %w", err)
 	}
-	
-	if err := os.WriteFile(outputPath, jsonData, 0644); err != nil {
+
+	if err := os.WriteFile(outputPath, jsonData, 0644); err != nil { //nolint:gosec // internal doc tool output
 		return fmt.Errorf("failed to write JSON file: %w", err)
 	}
-	
+
 	p.logger.Infof("Successfully wrote structured JSON to %s", outputPath)
 	return nil
 }
@@ -116,29 +116,29 @@ func (p *Parser) GenerateJSON(packageDir string, cfg *config.DocgenConfig) error
 func (p *Parser) parseSection(content string, sectionTitle string) Section {
 	// Split into subsections based on ## headings
 	markdownSections := p.splitIntoSections(content, "##")
-	
+
 	section := Section{
 		Title: sectionTitle,
 	}
-	
+
 	// Extract main content (everything before first ## heading)
 	var mainContent []string
 	var codeBlocks []string
 	var inCodeBlock bool
 	var currentCodeBlock []string
-	
+
 	lines := strings.Split(content, "\n")
 	for _, line := range lines {
 		// Stop at first ## heading
 		if strings.HasPrefix(line, "## ") {
 			break
 		}
-		
+
 		// Skip the main # heading
 		if strings.HasPrefix(line, "# ") {
 			continue
 		}
-		
+
 		// Handle code blocks
 		if strings.HasPrefix(line, "```") {
 			if inCodeBlock {
@@ -153,31 +153,27 @@ func (p *Parser) parseSection(content string, sectionTitle string) Section {
 			}
 			continue
 		}
-		
+
 		if inCodeBlock {
 			currentCodeBlock = append(currentCodeBlock, line)
 		} else {
 			mainContent = append(mainContent, line)
 		}
 	}
-	
+
 	section.Content = strings.TrimSpace(strings.Join(mainContent, "\n"))
 	section.CodeBlocks = codeBlocks
-	
+
 	// Parse subsections
 	for _, mdSection := range markdownSections {
 		if mdSection.Title == "" {
 			continue
 		}
-		
-		subsection := Subsection{
-			Title:      mdSection.Title,
-			Content:    mdSection.Content,
-			CodeBlocks: mdSection.CodeBlocks,
-		}
+
+		subsection := Subsection(mdSection)
 		section.Subsections = append(section.Subsections, subsection)
 	}
-	
+
 	return section
 }
 
@@ -187,11 +183,11 @@ func (p *Parser) splitIntoSections(content string, headingPrefix string) []Markd
 	var currentSection *MarkdownSection
 	var inCodeBlock bool
 	var codeBlock []string
-	
+
 	scanner := bufio.NewScanner(strings.NewReader(content))
 	for scanner.Scan() {
 		line := scanner.Text()
-		
+
 		// Handle code blocks
 		if strings.HasPrefix(line, "```") {
 			if inCodeBlock {
@@ -208,19 +204,19 @@ func (p *Parser) splitIntoSections(content string, headingPrefix string) []Markd
 			}
 			continue
 		}
-		
+
 		if inCodeBlock {
 			codeBlock = append(codeBlock, line)
 			continue
 		}
-		
+
 		// Check for section heading
-		if strings.HasPrefix(line, headingPrefix + " ") {
+		if strings.HasPrefix(line, headingPrefix+" ") {
 			// Save previous section if exists
 			if currentSection != nil {
 				sections = append(sections, *currentSection)
 			}
-			
+
 			// Start new section
 			title := strings.TrimSpace(strings.TrimPrefix(line, headingPrefix))
 			currentSection = &MarkdownSection{
@@ -228,7 +224,7 @@ func (p *Parser) splitIntoSections(content string, headingPrefix string) []Markd
 			}
 			continue
 		}
-		
+
 		// Add content to current section
 		if currentSection != nil {
 			if currentSection.Content != "" {
@@ -237,16 +233,16 @@ func (p *Parser) splitIntoSections(content string, headingPrefix string) []Markd
 			currentSection.Content += line
 		}
 	}
-	
+
 	// Save last section
 	if currentSection != nil {
 		sections = append(sections, *currentSection)
 	}
-	
+
 	// Trim content for each section
 	for i := range sections {
 		sections[i].Content = strings.TrimSpace(sections[i].Content)
 	}
-	
+
 	return sections
 }

@@ -39,7 +39,7 @@ type Property struct {
 
 // NewParser creates a new schema parser.
 func NewParser(schemaPath string) (*Parser, error) {
-	data, err := os.ReadFile(schemaPath)
+	data, err := os.ReadFile(schemaPath) //nolint:gosec // path from trusted config
 	if err != nil {
 		return nil, fmt.Errorf("failed to read schema file: %w", err)
 	}
@@ -90,7 +90,7 @@ func propagateLayer(props []Property, parentLayer string) {
 }
 
 func (p *Parser) extractProperties(rawProps map[string]interface{}, required []string) []Property {
-	var props []Property
+	props := make([]Property, 0, len(rawProps))
 
 	// Build required lookup set
 	requiredSet := make(map[string]bool)
