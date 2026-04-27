@@ -226,10 +226,10 @@ func (g *Generator) generateFromTUIKeymaps(packageDir string, section config.Sec
 	}
 
 	outputPath := filepath.Join(outputBaseDir, section.Output)
-	if err := os.MkdirAll(filepath.Dir(outputPath), 0755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(outputPath), 0o755); err != nil {
 		return fmt.Errorf("failed to create output directory: %w", err)
 	}
-	if err := os.WriteFile(outputPath, []byte(sb.String()), 0644); err != nil {
+	if err := os.WriteFile(outputPath, []byte(sb.String()), 0o644); err != nil {
 		return fmt.Errorf("failed to write TUI keymaps output: %w", err)
 	}
 
@@ -412,7 +412,7 @@ Output format (JSON only, no markdown fences):
 
 	// Write output
 	outputPath := filepath.Join(outputBaseDir, section.Output)
-	if err := os.MkdirAll(filepath.Dir(outputPath), 0755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(outputPath), 0o755); err != nil {
 		return fmt.Errorf("failed to create output directory: %w", err)
 	}
 
@@ -421,7 +421,7 @@ Output format (JSON only, no markdown fences):
 		return fmt.Errorf("failed to marshal descriptions: %w", err)
 	}
 
-	if err := os.WriteFile(outputPath, jsonBytes, 0644); err != nil {
+	if err := os.WriteFile(outputPath, jsonBytes, 0o644); err != nil {
 		return fmt.Errorf("failed to write descriptions file: %w", err)
 	}
 

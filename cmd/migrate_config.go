@@ -97,7 +97,7 @@ func runMigrateConfig(cmd *cobra.Command, args []string) error {
 	}
 
 	// 6. Create target directory
-	if err := os.MkdirAll(targetDir, 0755); err != nil {
+	if err := os.MkdirAll(targetDir, 0o755); err != nil {
 		return fmt.Errorf("could not create target directory: %w", err)
 	}
 
@@ -107,7 +107,7 @@ func runMigrateConfig(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("could not read %s: %w", sourceFile, err)
 	}
 
-	if err := os.WriteFile(targetFile, data, 0644); err != nil {
+	if err := os.WriteFile(targetFile, data, 0o644); err != nil {
 		return fmt.Errorf("could not write %s: %w", targetFile, err)
 	}
 

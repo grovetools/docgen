@@ -113,7 +113,7 @@ func runMigratePrompts(cmd *cobra.Command, args []string) error {
 	}
 
 	// 6. Create target directory
-	if err := os.MkdirAll(targetDir, 0755); err != nil {
+	if err := os.MkdirAll(targetDir, 0o755); err != nil {
 		return fmt.Errorf("could not create target directory: %w", err)
 	}
 
@@ -127,7 +127,7 @@ func runMigratePrompts(cmd *cobra.Command, args []string) error {
 			return fmt.Errorf("could not read %s: %w", srcPath, err)
 		}
 
-		if err := os.WriteFile(dstPath, data, 0644); err != nil {
+		if err := os.WriteFile(dstPath, data, 0o644); err != nil {
 			return fmt.Errorf("could not write %s: %w", dstPath, err)
 		}
 
@@ -196,5 +196,5 @@ func updateConfigFilePromptPaths(configPath string) error {
 		return err
 	}
 
-	return os.WriteFile(configPath, newData, 0644)
+	return os.WriteFile(configPath, newData, 0o644)
 }

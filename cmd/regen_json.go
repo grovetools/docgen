@@ -17,7 +17,6 @@ func newRegenJSONCmd() *cobra.Command {
 
 This command does not call any LLMs or modify the markdown files. It's a quick way to update the JSON output if the parsing logic changes or if you have manually edited the markdown files.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-
 			cwd, err := os.Getwd()
 			if err != nil {
 				return err

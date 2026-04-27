@@ -177,7 +177,7 @@ func (s *Synchronizer) Sync(packageDir string) error {
 
 	// Write the final README.md
 	outputPath := filepath.Join(packageDir, cfg.Readme.Output)
-	if err := os.WriteFile(outputPath, []byte(composedContent), 0644); err != nil {
+	if err := os.WriteFile(outputPath, []byte(composedContent), 0o644); err != nil {
 		return fmt.Errorf("failed to write output README file %s: %w", outputPath, err)
 	}
 

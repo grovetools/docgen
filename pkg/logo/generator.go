@@ -207,12 +207,12 @@ func (g *Generator) Generate(cfg Config) error {
 	buf.WriteString("</svg>\n")
 
 	// Ensure output directory exists
-	if err := os.MkdirAll(filepath.Dir(cfg.OutputPath), 0755); err != nil { //nolint:gosec // internal doc tool
+	if err := os.MkdirAll(filepath.Dir(cfg.OutputPath), 0o755); err != nil { //nolint:gosec // internal doc tool
 		return fmt.Errorf("failed to create output directory: %w", err)
 	}
 
 	// Write the output file
-	if err := os.WriteFile(cfg.OutputPath, buf.Bytes(), 0644); err != nil { //nolint:gosec // internal doc tool output
+	if err := os.WriteFile(cfg.OutputPath, buf.Bytes(), 0o644); err != nil { //nolint:gosec // internal doc tool output
 		return fmt.Errorf("failed to write output SVG: %w", err)
 	}
 

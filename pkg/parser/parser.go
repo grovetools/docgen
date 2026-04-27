@@ -95,7 +95,7 @@ func (p *Parser) GenerateJSON(packageDir string, cfg *config.DocgenConfig) error
 	outputPath := filepath.Join(packageDir, cfg.Settings.StructuredOutputFile)
 
 	// Ensure directory exists
-	if err := os.MkdirAll(filepath.Dir(outputPath), 0755); err != nil { //nolint:gosec // internal doc tool
+	if err := os.MkdirAll(filepath.Dir(outputPath), 0o755); err != nil { //nolint:gosec // internal doc tool
 		return fmt.Errorf("failed to create output directory: %w", err)
 	}
 
@@ -104,7 +104,7 @@ func (p *Parser) GenerateJSON(packageDir string, cfg *config.DocgenConfig) error
 		return fmt.Errorf("failed to marshal JSON: %w", err)
 	}
 
-	if err := os.WriteFile(outputPath, jsonData, 0644); err != nil { //nolint:gosec // internal doc tool output
+	if err := os.WriteFile(outputPath, jsonData, 0o644); err != nil { //nolint:gosec // internal doc tool output
 		return fmt.Errorf("failed to write JSON file: %w", err)
 	}
 

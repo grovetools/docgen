@@ -158,7 +158,7 @@ func runSyncToRepo(cmd *cobra.Command, args []string) error {
 	}
 
 	// 8. Create target directory
-	if err := os.MkdirAll(targetDir, 0755); err != nil {
+	if err := os.MkdirAll(targetDir, 0o755); err != nil {
 		return fmt.Errorf("could not create target directory: %w", err)
 	}
 
@@ -178,7 +178,7 @@ func runSyncToRepo(cmd *cobra.Command, args []string) error {
 		}
 
 		// Create subdirectories if needed
-		if err := os.MkdirAll(filepath.Dir(dstPath), 0755); err != nil {
+		if err := os.MkdirAll(filepath.Dir(dstPath), 0o755); err != nil {
 			return fmt.Errorf("could not create directory for %s: %w", dstPath, err)
 		}
 

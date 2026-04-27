@@ -129,7 +129,7 @@ func (a *Aggregator) Aggregate(outputDir string, mode string, transform string) 
 	m.GeneratedAt = time.Now()
 
 	// Ensure output directory exists
-	if err := os.MkdirAll(outputDir, 0755); err != nil { //nolint:gosec // internal doc tool
+	if err := os.MkdirAll(outputDir, 0o755); err != nil { //nolint:gosec // internal doc tool
 		return fmt.Errorf("failed to create output directory: %w", err)
 	}
 
@@ -311,7 +311,7 @@ func (a *Aggregator) aggregateEcosystem(rootDir string, m *manifest.Manifest, ou
 		// Copy only the markdown output files specified in the config, not everything in docs/
 		// Create output directory only if we have sections to copy
 		distDest := filepath.Join(outputDir, wsName)
-		if err := os.MkdirAll(distDest, 0755); err != nil { //nolint:gosec // internal doc tool
+		if err := os.MkdirAll(distDest, 0o755); err != nil { //nolint:gosec // internal doc tool
 			a.logger.WithError(err).Errorf("Failed to create output directory for %s", wsName)
 			continue
 		}
@@ -371,7 +371,7 @@ func (a *Aggregator) aggregateEcosystem(rootDir string, m *manifest.Manifest, ou
 					}
 					processedData := trans.TransformStandardDoc(srcData, opts)
 
-					if err := os.WriteFile(destFile, processedData, 0644); err != nil { //nolint:gosec // internal doc tool output
+					if err := os.WriteFile(destFile, processedData, 0o644); err != nil { //nolint:gosec // internal doc tool output
 						a.logger.WithError(err).Errorf("Failed to write transformed %s", destFile)
 						continue
 					}
@@ -391,7 +391,7 @@ func (a *Aggregator) aggregateEcosystem(rootDir string, m *manifest.Manifest, ou
 					// Add a header to indicate this is a placeholder
 					placeholder := fmt.Sprintf("# %s\n\n*Note: This is a placeholder generated from the prompt file. Full documentation is pending.*\n\n---\n\n%s", section.Title, string(promptData))
 
-					if err := os.WriteFile(destFile, []byte(placeholder), 0644); err != nil { //nolint:gosec // internal doc tool output
+					if err := os.WriteFile(destFile, []byte(placeholder), 0o644); err != nil { //nolint:gosec // internal doc tool output
 						a.logger.WithError(err).Errorf("Failed to write placeholder %s", destFile)
 						continue
 					}
@@ -426,7 +426,7 @@ func (a *Aggregator) aggregateEcosystem(rootDir string, m *manifest.Manifest, ou
 					processedData = trans.TransformStandardDoc(processedData, opts)
 				}
 
-				if err := os.WriteFile(destFile, processedData, 0644); err != nil { //nolint:gosec // internal doc tool output
+				if err := os.WriteFile(destFile, processedData, 0o644); err != nil { //nolint:gosec // internal doc tool output
 					a.logger.WithError(err).Errorf("Failed to write %s", destFile)
 					continue
 				}
@@ -442,7 +442,7 @@ func (a *Aggregator) aggregateEcosystem(rootDir string, m *manifest.Manifest, ou
 						if err != nil {
 							a.logger.WithError(err).Errorf("Failed to read companion JSON %s", jsonSrcFile)
 						} else {
-							if err := os.WriteFile(jsonDestFile, jsonData, 0644); err != nil { //nolint:gosec // internal doc tool output
+							if err := os.WriteFile(jsonDestFile, jsonData, 0o644); err != nil { //nolint:gosec // internal doc tool output
 								a.logger.WithError(err).Errorf("Failed to write companion JSON %s", jsonDestFile)
 							} else {
 								a.logger.Infof("Copied companion JSON for %s/%s", wsName, jsonFile)
@@ -489,7 +489,7 @@ func (a *Aggregator) aggregateEcosystem(rootDir string, m *manifest.Manifest, ou
 		// Copy additional logo files specified in logos: config
 		if len(docCfg.Logos) > 0 {
 			imagesDestPath := filepath.Join(distDest, "images")
-			if err := os.MkdirAll(imagesDestPath, 0755); err != nil { //nolint:gosec // internal doc tool
+			if err := os.MkdirAll(imagesDestPath, 0o755); err != nil { //nolint:gosec // internal doc tool
 				a.logger.WithError(err).Errorf("Failed to create images directory for logos: %s", wsName)
 			} else {
 				for _, logoPath := range docCfg.Logos {
@@ -548,7 +548,7 @@ func (a *Aggregator) aggregateEcosystem(rootDir string, m *manifest.Manifest, ou
 					changelogData = trans.TransformStandardDoc(changelogData, opts)
 				}
 
-				if err := os.WriteFile(changelogDest, changelogData, 0644); err != nil { //nolint:gosec // internal doc tool output
+				if err := os.WriteFile(changelogDest, changelogData, 0o644); err != nil { //nolint:gosec // internal doc tool output
 					a.logger.WithError(err).Errorf("Failed to write CHANGELOG.md for %s", wsName)
 				} else {
 					// Update the manifest with the changelog path
@@ -843,7 +843,7 @@ func (a *Aggregator) processWebsiteSections(wsPath string, cfg *docgenConfig.Doc
 
 		// Create output directory for this section
 		destDir := filepath.Join(outputDir, sectionName)
-		if err := os.MkdirAll(destDir, 0755); err != nil { //nolint:gosec // internal doc tool
+		if err := os.MkdirAll(destDir, 0o755); err != nil { //nolint:gosec // internal doc tool
 			a.logger.Errorf("Failed to create dest dir %s: %v", destDir, err)
 			continue
 		}
@@ -913,7 +913,7 @@ func (a *Aggregator) processWebsiteSections(wsPath string, cfg *docgenConfig.Doc
 
 			// Write file
 			destPath := filepath.Join(destDir, sec.Output)
-			if err := os.WriteFile(destPath, content, 0644); err != nil { //nolint:gosec // internal doc tool output
+			if err := os.WriteFile(destPath, content, 0o644); err != nil { //nolint:gosec // internal doc tool output
 				a.logger.Warnf("Failed to write %s: %v", sec.Output, err)
 				continue
 			}
@@ -1043,7 +1043,7 @@ func (a *Aggregator) aggregateConcepts(wsPath string, wsName string, docCfg *doc
 
 		// 6. Create output directory: {dist}/{pkg}/concepts/{concept-id}/
 		conceptDestDir := filepath.Join(distDest, "concepts", conceptID)
-		if err := os.MkdirAll(conceptDestDir, 0755); err != nil { //nolint:gosec // internal doc tool
+		if err := os.MkdirAll(conceptDestDir, 0o755); err != nil { //nolint:gosec // internal doc tool
 			a.logger.Errorf("Failed to create concept output dir: %v", err)
 			continue
 		}
@@ -1085,7 +1085,7 @@ concept_id: "%s"
 
 			// Write to destination
 			destPath := filepath.Join(conceptDestDir, mdFile)
-			if err := os.WriteFile(destPath, []byte(newContent), 0644); err != nil {
+			if err := os.WriteFile(destPath, []byte(newContent), 0o644); err != nil {
 				a.logger.Errorf("Failed to write %s: %v", destPath, err)
 				continue
 			}

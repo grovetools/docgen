@@ -46,7 +46,6 @@ Examples:
   docgen customize --recipe-type prompts  # Create plan with prompts recipe
   flow run                                # Run the plan after creation`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-
 			// Check if this is the print-recipes subcommand
 			if len(args) > 0 && args[0] == "print-recipes" {
 				return printRecipes()
@@ -197,7 +196,6 @@ func loadDocgenConfig(dir string) (*config.DocgenConfig, error) {
 
 // printRecipes prints all available recipes in JSON format (for grove-flow integration)
 func printRecipes() error {
-
 	collection := make(recipes.RecipeCollection)
 
 	// Load the docgen-customize-agent recipe
@@ -259,7 +257,6 @@ func loadDocgenRecipe(recipeName string, embedFS fs.FS) (recipes.RecipeDefinitio
 
 		return nil
 	})
-
 	if err != nil {
 		return recipe, fmt.Errorf("failed to walk embedded files: %w", err)
 	}

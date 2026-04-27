@@ -26,7 +26,7 @@ func main() {
 	}
 
 	// Write to schema directory
-	if err := os.WriteFile("schema/docgen.config.schema.json", data, 0644); err != nil { //nolint:gosec // fixed output path
+	if err := os.WriteFile("schema/docgen.config.schema.json", data, 0o644); err != nil { //nolint:gosec // fixed output path
 		log.Fatalf("Error writing schema file: %v", err)
 	}
 

@@ -178,11 +178,11 @@ order: %d
 
 		// Write output
 		outputPath := filepath.Join(outputBaseDir, outputDir, mdFile)
-		if err := os.MkdirAll(filepath.Dir(outputPath), 0755); err != nil { //nolint:gosec // internal doc tool
+		if err := os.MkdirAll(filepath.Dir(outputPath), 0o755); err != nil { //nolint:gosec // internal doc tool
 			g.logger.Errorf("Failed to create output directory for %s: %v", mdFile, err)
 			continue
 		}
-		if err := os.WriteFile(outputPath, []byte(newContent), 0644); err != nil {
+		if err := os.WriteFile(outputPath, []byte(newContent), 0o644); err != nil {
 			g.logger.Errorf("Failed to write output for %s: %v", mdFile, err)
 			continue
 		}

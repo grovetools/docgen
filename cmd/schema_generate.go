@@ -17,7 +17,6 @@ func newSchemaGenerateCmd() *cobra.Command {
 This command provides a standardized way to trigger schema generation.
 It relies on 'go:generate' directives within the Go source code to execute the actual schema generation tools.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-
 			ulog.Info("Running 'go generate ./...' to create schemas").Emit()
 
 			execCmd := exec.Command("go", "generate", "./...")

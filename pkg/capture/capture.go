@@ -77,7 +77,7 @@ func (c *Capturer) Capture(binaryPath, outputPath string, opts Options) error {
 		content = c.render(root)
 	}
 
-	if err := os.WriteFile(outputPath, []byte(content), 0644); err != nil { //nolint:gosec // internal doc tool output
+	if err := os.WriteFile(outputPath, []byte(content), 0o644); err != nil { //nolint:gosec // internal doc tool output
 		return fmt.Errorf("failed to write output file: %w", err)
 	}
 

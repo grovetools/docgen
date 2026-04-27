@@ -339,10 +339,10 @@ func (g *Generator) generateInPlace(packageDir string, opts GenerateOptions) err
 
 		// 6. Write output to the determined output directory
 		outputPath := filepath.Join(outputBaseDir, section.Output)
-		if err := os.MkdirAll(filepath.Dir(outputPath), 0755); err != nil { //nolint:gosec // internal doc tool
+		if err := os.MkdirAll(filepath.Dir(outputPath), 0o755); err != nil { //nolint:gosec // internal doc tool
 			return fmt.Errorf("failed to create output directory: %w", err)
 		}
-		if err := os.WriteFile(outputPath, []byte(output), 0644); err != nil {
+		if err := os.WriteFile(outputPath, []byte(output), 0o644); err != nil {
 			return fmt.Errorf("failed to write section output: %w", err)
 		}
 		g.logger.Infof("Successfully wrote section '%s' to %s", section.Name, outputPath)
@@ -538,10 +538,10 @@ func (g *Generator) generateFromSchema(packageDir string, section config.Section
 	}
 
 	// Write to the determined output directory
-	if err := os.MkdirAll(filepath.Dir(outputPath), 0755); err != nil { //nolint:gosec // internal doc tool
+	if err := os.MkdirAll(filepath.Dir(outputPath), 0o755); err != nil { //nolint:gosec // internal doc tool
 		return fmt.Errorf("failed to create output directory for schema doc: %w", err)
 	}
-	if err := os.WriteFile(outputPath, []byte(output), 0644); err != nil {
+	if err := os.WriteFile(outputPath, []byte(output), 0o644); err != nil {
 		return fmt.Errorf("failed to write schema doc output: %w", err)
 	}
 	g.logger.Infof("Successfully wrote schema doc section '%s' to %s", section.Name, outputPath)
@@ -692,10 +692,10 @@ func (g *Generator) generateFromDocSections(packageDir string, section config.Se
 	}
 
 	// Write output
-	if err := os.MkdirAll(filepath.Dir(outputPath), 0755); err != nil { //nolint:gosec // internal doc tool
+	if err := os.MkdirAll(filepath.Dir(outputPath), 0o755); err != nil { //nolint:gosec // internal doc tool
 		return fmt.Errorf("failed to create output directory: %w", err)
 	}
-	if err := os.WriteFile(outputPath, []byte(output), 0644); err != nil {
+	if err := os.WriteFile(outputPath, []byte(output), 0o644); err != nil {
 		return fmt.Errorf("failed to write doc sections output: %w", err)
 	}
 	g.logger.Infof("Successfully wrote doc sections '%s' to %s", section.Name, outputPath)
@@ -864,10 +864,10 @@ func (g *Generator) generateFromSchemaTable(packageDir string, section config.Se
 
 	// Write output
 	outputPath := filepath.Join(outputBaseDir, section.Output)
-	if err := os.MkdirAll(filepath.Dir(outputPath), 0755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(outputPath), 0o755); err != nil {
 		return fmt.Errorf("failed to create output directory: %w", err)
 	}
-	if err := os.WriteFile(outputPath, []byte(sb.String()), 0644); err != nil {
+	if err := os.WriteFile(outputPath, []byte(sb.String()), 0o644); err != nil {
 		return fmt.Errorf("failed to write schema table output: %w", err)
 	}
 
@@ -973,7 +973,7 @@ func (g *Generator) generateFromSchemaTableJSON(packageDir string, section confi
 	}
 
 	// Create output directory
-	if err := os.MkdirAll(outputBaseDir, 0755); err != nil {
+	if err := os.MkdirAll(outputBaseDir, 0o755); err != nil {
 		return fmt.Errorf("failed to create output directory: %w", err)
 	}
 
@@ -984,7 +984,7 @@ func (g *Generator) generateFromSchemaTableJSON(packageDir string, section confi
 		return fmt.Errorf("failed to marshal config schema to JSON: %w", err)
 	}
 
-	if err := os.WriteFile(jsonPath, jsonBytes, 0644); err != nil {
+	if err := os.WriteFile(jsonPath, jsonBytes, 0o644); err != nil {
 		return fmt.Errorf("failed to write schema table JSON output: %w", err)
 	}
 	g.logger.Infof("Successfully wrote schema table JSON '%s' to %s", section.Name, jsonPath)
@@ -1016,7 +1016,7 @@ func (g *Generator) generateFromSchemaTableJSON(packageDir string, section confi
 `, section.Title, configRefJSON)
 
 		mdPath := filepath.Join(outputBaseDir, mdOutput)
-		if err := os.WriteFile(mdPath, []byte(mdContent), 0644); err != nil {
+		if err := os.WriteFile(mdPath, []byte(mdContent), 0o644); err != nil {
 			return fmt.Errorf("failed to write schema table markdown wrapper: %w", err)
 		}
 		g.logger.Infof("Successfully wrote schema table markdown wrapper to %s", mdPath)
@@ -1246,7 +1246,7 @@ Output format (JSON only, no markdown fences):
 
 	// Write output
 	outputPath := filepath.Join(outputBaseDir, section.Output)
-	if err := os.MkdirAll(filepath.Dir(outputPath), 0755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(outputPath), 0o755); err != nil {
 		return fmt.Errorf("failed to create output directory: %w", err)
 	}
 
@@ -1255,7 +1255,7 @@ Output format (JSON only, no markdown fences):
 		return fmt.Errorf("failed to marshal descriptions: %w", err)
 	}
 
-	if err := os.WriteFile(outputPath, jsonBytes, 0644); err != nil {
+	if err := os.WriteFile(outputPath, jsonBytes, 0o644); err != nil {
 		return fmt.Errorf("failed to write descriptions file: %w", err)
 	}
 
@@ -1368,7 +1368,7 @@ Output format (JSON only, no markdown fences):
 
 	// Write Output
 	outputPath := filepath.Join(outputBaseDir, section.Output)
-	if err := os.MkdirAll(filepath.Dir(outputPath), 0755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(outputPath), 0o755); err != nil {
 		return fmt.Errorf("failed to create output directory: %w", err)
 	}
 
@@ -1377,7 +1377,7 @@ Output format (JSON only, no markdown fences):
 		return fmt.Errorf("failed to marshal examples: %w", err)
 	}
 
-	if err := os.WriteFile(outputPath, jsonBytes, 0644); err != nil {
+	if err := os.WriteFile(outputPath, jsonBytes, 0o644); err != nil {
 		return fmt.Errorf("failed to write examples file: %w", err)
 	}
 
@@ -1459,7 +1459,7 @@ func (g *Generator) generateFromCapture(packageDir string, section config.Sectio
 	}
 
 	outputPath := filepath.Join(outputBaseDir, section.Output)
-	if err := os.MkdirAll(filepath.Dir(outputPath), 0755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(outputPath), 0o755); err != nil {
 		return fmt.Errorf("failed to create output directory for capture: %w", err)
 	}
 
@@ -1489,14 +1489,14 @@ func (g *Generator) setupRulesFile(packageDir, rulesFile string) error {
 
 	// Ensure .grove directory exists
 	groveDir := filepath.Join(packageDir, ".grove")
-	if err := os.MkdirAll(groveDir, 0755); err != nil {
+	if err := os.MkdirAll(groveDir, 0o755); err != nil {
 		return fmt.Errorf("failed to create .grove directory: %w", err)
 	}
 
 	// Copy the rules file content to .grove/rules
 	// Since we're now operating locally, no path adjustments are needed
 	groveRulesPath := filepath.Join(groveDir, "rules")
-	if err := os.WriteFile(groveRulesPath, content, 0644); err != nil {
+	if err := os.WriteFile(groveRulesPath, content, 0o644); err != nil {
 		return fmt.Errorf("failed to write .grove/rules: %w", err)
 	}
 
@@ -1860,10 +1860,10 @@ func (g *Generator) generateSectionsMode(packageDir, configPath string, topCfg *
 
 		// Write output to the subdirectory's docs/ folder
 		outputPath := filepath.Join(outputDir, ss.section.Output)
-		if err := os.MkdirAll(filepath.Dir(outputPath), 0755); err != nil {
+		if err := os.MkdirAll(filepath.Dir(outputPath), 0o755); err != nil {
 			return fmt.Errorf("failed to create output directory: %w", err)
 		}
-		if err := os.WriteFile(outputPath, []byte(output), 0644); err != nil {
+		if err := os.WriteFile(outputPath, []byte(output), 0o644); err != nil {
 			return fmt.Errorf("failed to write section output: %w", err)
 		}
 		g.logger.Infof("Successfully wrote section '%s' to %s", ss.section.Name, outputPath)

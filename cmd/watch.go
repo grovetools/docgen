@@ -601,10 +601,10 @@ concept_id: "%s"
 
 			// Write to website
 			destPath := filepath.Join(w.WebsiteDir(), "src/content/docs", pkg.pkgName, "concepts", conceptID, mdFile)
-			if err := os.MkdirAll(filepath.Dir(destPath), 0755); err != nil {
+			if err := os.MkdirAll(filepath.Dir(destPath), 0o755); err != nil {
 				continue
 			}
-			if err := os.WriteFile(destPath, []byte(newContent), 0644); err != nil {
+			if err := os.WriteFile(destPath, []byte(newContent), 0o644); err != nil {
 				ulog.Error("Failed to write concept doc").Field("file", destPath).Err(err).Emit()
 			}
 		}
@@ -710,10 +710,10 @@ func rebuildWebsiteSections(pkg *watchedPackage, w *writer.AstroWriter, mode str
 
 			// Write to website content collection
 			destPath := filepath.Join(w.WebsiteDir(), "src/content", sectionName, sec.Output)
-			if err := os.MkdirAll(filepath.Dir(destPath), 0755); err != nil {
+			if err := os.MkdirAll(filepath.Dir(destPath), 0o755); err != nil {
 				continue
 			}
-			if err := os.WriteFile(destPath, transformed, 0644); err != nil {
+			if err := os.WriteFile(destPath, transformed, 0o644); err != nil {
 				ulog.Error("Failed to write section file").Field("file", destPath).Err(err).Emit()
 			}
 		}
@@ -833,7 +833,7 @@ func updateManifestSidebar(pkgName string, docCfg *config.DocgenConfig, mode str
 	if err != nil {
 		return
 	}
-	_ = os.WriteFile(manifestPath, data, 0644)
+	_ = os.WriteFile(manifestPath, data, 0o644)
 }
 
 // getPackageVersion gets version from git tags

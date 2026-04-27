@@ -104,7 +104,7 @@ func (e *Enricher) Enrich(projectDir, schemaPath string, inPlace bool) error {
 	}
 
 	if inPlace {
-		if err := os.WriteFile(schemaPath, updatedData, 0644); err != nil {
+		if err := os.WriteFile(schemaPath, updatedData, 0o644); err != nil {
 			return fmt.Errorf("failed to write updated schema file: %w", err)
 		}
 		e.logger.Infof("Successfully enriched schema in-place: %s", schemaPath)
@@ -285,13 +285,13 @@ func (e *Enricher) setupRulesFile(packageDir, rulesFile string) error {
 
 	// Ensure .grove directory exists
 	groveDir := filepath.Join(packageDir, ".grove")
-	if err := os.MkdirAll(groveDir, 0755); err != nil {
+	if err := os.MkdirAll(groveDir, 0o755); err != nil {
 		return fmt.Errorf("failed to create .grove directory: %w", err)
 	}
 
 	// Copy the rules file content to .grove/rules
 	groveRulesPath := filepath.Join(groveDir, "rules")
-	if err := os.WriteFile(groveRulesPath, content, 0644); err != nil {
+	if err := os.WriteFile(groveRulesPath, content, 0o644); err != nil {
 		return fmt.Errorf("failed to write .grove/rules: %w", err)
 	}
 
