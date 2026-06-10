@@ -1570,8 +1570,13 @@ func (g *Generator) CallLLM(promptContent, model string, genConfig config.Genera
 
 	err = cmd.Run()
 	if err != nil {
-		// Log the stderr for debugging
+		// Log the full stderr for debugging
 		g.logger.Debugf("LLM stderr: %s", stderr.String())
+		// Surface the underlying cause (e.g. missing API key) instead of
+		// just "exit status 1" by including the tail of stderr.
+		if tail := lastLines(stderr.String(), 10); tail != "" {
+			return "", fmt.Errorf("grove llm request failed: %w; stderr:\n%s", err, tail)
+		}
 		return "", fmt.Errorf("grove llm request failed: %w", err)
 	}
 
@@ -1618,6 +1623,20 @@ func (g *Generator) CallLLM(promptContent, model string, genConfig config.Genera
 	// The response should be clean markdown at this point
 
 	return response, nil
+}
+
+// lastLines returns the last n lines of s, with surrounding whitespace trimmed.
+// It returns "" if s contains no non-whitespace content.
+func lastLines(s string, n int) string {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return ""
+	}
+	lines := strings.Split(s, "\n")
+	if len(lines) > n {
+		lines = lines[len(lines)-n:]
+	}
+	return strings.Join(lines, "\n")
 }
 
 // generateSectionsMode handles output_mode: sections where the top-level config
