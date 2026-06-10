@@ -183,7 +183,7 @@ func copyAndCustomizeConfig(src, dest string, opts InitOptions) error {
 	}
 
 	// Add the schema comment back at the top
-	finalContent := "# yaml-language-server: $schema=https://raw.githubusercontent.com/mattsolo1/grove-docgen/main/schema/docgen.config.schema.json\n" + string(updatedContent)
+	finalContent := "# yaml-language-server: $schema=https://raw.githubusercontent.com/grovetools/grove-docgen/main/schema/docgen.config.schema.json\n" + string(updatedContent)
 
 	// Clean up the YAML formatting
 	finalContent = strings.ReplaceAll(finalContent, "\n    ", "\n  ")
