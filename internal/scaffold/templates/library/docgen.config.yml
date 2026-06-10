@@ -1,4 +1,4 @@
-# yaml-language-server: $schema=https://raw.githubusercontent.com/mattsolo1/grove-docgen/main/schema/docgen.config.schema.json
+# yaml-language-server: $schema=https://raw.githubusercontent.com/grovetools/grove-docgen/main/schema/docgen.config.schema.json
 enabled: true
 title: "My Library"
 description: "A brief description of this library."
