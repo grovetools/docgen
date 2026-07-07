@@ -77,6 +77,8 @@ type SettingsConfig struct {
 	SystemPrompt         string   `yaml:"system_prompt,omitempty" jsonschema:"description=Path to system prompt file or 'default' to use built-in" jsonschema_extras:"x-layer=project,x-priority=25"`
 	OutputDir            string   `yaml:"output_dir,omitempty" jsonschema:"description=Output directory for generated docs" jsonschema_extras:"x-layer=project,x-priority=26"`
 	TocDepth             int      `yaml:"toc_depth,omitempty" jsonschema:"description=Maximum heading level to show in Table of Contents (default: 3)" jsonschema_extras:"x-layer=project,x-priority=27"`
+	CacheFanout          bool     `yaml:"cache_fanout,omitempty" jsonschema:"description=Route claude-* section generation through the grove-anthropic shared-prefix cache fan-out (one cached repo-context prefix, per-section task requests) instead of shelling grove llm request. Only takes effect when the effective model is a Claude model." jsonschema_extras:"x-layer=project,x-priority=28"`
+	CacheTTL             string   `yaml:"cache_ttl,omitempty" jsonschema:"description=Cache TTL for the fan-out shared prefix: 5m (default) or 1h. A longer TTL pays off when a generation wave or repeated re-runs span more than five minutes,enum=5m,enum=1h" jsonschema_extras:"x-layer=project,x-priority=29"`
 	GenerationConfig     `yaml:",inline"`
 }
 

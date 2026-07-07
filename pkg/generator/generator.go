@@ -2,6 +2,7 @@ package generator
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -20,6 +21,7 @@ import (
 	"github.com/grovetools/docgen/pkg/config"
 	"github.com/grovetools/docgen/pkg/parser"
 	"github.com/grovetools/docgen/pkg/schema"
+	"github.com/grovetools/grove-anthropic/pkg/anthropic"
 	"github.com/sirupsen/logrus"
 )
 
@@ -28,11 +30,22 @@ var ulog = logging.NewUnifiedLogger("grove-docgen")
 // Generator handles the documentation generation for a single package.
 type Generator struct {
 	logger *logrus.Logger
+
+	// Fan-out state, populated per run when the effective model is a Claude
+	// model (see setupFanout). When prefix is non-nil, CallLLM routes claude-*
+	// section generation through the shared-prefix cache fan-out instead of
+	// shelling `grove llm request`. forceModel, when set, overrides every
+	// section's model for the run (so the whole wave shares one prefix).
+	prefix         *anthropic.SharedPrefix
+	forceModel     string
+	currentSection string // label for per-section usage logging
 }
 
 // GenerateOptions configures what sections to generate
 type GenerateOptions struct {
 	Sections []string // List of section names to generate (empty means all)
+	Model    string   // Override the model for all sections (enables claude-* fan-out)
+	CacheTTL string   // Fan-out shared-prefix cache TTL: "5m" (default) or "1h"
 }
 
 func New(logger *logrus.Logger) *Generator {
@@ -175,10 +188,13 @@ func (g *Generator) generateInPlace(packageDir string, opts GenerateOptions) err
 			Emit()
 	}
 
-	// 2. Setup rules file if specified
+	// 2. Setup rules file if specified. A configured-but-missing rules file is
+	// non-fatal: cx generate falls back to the workspace/notebook default rules,
+	// which still yields usable context. This matches how the schema section
+	// generators already treat setupRulesFile errors (warn, don't abort).
 	if cfg.Settings.RulesFile != "" {
 		if err := g.setupRulesFile(packageDir, cfg.Settings.RulesFile); err != nil {
-			return fmt.Errorf("failed to setup rules file: %w", err)
+			g.logger.WithError(err).Warnf("Failed to setup rules file %s; proceeding with default cx context", cfg.Settings.RulesFile)
 		}
 	}
 
@@ -187,6 +203,11 @@ func (g *Generator) generateInPlace(packageDir string, opts GenerateOptions) err
 	if err := g.BuildContext(packageDir); err != nil {
 		return fmt.Errorf("failed to build context: %w", err)
 	}
+
+	// 3a. Enable Claude cache fan-out for this run when applicable. Must run
+	// after BuildContext so the cx context exists to form the shared prefix.
+	teardownFanout := g.setupFanout(packageDir, cfg, opts)
+	defer teardownFanout()
 
 	// 3. Load system prompt if configured
 	systemPrompt := ""
@@ -242,6 +263,7 @@ func (g *Generator) generateInPlace(packageDir string, opts GenerateOptions) err
 
 	// 5. Generate each section
 	for _, section := range sectionsToGenerate {
+		g.currentSection = section.Name
 		// Handle different generation types
 		if section.Type == "schema_to_md" {
 			if err := g.generateFromSchema(packageDir, section, cfg, outputBaseDir); err != nil {
@@ -1515,11 +1537,30 @@ func (g *Generator) BuildContext(packageDir string) error {
 	return cmd.Run()
 }
 
-// CallLLM makes an LLM request with the given prompt and configuration
+// CallLLM makes an LLM request with the given prompt and configuration.
+//
+// When a cache fan-out prefix is active for this run (setupFanout) and the
+// effective model is the prefix's Claude model, the request is issued as a
+// task rider on the shared, byte-identical repo-context prefix — the big cx
+// context is written to the cache once and cache-read by every subsequent
+// section — instead of shelling `grove llm request`. Non-Claude models (and
+// runs without an active prefix) keep the original facade path untouched.
 func (g *Generator) CallLLM(promptContent, model string, genConfig config.GenerationConfig, workDir string) (string, error) {
+	// A run-wide --model override forces every section onto one model so the
+	// whole wave shares a single cached prefix.
+	if g.forceModel != "" {
+		model = g.forceModel
+	}
+
 	// Use provided model or default to gemini-3-pro-preview
 	if model == "" {
 		model = "gemini-3-pro-preview"
+	}
+
+	// Route Claude generation through the shared-prefix fan-out when one is
+	// active for this exact model.
+	if g.prefix != nil && anthropic.ResolveModelAlias(model) == g.prefix.Model() {
+		return g.callViaFanout(promptContent)
 	}
 
 	// Create a temporary file for the prompt
@@ -1603,10 +1644,16 @@ func (g *Generator) CallLLM(promptContent, model string, genConfig config.Genera
 	}
 
 	// Clean up the output
-	response := string(output)
+	return cleanLLMResponse(string(output)), nil
+}
+
+// cleanLLMResponse trims whitespace and strips a single wrapping markdown code
+// fence (```markdown / ```md / ```) from an LLM response, leaving clean markdown.
+// Shared by the shell facade path and the cache fan-out path so both produce
+// byte-comparable section output.
+func cleanLLMResponse(response string) string {
 	response = strings.TrimSpace(response)
 
-	// Remove markdown code fences if present
 	if strings.HasPrefix(response, "```markdown") || strings.HasPrefix(response, "```md") {
 		lines := strings.Split(response, "\n")
 		if len(lines) > 2 && strings.HasSuffix(response, "```") {
@@ -1619,10 +1666,105 @@ func (g *Generator) CallLLM(promptContent, model string, genConfig config.Genera
 		}
 	}
 
-	// Clean up any remaining issues
-	// The response should be clean markdown at this point
+	return response
+}
 
-	return response, nil
+// callViaFanout issues one section request against the active shared-prefix
+// cache fan-out and logs its per-section cache write/read usage.
+func (g *Generator) callViaFanout(promptContent string) (string, error) {
+	text, usage, err := g.prefix.Request(context.Background(), promptContent)
+	g.logFanoutUsage(usage)
+	if err != nil {
+		return "", fmt.Errorf("cache fan-out request failed: %w", err)
+	}
+	return cleanLLMResponse(text), nil
+}
+
+// logFanoutUsage prints the per-section cache write/read token accounting so
+// caching is verifiable from the CLI: request 1 shows a large cache_write and
+// near-zero cache_read; every subsequent section shows cache_read ≈ prefix size.
+func (g *Generator) logFanoutUsage(u *anthropic.UsageResult) {
+	if u == nil {
+		return
+	}
+	section := g.currentSection
+	if section == "" {
+		section = "(section)"
+	}
+	g.logger.Infof("Cache usage [%s]: model=%s input=%d output=%d cache_write=%d (5m=%d 1h=%d) cache_read=%d est_cost=$%.4f",
+		section, u.Model, u.InputTokens, u.OutputTokens, u.CacheCreationTokens, u.CacheWrite5m, u.CacheWrite1h, u.CacheReadTokens, u.EstimatedCostUSD)
+	ulog.Info("Cache fan-out usage").
+		Field("section", section).
+		Field("model", u.Model).
+		Field("input", u.InputTokens).
+		Field("output", u.OutputTokens).
+		Field("cache_write", u.CacheCreationTokens).
+		Field("cache_read", u.CacheReadTokens).
+		Field("est_cost_usd", u.EstimatedCostUSD).
+		Emit()
+}
+
+// setupFanout configures the run's cache fan-out when the effective model is a
+// Claude model. It builds a shared prefix from the cx context that BuildContext
+// has already generated for packageDir and returns a teardown func the caller
+// must defer. When fan-out does not apply (non-Claude model, or no cx context),
+// it is a no-op and CallLLM keeps shelling `grove llm request`.
+func (g *Generator) setupFanout(packageDir string, cfg *config.DocgenConfig, opts GenerateOptions) func() {
+	noop := func() {}
+
+	prefixModel := opts.Model
+	if prefixModel == "" {
+		prefixModel = cfg.Settings.Model
+	}
+	if !anthropic.IsAnthropicModel(prefixModel) {
+		if cfg.Settings.CacheFanout {
+			g.logger.Warnf("cache_fanout is set but effective model %q is not a Claude model; using the standard grove llm path", prefixModel)
+		}
+		return noop
+	}
+
+	// Verify the context fileset before spending: an empty set means cx produced
+	// nothing to cache, so fall back rather than fan out over an empty prefix.
+	ctxFiles := anthropic.WorkDirContextFiles(packageDir)
+	if len(ctxFiles) == 0 {
+		g.logger.Warnf("cache fan-out requested for model %q but cx produced no context in %s; using the standard grove llm path", prefixModel, packageDir)
+		return noop
+	}
+
+	ttl := opts.CacheTTL
+	if ttl == "" {
+		ttl = cfg.Settings.CacheTTL
+	}
+	if ttl == "" {
+		ttl = "5m"
+	}
+
+	prefix, err := anthropic.NewSharedPrefixFromFiles("", ctxFiles, anthropic.SharedPrefixOptions{
+		Model:     prefixModel,
+		TTL:       ttl,
+		MaxTokens: 8192,
+		Caller:    "docgen",
+	})
+	if err != nil {
+		g.logger.WithError(err).Warnf("failed to set up cache fan-out for model %q; using the standard grove llm path", prefixModel)
+		return noop
+	}
+
+	g.prefix = prefix
+	g.forceModel = prefixModel
+	g.logger.Infof("Cache fan-out enabled: model=%s ttl=%s prefix_docs=%d", prefix.Model(), ttl, len(ctxFiles))
+	ulog.Info("Cache fan-out enabled").
+		Field("model", prefix.Model()).
+		Field("ttl", ttl).
+		Field("prefix_docs", len(ctxFiles)).
+		Emit()
+
+	return func() {
+		_ = prefix.Close()
+		g.prefix = nil
+		g.forceModel = ""
+		g.currentSection = ""
+	}
 }
 
 // lastLines returns the last n lines of s, with surrounding whitespace trimmed.
@@ -1655,6 +1797,11 @@ func (g *Generator) generateSectionsMode(packageDir, configPath string, topCfg *
 	if err := g.BuildContext(packageDir); err != nil {
 		return fmt.Errorf("failed to build context: %w", err)
 	}
+
+	// Enable Claude cache fan-out for this run when applicable (after
+	// BuildContext so the shared cx-context prefix exists).
+	teardownFanout := g.setupFanout(packageDir, topCfg, opts)
+	defer teardownFanout()
 
 	// Discover subdirectories with their own docgen.config.yml
 	type subSection struct {
@@ -1771,6 +1918,7 @@ func (g *Generator) generateSectionsMode(packageDir, configPath string, topCfg *
 
 	// Generate each section using its subdirectory context
 	for _, ss := range sectionsToGenerate {
+		g.currentSection = qualifiedName(ss)
 		g.logger.Infof("Generating section: %s", qualifiedName(ss))
 
 		// Determine output directory for this section
