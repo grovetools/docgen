@@ -8,17 +8,28 @@ import (
 )
 
 func newGenerateCmd() *cobra.Command {
-	var sections []string
+	var (
+		sections []string
+		model    string
+		cacheTTL string
+	)
 
 	cmd := &cobra.Command{
 		Use:   "generate",
 		Short: "Generate documentation for the current package",
 		Long: `Reads the docs/docgen.config.yml in the current directory, builds context, calls an LLM for each section, and writes the output to docs/.
 
+When --model is a Claude model (or settings.cache_fanout is set), the repo's cx
+context is built once and cached as a shared Anthropic prompt prefix; each
+section's request rides that cached prefix (cache_read ≈ 0.1x cost) instead of
+shelling grove llm request. Non-Claude models keep the standard path.
+
 Examples:
-  docgen generate                          # Generate all sections
-  docgen generate --section introduction   # Generate only introduction
-  docgen generate -s intro -s core         # Generate multiple specific sections`,
+  docgen generate                                  # Generate all sections
+  docgen generate --section introduction           # Generate only introduction
+  docgen generate -s intro -s core                 # Generate multiple specific sections
+  docgen generate --model claude-haiku-4-5         # Claude cache fan-out for all sections
+  docgen generate --model claude-haiku-4-5 --cache-ttl 1h`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			gen := generator.New(getLogger())
 
@@ -27,20 +38,18 @@ Examples:
 				return err
 			}
 
-			// If sections are specified, use GenerateWithOptions
-			if len(sections) > 0 {
-				opts := generator.GenerateOptions{
-					Sections: sections,
-				}
-				return gen.GenerateWithOptions(cwd, opts)
+			opts := generator.GenerateOptions{
+				Sections: sections,
+				Model:    model,
+				CacheTTL: cacheTTL,
 			}
-
-			// Otherwise generate all sections
-			return gen.Generate(cwd)
+			return gen.GenerateWithOptions(cwd, opts)
 		},
 	}
 
 	cmd.Flags().StringSliceVarP(&sections, "section", "s", nil, "Generate only specified sections (by name)")
+	cmd.Flags().StringVar(&model, "model", "", "Override the model for all sections; a claude-* model enables the shared-prefix cache fan-out")
+	cmd.Flags().StringVar(&cacheTTL, "cache-ttl", "", "Cache TTL for the fan-out shared prefix: 5m (default) or 1h")
 
 	return cmd
 }
