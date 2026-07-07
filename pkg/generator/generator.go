@@ -39,6 +39,10 @@ type Generator struct {
 	prefix         *anthropic.SharedPrefix
 	forceModel     string
 	currentSection string // label for per-section usage logging
+
+	// usageRecords accumulates per-section fan-out usage over a run so it can be
+	// emitted as a machine-readable report (GenerateOptions.UsageJSONPath).
+	usageRecords []SectionUsage
 }
 
 // GenerateOptions configures what sections to generate
@@ -46,6 +50,38 @@ type GenerateOptions struct {
 	Sections []string // List of section names to generate (empty means all)
 	Model    string   // Override the model for all sections (enables claude-* fan-out)
 	CacheTTL string   // Fan-out shared-prefix cache TTL: "5m" (default) or "1h"
+	// UsageJSONPath, when non-empty, is a file path to which a machine-readable
+	// per-section cache/usage report (UsageReport) is written at the end of the
+	// run. Callers that shell `docgen generate` (e.g. `grove release gen`) parse
+	// this instead of scraping the human-readable log lines. Only fan-out
+	// (claude-*) sections contribute records; a non-fan-out run writes an empty
+	// report so the caller can still distinguish "ran, no cache usage" from
+	// "did not run".
+	UsageJSONPath string
+}
+
+// SectionUsage is one section's cache/usage accounting in the machine-readable
+// usage report written by `docgen generate --usage-json`.
+type SectionUsage struct {
+	Section          string  `json:"section"`
+	Model            string  `json:"model"`
+	InputTokens      int64   `json:"input_tokens"`
+	OutputTokens     int64   `json:"output_tokens"`
+	CacheWriteTokens int64   `json:"cache_write_tokens"`
+	CacheReadTokens  int64   `json:"cache_read_tokens"`
+	EstCostUSD       float64 `json:"est_cost_usd"`
+}
+
+// UsageReport is the machine-readable per-run usage summary emitted by
+// `docgen generate --usage-json <file>`. Totals are the sum over Sections.
+type UsageReport struct {
+	Model                 string         `json:"model"`
+	Sections              []SectionUsage `json:"sections"`
+	TotalInputTokens      int64          `json:"total_input_tokens"`
+	TotalOutputTokens     int64          `json:"total_output_tokens"`
+	TotalCacheWriteTokens int64          `json:"total_cache_write_tokens"`
+	TotalCacheReadTokens  int64          `json:"total_cache_read_tokens"`
+	TotalEstCostUSD       float64        `json:"total_est_cost_usd"`
 }
 
 func New(logger *logrus.Logger) *Generator {
@@ -59,6 +95,11 @@ func (g *Generator) Generate(packageDir string) error {
 
 // GenerateWithOptions orchestrates documentation generation with specific options.
 func (g *Generator) GenerateWithOptions(packageDir string, opts GenerateOptions) error {
+	// Emit the machine-readable usage report at the end of the run (even on
+	// partial failure) so a shelling caller always gets whatever was billed.
+	if opts.UsageJSONPath != "" {
+		defer g.writeUsageReport(opts.UsageJSONPath, opts.Model)
+	}
 	if len(opts.Sections) > 0 {
 		g.logger.Infof("Starting generation for package at: %s (sections: %v)", packageDir, opts.Sections)
 	} else {
@@ -1693,6 +1734,15 @@ func (g *Generator) logFanoutUsage(u *anthropic.UsageResult) {
 	}
 	g.logger.Infof("Cache usage [%s]: model=%s input=%d output=%d cache_write=%d (5m=%d 1h=%d) cache_read=%d est_cost=$%.4f",
 		section, u.Model, u.InputTokens, u.OutputTokens, u.CacheCreationTokens, u.CacheWrite5m, u.CacheWrite1h, u.CacheReadTokens, u.EstimatedCostUSD)
+	g.usageRecords = append(g.usageRecords, SectionUsage{
+		Section:          section,
+		Model:            u.Model,
+		InputTokens:      u.InputTokens,
+		OutputTokens:     u.OutputTokens,
+		CacheWriteTokens: u.CacheCreationTokens,
+		CacheReadTokens:  u.CacheReadTokens,
+		EstCostUSD:       u.EstimatedCostUSD,
+	})
 	ulog.Info("Cache fan-out usage").
 		Field("section", section).
 		Field("model", u.Model).
@@ -1702,6 +1752,42 @@ func (g *Generator) logFanoutUsage(u *anthropic.UsageResult) {
 		Field("cache_read", u.CacheReadTokens).
 		Field("est_cost_usd", u.EstimatedCostUSD).
 		Emit()
+}
+
+// writeUsageReport serializes the run's accumulated per-section fan-out usage to
+// path as a UsageReport JSON document. It is best-effort: a write failure is
+// logged but never fails the generation run. reqModel is the run's requested
+// model override (may be empty); the report's Model prefers the model actually
+// billed (from the first record) and falls back to reqModel.
+func (g *Generator) writeUsageReport(path, reqModel string) {
+	report := UsageReport{Model: reqModel, Sections: g.usageRecords}
+	if report.Sections == nil {
+		report.Sections = []SectionUsage{}
+	}
+	for _, r := range g.usageRecords {
+		if report.Model == "" || report.Model == reqModel {
+			if r.Model != "" {
+				report.Model = r.Model
+			}
+		}
+		report.TotalInputTokens += r.InputTokens
+		report.TotalOutputTokens += r.OutputTokens
+		report.TotalCacheWriteTokens += r.CacheWriteTokens
+		report.TotalCacheReadTokens += r.CacheReadTokens
+		report.TotalEstCostUSD += r.EstCostUSD
+	}
+
+	data, err := json.MarshalIndent(report, "", "  ")
+	if err != nil {
+		g.logger.WithError(err).Warnf("failed to marshal usage report for %s", path)
+		return
+	}
+	if err := os.WriteFile(path, data, 0o600); err != nil {
+		g.logger.WithError(err).Warnf("failed to write usage report to %s", path)
+		return
+	}
+	g.logger.Infof("Wrote usage report: %s (%d sections, cache_write=%d cache_read=%d est_cost=$%.4f)",
+		path, len(report.Sections), report.TotalCacheWriteTokens, report.TotalCacheReadTokens, report.TotalEstCostUSD)
 }
 
 // setupFanout configures the run's cache fan-out when the effective model is a
