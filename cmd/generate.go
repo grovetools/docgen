@@ -9,9 +9,10 @@ import (
 
 func newGenerateCmd() *cobra.Command {
 	var (
-		sections []string
-		model    string
-		cacheTTL string
+		sections  []string
+		model     string
+		cacheTTL  string
+		usageJSON string
 	)
 
 	cmd := &cobra.Command{
@@ -39,9 +40,10 @@ Examples:
 			}
 
 			opts := generator.GenerateOptions{
-				Sections: sections,
-				Model:    model,
-				CacheTTL: cacheTTL,
+				Sections:      sections,
+				Model:         model,
+				CacheTTL:      cacheTTL,
+				UsageJSONPath: usageJSON,
 			}
 			return gen.GenerateWithOptions(cwd, opts)
 		},
@@ -50,6 +52,7 @@ Examples:
 	cmd.Flags().StringSliceVarP(&sections, "section", "s", nil, "Generate only specified sections (by name)")
 	cmd.Flags().StringVar(&model, "model", "", "Override the model for all sections; a claude-* model enables the shared-prefix cache fan-out")
 	cmd.Flags().StringVar(&cacheTTL, "cache-ttl", "", "Cache TTL for the fan-out shared prefix: 5m (default) or 1h")
+	cmd.Flags().StringVar(&usageJSON, "usage-json", "", "Write a machine-readable per-section cache/usage report (JSON) to this file at end of run")
 
 	return cmd
 }
