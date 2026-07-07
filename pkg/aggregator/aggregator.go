@@ -67,6 +67,29 @@ func (a *Aggregator) Aggregate(outputDir string, mode string, transform string) 
 			ecoByName[eco.Name] = eco
 		}
 
+		// GROVE_ECOSYSTEM_PATH override: when set (e.g. by `grove release apply
+		// --website`), the ecosystem checkout at that path WINS over the
+		// groves-registry resolution for its own name. This closes the changelog
+		// hop: the aggregator reads each repo's CHANGELOG.md straight from the
+		// checkout that the release just published to, rather than whatever
+		// same-named checkout the registry happens to resolve (which may be a
+		// different clone or a stale worktree). Docs are notebook-first and so
+		// already shared across checkouts; changelogs live only in the repo tree,
+		// so without this override a release run from a worktree/XDG location would
+		// build the site against another checkout's changelogs.
+		if envPath := os.Getenv("GROVE_ECOSYSTEM_PATH"); envPath != "" {
+			if root, err := workspace.FindEcosystemRoot(envPath); err == nil && root != "" {
+				name := filepath.Base(root)
+				if cfg, err := config.LoadFrom(root); err == nil && cfg.Name != "" {
+					name = cfg.Name
+				}
+				a.logger.Infof("GROVE_ECOSYSTEM_PATH override: ecosystem %q -> %s", name, root)
+				ecoByName[name] = workspace.Ecosystem{Name: name, Path: root}
+			} else {
+				a.logger.Debugf("GROVE_ECOSYSTEM_PATH=%s is not inside an ecosystem root; ignoring override", envPath)
+			}
+		}
+
 		// Filter to only requested ecosystems
 		for _, name := range localCfg.Settings.Ecosystems {
 			if eco, ok := ecoByName[name]; ok {
