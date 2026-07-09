@@ -1535,7 +1535,19 @@ func (g *Generator) generateFromCapture(packageDir string, section config.Sectio
 }
 
 func (g *Generator) setupRulesFile(packageDir, rulesFile string) error {
-	// Read the specified rules file
+	// Notebook-first: docs context rules now live in the notebook
+	// (workspaces/<repo>/context/rules). `cx generate` resolves that file
+	// directly and ranks it above the legacy repo-local .grove/rules, so when
+	// the notebook owns the rules we must NOT stage a .grove/rules copy — cx
+	// would ignore it and emit a stale-.grove/rules warning. Treat the
+	// notebook rules file as authoritative and skip the legacy staging.
+	if nbRules, ok := config.NotebookContextRulesFile(packageDir); ok {
+		g.logger.Debugf("Notebook context rules active (%s); skipping .grove/rules staging", nbRules)
+		return nil
+	}
+
+	// Legacy fallback (non-notebook repos): copy the repo-relative rules file
+	// to .grove/rules so `cx generate` picks it up.
 	// If the rules file path starts with .cx/ or is an absolute path, use it directly
 	// Otherwise, look for it in the docs/ directory (legacy behavior)
 	var rulesPath string

@@ -269,6 +269,36 @@ func LoadWithNotebook(repoDir string) (*DocgenConfig, string, error) {
 	return &config, repoConfigPath, nil
 }
 
+// NotebookContextRulesFile returns the path to the notebook-scoped context
+// rules file for the repo at repoDir, and whether that file currently exists.
+//
+// Docs context rules live in the notebook (workspaces/<repo>/context/rules),
+// not in the repo. `cx generate` resolves that file directly and ranks it
+// above the legacy repo-local .grove/rules, so when the notebook owns the
+// rules a docgen generator must NOT stage a .grove/rules copy — cx would
+// ignore it and emit a stale-.grove/rules warning. Callers use this to make
+// rules resolution notebook-first and fall back to repo-local rules only when
+// no notebook rules file exists.
+func NotebookContextRulesFile(repoDir string) (path string, exists bool) {
+	node, err := workspace.GetProjectByPath(repoDir)
+	if err != nil {
+		return "", false
+	}
+	cfg, err := coreConfig.LoadDefault()
+	if err != nil {
+		return "", false
+	}
+	locator := workspace.NewNotebookLocator(cfg)
+	rulesFile, err := locator.GetContextRulesFile(node)
+	if err != nil {
+		return "", false
+	}
+	if _, statErr := os.Stat(rulesFile); statErr != nil {
+		return rulesFile, false
+	}
+	return rulesFile, true
+}
+
 // MergeGenerationConfig merges section-specific overrides with global defaults
 func MergeGenerationConfig(global, section GenerationConfig) GenerationConfig {
 	merged := GenerationConfig{}
