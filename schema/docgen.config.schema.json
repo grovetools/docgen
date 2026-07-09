@@ -488,6 +488,22 @@
           "x-layer": "project",
           "x-priority": "27"
         },
+        "cache_fanout": {
+          "type": "boolean",
+          "description": "Route claude-* section generation through the grove-anthropic shared-prefix cache fan-out (one cached repo-context prefix",
+          "x-layer": "project",
+          "x-priority": "28"
+        },
+        "cache_ttl": {
+          "type": "string",
+          "enum": [
+            "5m",
+            "1h"
+          ],
+          "description": "Cache TTL for the fan-out shared prefix: 5m (default) or 1h. A longer TTL pays off when a generation wave or repeated re-runs span more than five minutes",
+          "x-layer": "project",
+          "x-priority": "29"
+        },
         "temperature": {
           "type": "number",
           "maximum": 1,
