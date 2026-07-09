@@ -276,7 +276,16 @@ func (e *Enricher) generateDescriptionsBatch(projectDir string, properties []pro
 }
 
 func (e *Enricher) setupRulesFile(packageDir, rulesFile string) error {
-	// Read the specified rules file
+	// Notebook-first: docs context rules now live in the notebook
+	// (workspaces/<repo>/context/rules), which `cx generate` resolves directly
+	// and ranks above the legacy repo-local .grove/rules. When the notebook
+	// owns the rules, skip .grove/rules staging so cx doesn't ignore-and-warn.
+	if nbRules, ok := config.NotebookContextRulesFile(packageDir); ok {
+		e.logger.Debugf("Notebook context rules active (%s); skipping .grove/rules staging", nbRules)
+		return nil
+	}
+
+	// Legacy fallback (non-notebook repos): read the repo-relative rules file.
 	rulesPath := filepath.Join(packageDir, "docs", rulesFile)
 	content, err := os.ReadFile(rulesPath)
 	if err != nil {
