@@ -43,6 +43,12 @@ type Generator struct {
 	// usageRecords accumulates per-section fan-out usage over a run so it can be
 	// emitted as a machine-readable report (GenerateOptions.UsageJSONPath).
 	usageRecords []SectionUsage
+
+	// failedSections accumulates the names of sections that failed during the
+	// run (bare names in in-place mode, subdir/name in sections mode — the same
+	// forms `-s` accepts) so the usage report can surface them and a shelling
+	// caller can retry only the failed sections.
+	failedSections []string
 }
 
 // GenerateOptions configures what sections to generate
@@ -74,9 +80,14 @@ type SectionUsage struct {
 
 // UsageReport is the machine-readable per-run usage summary emitted by
 // `docgen generate --usage-json <file>`. Totals are the sum over Sections.
+// FailedSections lists the sections that failed this run, in a form `-s`
+// accepts, so a caller can retry only those; it is always present (empty on a
+// clean run) so callers can distinguish "no failures" from a report written by
+// an older docgen that does not know the field.
 type UsageReport struct {
 	Model                 string         `json:"model"`
 	Sections              []SectionUsage `json:"sections"`
+	FailedSections        []string       `json:"failed_sections"`
 	TotalInputTokens      int64          `json:"total_input_tokens"`
 	TotalOutputTokens     int64          `json:"total_output_tokens"`
 	TotalCacheWriteTokens int64          `json:"total_cache_write_tokens"`
@@ -310,6 +321,7 @@ func (g *Generator) generateInPlace(packageDir string, opts GenerateOptions) err
 	var failedSections []string
 	sectionFailed := func(name string, err error) {
 		failedSections = append(failedSections, name)
+		g.failedSections = append(g.failedSections, name)
 		ulog.Error("Section failed").
 			Field("section", name).
 			Field("error", err.Error()).
@@ -1797,9 +1809,12 @@ func (g *Generator) logFanoutUsage(u *anthropic.UsageResult) {
 // model override (may be empty); the report's Model prefers the model actually
 // billed (from the first record) and falls back to reqModel.
 func (g *Generator) writeUsageReport(path, reqModel string) {
-	report := UsageReport{Model: reqModel, Sections: g.usageRecords}
+	report := UsageReport{Model: reqModel, Sections: g.usageRecords, FailedSections: g.failedSections}
 	if report.Sections == nil {
 		report.Sections = []SectionUsage{}
+	}
+	if report.FailedSections == nil {
+		report.FailedSections = []string{}
 	}
 	for _, r := range g.usageRecords {
 		if report.Model == "" || report.Model == reqModel {
@@ -2046,6 +2061,7 @@ func (g *Generator) generateSectionsMode(packageDir, configPath string, topCfg *
 	var failedSections []string
 	sectionFailed := func(name string, err error) {
 		failedSections = append(failedSections, name)
+		g.failedSections = append(g.failedSections, name)
 		ulog.Error("Section failed").
 			Field("section", name).
 			Field("error", err.Error()).
