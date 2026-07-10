@@ -1,6 +1,7 @@
 package generator
 
 import (
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
@@ -520,6 +521,119 @@ func TestValidateSectionOutputs(t *testing.T) {
 	}
 }
 
+// TestValidateSectionPrompts covers the pre-spend prompt-existence guard: all
+// prompts resolving passes; missing prompts fail BEFORE any LLM call with one
+// error that carries the retry-classifier fragment and names every offender.
+func TestValidateSectionPrompts(t *testing.T) {
+	docsDir := t.TempDir()
+	promptsDir := filepath.Join(docsDir, "prompts")
+	if err := os.MkdirAll(promptsDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	for _, p := range []string{"01-overview.md", "02-cli.md"} {
+		if err := os.WriteFile(filepath.Join(promptsDir, p), []byte("# "+p), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	resolve := func(_ int, s config.SectionConfig) (string, error) {
+		p := filepath.Join(promptsDir, s.Prompt)
+		if _, err := os.Stat(p); err != nil {
+			return "", fmt.Errorf("prompt not found at %s", p)
+		}
+		return p, nil
+	}
+
+	t.Run("all prompts present passes", func(t *testing.T) {
+		sections := []config.SectionConfig{
+			{Name: "01-overview", Type: "prose", Prompt: "01-overview.md", Output: "01-overview.md"},
+			{Name: "02-cli", Prompt: "02-cli.md", Output: "02-cli.md"}, // empty type is prose too
+			{Name: "03-ref", Type: "capture", Binary: "notify", Output: "03-ref.md"},
+		}
+		if err := validateSectionPrompts(sections, resolve); err != nil {
+			t.Fatalf("expected no error when all prompts resolve, got: %v", err)
+		}
+	})
+
+	t.Run("two missing prompts listed in one error", func(t *testing.T) {
+		sections := []config.SectionConfig{
+			{Name: "01-overview", Type: "prose", Prompt: "01-overview.md", Output: "01-overview.md"},
+			{Name: "04-nope", Type: "prose", Prompt: "04-nope.md", Output: "04-nope.md"},
+			{Name: "05-gone", Type: "prose", Prompt: "05-gone.md", Output: "05-gone.md"},
+		}
+		err := validateSectionPrompts(sections, resolve)
+		if err == nil {
+			t.Fatal("expected an error for missing prompts")
+		}
+		if !strings.Contains(err.Error(), "could not resolve prompt") {
+			t.Errorf("error missing the retry-classifier fragment: %v", err)
+		}
+		for _, name := range []string{"04-nope", "05-gone"} {
+			if !strings.Contains(err.Error(), name) {
+				t.Errorf("error does not name offender %q: %v", name, err)
+			}
+		}
+		if strings.Contains(err.Error(), `"01-overview"`) {
+			t.Errorf("error should not name a section whose prompt resolved: %v", err)
+		}
+	})
+
+	t.Run("non-prose sections are skipped", func(t *testing.T) {
+		sections := []config.SectionConfig{
+			{Name: "03-ref", Type: "capture", Binary: "notify", Prompt: "not-a-file.md", Output: "03-ref.md"},
+			{Name: "04-schema", Type: "schema_table", Output: "04-schema.md"},
+		}
+		if err := validateSectionPrompts(sections, resolve); err != nil {
+			t.Fatalf("non-prose sections must not be prompt-checked, got: %v", err)
+		}
+	})
+
+	t.Run("prose section with empty prompt is an offender", func(t *testing.T) {
+		sections := []config.SectionConfig{
+			{Name: "06-blank", Type: "prose", Prompt: "  ", Output: "06-blank.md"},
+		}
+		err := validateSectionPrompts(sections, resolve)
+		if err == nil || !strings.Contains(err.Error(), "has no prompt: filename") {
+			t.Fatalf("expected an empty-prompt error, got: %v", err)
+		}
+		if !strings.Contains(err.Error(), "could not resolve prompt") {
+			t.Errorf("error missing the retry-classifier fragment: %v", err)
+		}
+	})
+}
+
+// TestResolvePromptPathLegacyFallback exercises the factored path resolution
+// the guard and generation now share: outside any workspace it falls back to
+// the legacy docs/ location, returning the path when present and an error
+// naming the location when missing.
+func TestResolvePromptPathLegacyFallback(t *testing.T) {
+	repo := t.TempDir()
+	promptsDir := filepath.Join(repo, "docs", "prompts")
+	if err := os.MkdirAll(promptsDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	promptRel := filepath.Join("prompts", "01-overview.md")
+	if err := os.WriteFile(filepath.Join(repo, "docs", promptRel), []byte("# overview"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	g := New(newTestLogger())
+	got, err := g.resolvePromptPath(repo, promptRel)
+	if err != nil {
+		t.Fatalf("expected legacy resolution to succeed, got: %v", err)
+	}
+	if got != filepath.Join(repo, "docs", promptRel) {
+		t.Errorf("resolved %q, want the legacy path", got)
+	}
+	// The resolved path must be readable by resolvePromptContent identically.
+	if _, err := g.resolvePromptContent(repo, promptRel); err != nil {
+		t.Errorf("resolvePromptContent should read the same file: %v", err)
+	}
+
+	if _, err := g.resolvePromptPath(repo, filepath.Join("prompts", "missing.md")); err == nil {
+		t.Fatal("expected an error for a missing prompt")
+	}
+}
+
 // TestReduceConfigForFresh verifies the sections list is dropped while the
 // settings survive, and the result is still valid YAML.
 func TestReduceConfigForFresh(t *testing.T) {
@@ -695,6 +809,77 @@ func TestProposeFollowupModelMismatch(t *testing.T) {
 	})
 	if err == nil || !strings.Contains(err.Error(), "does not match") {
 		t.Fatalf("expected a model-mismatch error, got %v", err)
+	}
+}
+
+// TestProposeFollowupInfersModelFromTranscript asserts an omitted Model on a
+// followup defaults to the model the prior transcript records — even when
+// settings.model differs (the transcript, not the config, is the record of the
+// prior run). Dry-run, so no network is used.
+func TestProposeFollowupInfersModelFromTranscript(t *testing.T) {
+	repo := writeProposeTestRepo(t) // settings.model: claude-haiku-4-5
+	tpath := filepath.Join(t.TempDir(), "transcript.json")
+	// Transcript model intentionally differs from settings.model: inference must
+	// pick the transcript's model, or the old mismatch error would fire.
+	if err := os.WriteFile(tpath, []byte(`{"model":"claude-sonnet-4-5","turns":[{"role":"user","content":"x"},{"role":"assistant","content":"y"}]}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	out := filepath.Join(t.TempDir(), "p")
+	g := New(newTestLogger())
+	err := g.Propose(repo, ProposeOptions{
+		Model:          "", // omitted — must be inferred from the transcript
+		OutputDir:      out,
+		DryRun:         true,
+		Followup:       "merge the CLI pages",
+		TranscriptPath: tpath,
+	})
+	if err != nil {
+		t.Fatalf("followup with omitted model should infer from the transcript, got %v", err)
+	}
+	if _, serr := os.Stat(filepath.Join(out, "PROPOSE_SUFFIX.md")); serr != nil {
+		t.Errorf("dry-run followup should still record the suffix: %v", serr)
+	}
+}
+
+// TestProposeFollowupExplicitMismatchStillErrors pins the guard the inference
+// must NOT weaken: an explicitly passed model that differs from the
+// transcript's errors exactly as before.
+func TestProposeFollowupExplicitMismatchStillErrors(t *testing.T) {
+	repo := writeProposeTestRepo(t)
+	tpath := filepath.Join(t.TempDir(), "transcript.json")
+	if err := os.WriteFile(tpath, []byte(`{"model":"claude-sonnet-4-5","turns":[{"role":"user","content":"x"},{"role":"assistant","content":"y"}]}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	g := New(newTestLogger())
+	err := g.Propose(repo, ProposeOptions{
+		Model:          "claude-haiku-4-5", // explicit, mismatching
+		OutputDir:      filepath.Join(t.TempDir(), "p"),
+		Followup:       "revise",
+		TranscriptPath: tpath,
+	})
+	if err == nil || !strings.Contains(err.Error(), "does not match") {
+		t.Fatalf("expected a model-mismatch error, got %v", err)
+	}
+}
+
+// TestProposeNonFollowupStillRequiresModel pins the non-followup behavior: with
+// no --model and no settings.model, propose keeps its required-model error.
+func TestProposeNonFollowupStillRequiresModel(t *testing.T) {
+	repo := t.TempDir()
+	docsDir := filepath.Join(repo, "docs")
+	if err := os.MkdirAll(docsDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	cfgYAML := "enabled: true\nsettings:\n  rules_file: doc\nsections: []\n"
+	if err := os.WriteFile(filepath.Join(docsDir, config.ConfigFileName), []byte(cfgYAML), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	g := New(newTestLogger())
+	err := g.Propose(repo, ProposeOptions{
+		OutputDir: filepath.Join(t.TempDir(), "p"),
+	})
+	if err == nil || !strings.Contains(err.Error(), "requires a claude model") {
+		t.Fatalf("expected the required-model error, got %v", err)
 	}
 }
 

@@ -57,8 +57,10 @@ Modes:
               the current settings (sections/prompts/README withheld) so the
               proposal is not anchored to today's outline. Excludes --followup.
   --followup  refine a PRIOR proposal in a second turn: replay --transcript's
-              turns (same --model required) and add the given feedback as a new
-              user turn, re-emitting the complete proposal. Excludes --fresh.
+              turns and add the given feedback as a new user turn, re-emitting
+              the complete proposal. The model must match the transcript's: omit
+              --model to reuse the transcript's recorded model automatically; an
+              explicit mismatching --model errors. Excludes --fresh.
 
 Examples:
   docgen propose --output-dir ./proposal --model claude-haiku-4-5
@@ -89,13 +91,13 @@ Examples:
 		},
 	}
 
-	cmd.Flags().StringVar(&model, "model", "", "Claude model whose cache the proposal warms (must match a later generate); empty ⇒ settings.model")
+	cmd.Flags().StringVar(&model, "model", "", "Claude model whose cache the proposal warms (must match a later generate); empty ⇒ the prior transcript's model with --followup, else settings.model")
 	cmd.Flags().StringVar(&cacheTTL, "cache-ttl", "", "Shared-prefix cache TTL: 5m or 1h (default 1h — review outlasts 5m)")
 	cmd.Flags().StringVar(&outputDir, "output-dir", "", "Directory to write the proposal bundle to (required)")
 	cmd.Flags().StringVar(&usageJSON, "usage-json", "", "Write a machine-readable cache/usage report (JSON) to this file")
 	cmd.Flags().BoolVar(&dryRun, "dry-run", false, "Assemble and save the request suffix without any API call")
 	cmd.Flags().BoolVar(&fresh, "fresh", false, "Green-field: propose from the code alone (withhold the current sections/prompts/README); excludes --followup")
-	cmd.Flags().StringVar(&followup, "followup", "", "Reviewer feedback that refines a prior proposal in a second turn (requires --transcript); excludes --fresh")
+	cmd.Flags().StringVar(&followup, "followup", "", "Reviewer feedback that refines a prior proposal in a second turn (requires --transcript; omit --model to reuse the transcript's model); excludes --fresh")
 	cmd.Flags().StringVar(&transcript, "transcript", "", "Path to a prior run's transcript.json to replay for --followup")
 
 	_ = cmd.MarkFlagRequired("output-dir")

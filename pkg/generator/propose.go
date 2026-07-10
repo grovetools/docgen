@@ -43,8 +43,10 @@ type ProposeOptions struct {
 	Fresh bool
 	// Followup, when non-empty, is reviewer feedback that refines a PRIOR
 	// proposal in a second turn. TranscriptPath must point at that prior run's
-	// transcript.json; the request replays its turns (whose model must match)
-	// then adds the feedback as a new user turn. Mutually exclusive with Fresh.
+	// transcript.json; the request replays its turns then adds the feedback as a
+	// new user turn. The turns' model must match: an empty Model defaults to the
+	// transcript's recorded model, while an explicit mismatching Model errors.
+	// Mutually exclusive with Fresh.
 	Followup string
 	// TranscriptPath is the prior run's transcript.json, required by Followup.
 	TranscriptPath string
@@ -128,9 +130,31 @@ func (g *Generator) Propose(packageDir string, opts ProposeOptions) error {
 		return fmt.Errorf("failed to load docgen config: %w", err)
 	}
 
+	// A --followup replays a prior run's transcript, so load it up front — both
+	// to fail fast when it is missing and so an omitted --model can default to
+	// the model the transcript records (a followup must reuse the prior run's
+	// model; the transcript is the authoritative record of what that was).
+	followup := strings.TrimSpace(opts.Followup) != ""
+	var prior *proposeTranscript
+	if followup {
+		if strings.TrimSpace(opts.TranscriptPath) == "" {
+			return fmt.Errorf("--followup requires --transcript pointing at the prior run's transcript.json")
+		}
+		prior, err = loadProposeTranscript(opts.TranscriptPath)
+		if err != nil {
+			return err
+		}
+	}
+
 	// Claude models only — the entire point is that the proposal warms a cache a
 	// later `generate` cache-reads. A non-claude model cannot share that prefix.
+	// Resolution order: explicit --model, then (followup only) the prior
+	// transcript's model, then settings.model. An EXPLICIT model that mismatches
+	// the transcript still errors below — inference applies only when omitted.
 	model := opts.Model
+	if model == "" && followup {
+		model = prior.Model
+	}
 	if model == "" {
 		model = cfg.Settings.Model
 	}
@@ -158,16 +182,8 @@ func (g *Generator) Propose(packageDir string, opts ProposeOptions) error {
 	var (
 		sendText string
 		history  []proposeTranscriptTurn
-		prior    *proposeTranscript
 	)
-	if strings.TrimSpace(opts.Followup) != "" {
-		if strings.TrimSpace(opts.TranscriptPath) == "" {
-			return fmt.Errorf("--followup requires --transcript pointing at the prior run's transcript.json")
-		}
-		prior, err = loadProposeTranscript(opts.TranscriptPath)
-		if err != nil {
-			return err
-		}
+	if followup {
 		if prior.Model != model {
 			return fmt.Errorf("--followup model %q does not match the prior transcript's model %q; a followup must reuse the same model (cache reuse and coherence both depend on it)", model, prior.Model)
 		}

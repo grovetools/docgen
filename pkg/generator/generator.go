@@ -179,22 +179,38 @@ func (g *Generator) GenerateWithOptions(packageDir string, opts GenerateOptions)
 }
 
 // resolvePromptContent finds and reads a prompt file, trying notebook location first.
-// It follows this resolution order:
+// Resolution is delegated to resolvePromptPath so the pre-spend prompt guard and
+// the actual generation read the SAME file (they can never diverge).
+func (g *Generator) resolvePromptContent(packageDir, promptFile string) ([]byte, error) {
+	path, err := g.resolvePromptPath(packageDir, promptFile)
+	if err != nil {
+		return nil, err
+	}
+	return os.ReadFile(path)
+}
+
+// resolvePromptPath locates a prompt file WITHOUT reading it, following the
+// exact resolution order generation uses:
 // 1. Tries to resolve the workspace and get the notebook prompts directory
 // 2. Looks for the prompt in the notebook directory (using basename only)
-// 3. Falls back to the legacy path in docs/prompts/
-// Returns the prompt content or an error if not found in either location.
-func (g *Generator) resolvePromptContent(packageDir, promptFile string) ([]byte, error) {
+// 3. Falls back to the legacy path in docs/
+// Returns the path of the file that exists, or an error naming every location
+// tried. This is the single source of truth for prompt resolution — the
+// pre-spend guard (validateSectionPrompts) and resolvePromptContent both use it.
+func (g *Generator) resolvePromptPath(packageDir, promptFile string) (string, error) {
 	// Extract basename only - ignore any directory prefix for backward compatibility
 	promptBaseName := filepath.Base(promptFile)
+	legacyPath := filepath.Join(packageDir, "docs", promptFile)
 
 	// 1. Try to get workspace node for the package directory
 	node, err := workspace.GetProjectByPath(packageDir)
 	if err != nil {
 		// Fallback: Can't resolve workspace, use legacy path
 		g.logger.Warnf("Could not resolve workspace for %s. Falling back to legacy prompt path.", packageDir)
-		legacyPath := filepath.Join(packageDir, "docs", promptFile)
-		return os.ReadFile(legacyPath)
+		if _, serr := os.Stat(legacyPath); serr != nil {
+			return "", fmt.Errorf("prompt '%s' not found at legacy location (%s): %w", promptBaseName, legacyPath, serr)
+		}
+		return legacyPath, nil
 	}
 
 	// 2. Try notebook path first
@@ -205,18 +221,16 @@ func (g *Generator) resolvePromptContent(packageDir, promptFile string) ([]byte,
 
 		if err == nil {
 			notebookPath := filepath.Join(notebookPromptsDir, promptBaseName)
-			if data, err := os.ReadFile(notebookPath); err == nil {
-				g.logger.Debugf("Loaded prompt '%s' from notebook: %s", promptBaseName, notebookPath)
-				return data, nil
+			if _, serr := os.Stat(notebookPath); serr == nil {
+				g.logger.Debugf("Resolved prompt '%s' from notebook: %s", promptBaseName, notebookPath)
+				return notebookPath, nil
 			}
 		}
 	}
 
 	// 3. Fallback to legacy path
-	legacyPath := filepath.Join(packageDir, "docs", promptFile)
 	g.logger.Debugf("Prompt not found in notebook, trying legacy path: %s", legacyPath)
-	data, err := os.ReadFile(legacyPath)
-	if err != nil {
+	if _, serr := os.Stat(legacyPath); serr != nil {
 		// Enhanced error message showing both paths attempted
 		notebookPromptsDir := "unable to resolve"
 		if cfg, cfgErr := coreConfig.LoadDefault(); cfgErr == nil {
@@ -225,13 +239,13 @@ func (g *Generator) resolvePromptContent(packageDir, promptFile string) ([]byte,
 				notebookPromptsDir = dir
 			}
 		}
-		return nil, fmt.Errorf(
+		return "", fmt.Errorf(
 			"prompt '%s' not found in notebook (%s) or legacy location (%s)",
 			promptBaseName, notebookPromptsDir, legacyPath,
 		)
 	}
 
-	return data, nil
+	return legacyPath, nil
 }
 
 // generateInPlace runs the core doc generation logic within a given directory.
@@ -363,6 +377,15 @@ func (g *Generator) generateInPlace(packageDir string, opts GenerateOptions) err
 	// output: filename (an empty output writes onto the output dir itself). Only
 	// the sections this run will actually generate are validated.
 	if err := validateSectionOutputs(sectionsToGenerate); err != nil {
+		return err
+	}
+
+	// Pre-spend guard: every in-scope prose section's prompt file must resolve
+	// (notebook first, legacy fallback — the same resolution the loop below
+	// uses) before any LLM call, listing ALL missing prompts in one error.
+	if err := validateSectionPrompts(sectionsToGenerate, func(_ int, s config.SectionConfig) (string, error) {
+		return g.resolvePromptPath(packageDir, s.Prompt)
+	}); err != nil {
 		return err
 	}
 
@@ -541,6 +564,37 @@ func validateSectionOutputs(sections []config.SectionConfig) error {
 		return nil
 	}
 	return fmt.Errorf("docs config error: %s", strings.Join(parts, "; "))
+}
+
+// validateSectionPrompts is the pre-spend prompt-existence guard, the prompt
+// counterpart to validateSectionOutputs: every in-scope PROSE section's prompt
+// file must resolve BEFORE any LLM call, or a section late in the run would
+// hard-fail on a missing prompt after earlier sections already paid for their
+// calls. resolvePath is the caller's own prompt resolution (index-aligned with
+// sections) so the guard checks the exact file generation would read — notebook
+// first + legacy fallback in generateInPlace, the subdir prompts/ dir in
+// generateSectionsMode. All missing prompts are listed in ONE error. The
+// "could not resolve prompt" fragment is load-bearing for grove's release
+// retry classifier (it marks the failure permanent — no retry re-spend).
+func validateSectionPrompts(sections []config.SectionConfig, resolvePath func(i int, s config.SectionConfig) (string, error)) error {
+	var problems []string
+	for i, s := range sections {
+		if !isProseSection(s.Type) {
+			continue
+		}
+		if strings.TrimSpace(s.Prompt) == "" {
+			problems = append(problems, fmt.Sprintf("section %q has no prompt: filename", s.Name))
+			continue
+		}
+		if _, err := resolvePath(i, s); err != nil {
+			problems = append(problems, fmt.Sprintf("section %q: %v", s.Name, err))
+		}
+	}
+	if len(problems) == 0 {
+		return nil
+	}
+	return fmt.Errorf("could not resolve prompt for %d prose section(s) — failing before any LLM call: %s",
+		len(problems), strings.Join(problems, "; "))
 }
 
 const SchemaToMarkdownSystemPrompt = `You are a technical writer tasked with creating documentation from one or more JSON schemas.
@@ -2189,6 +2243,19 @@ func (g *Generator) generateSectionsMode(packageDir, configPath string, topCfg *
 		scoped = append(scoped, s)
 	}
 	if err := validateSectionOutputs(scoped); err != nil {
+		return err
+	}
+
+	// Pre-spend guard: every in-scope prose section's prompt file must exist in
+	// its subdirectory's prompts/ dir (the exact path the loop below reads)
+	// before any LLM call, listing ALL missing prompts in one error.
+	if err := validateSectionPrompts(scoped, func(i int, _ config.SectionConfig) (string, error) {
+		p := filepath.Join(sectionsToGenerate[i].subDir, "prompts", sectionsToGenerate[i].section.Prompt)
+		if _, serr := os.Stat(p); serr != nil {
+			return "", fmt.Errorf("prompt not found at %s", p)
+		}
+		return p, nil
+	}); err != nil {
 		return err
 	}
 
