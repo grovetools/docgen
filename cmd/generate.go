@@ -31,6 +31,9 @@ Examples:
   docgen generate -s intro -s core                 # Generate multiple specific sections
   docgen generate --model claude-haiku-4-5         # Claude cache fan-out for all sections
   docgen generate --model claude-haiku-4-5 --cache-ttl 1h`,
+		// A generation failure is a runtime error, not a usage error — dumping
+		// the flag reference after "15 section(s) failed" buries the cause.
+		SilenceUsage: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			gen := generator.New(getLogger())
 

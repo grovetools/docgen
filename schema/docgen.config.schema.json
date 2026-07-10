@@ -372,7 +372,7 @@
         },
         "rules_file": {
           "type": "string",
-          "description": "Path to a cx rules file for gathering context (for schema_describe and schema_examples types)",
+          "description": "Context preset name or legacy .rules path for schema_describe and schema_examples",
           "x-layer": "project",
           "x-priority": "26"
         },
@@ -460,7 +460,7 @@
         },
         "rules_file": {
           "type": "string",
-          "description": "Custom rules file for cx generate",
+          "description": "Required docs context preset name (for example doc); explicit legacy .rules paths remain supported",
           "x-layer": "project",
           "x-priority": "24"
         },
