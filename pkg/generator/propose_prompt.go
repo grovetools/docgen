@@ -89,7 +89,7 @@ Rules:
 - The name in each PROMPT block header must match a prose section's name and its
   config prompt: filename stem.
 - Provide a prompt block for EVERY prose section and for no non-prose section.
-` + proposeSchemaFieldsRule
+` + proposeSchemaFieldsRule + proposeOutputFieldRule
 
 // proposeSchemaFieldsRule is appended to both instruction variants. Models have
 // invented unsupported keys (filter/invert_filter) on schemas: entries; the
@@ -98,6 +98,20 @@ Rules:
 const proposeSchemaFieldsRule = `- Each entry under a section's ` + "`schemas:`" + ` list supports ONLY two fields:
   ` + "`path`" + ` (the schema file) and ` + "`title`" + ` (the H2 heading). Do not add any
   other keys (there is no filter, invert_filter, or similar field).
+`
+
+// proposeOutputFieldRule is appended to both instruction variants. A --fresh
+// proposal once emitted sections with NO output: field; applying that config and
+// running `docgen generate` spent an LLM call per section and THEN failed the
+// write ("open .../docs: is a directory") because an empty output: joined onto
+// the output dir resolves to the dir itself. Spelling out the requirement keeps
+// every proposed section writable.
+const proposeOutputFieldRule = `- EVERY section MUST set an explicit ` + "`output:`" + ` filename (the file written under
+  the docs output dir), e.g. ` + "`output: 01-overview.md`" + `. A section with no output:
+  cannot be written and wastes its generation.
+- Rendered doc sections use ` + "`.md`" + `; a ` + "`schema_describe`" + ` section's output is a data
+  file conventionally named ` + "`<repo>.descriptions.json`" + `, and any ` + "`schema_table`" + `
+  section that consumes it via ` + "`descriptions:`" + ` must reference that exact filename.
 `
 
 // FreshProposeInstruction is the green-field variant of ProposeInstruction used
@@ -168,4 +182,4 @@ Rules:
 - The name in each PROMPT block header must match a prose section's name and its
   config prompt: filename stem.
 - Provide a prompt block for EVERY prose section and for no non-prose section.
-` + proposeSchemaFieldsRule
+` + proposeSchemaFieldsRule + proposeOutputFieldRule

@@ -364,6 +364,94 @@ func TestProposeInstructionHardening(t *testing.T) {
 	}
 }
 
+// TestProposeInstructionsCarryOutputRule asserts BOTH instruction variants tell
+// the model that every section needs an explicit output: filename — the rule
+// that prevents the --fresh empty-output bug (LLM spent, write onto a directory).
+func TestProposeInstructionsCarryOutputRule(t *testing.T) {
+	const frag = "output:"
+	for name, instr := range map[string]string{
+		"ProposeInstruction":      ProposeInstruction,
+		"FreshProposeInstruction": FreshProposeInstruction,
+	} {
+		if !strings.Contains(instr, "EVERY section MUST set an explicit") {
+			t.Errorf("%s missing the explicit-output rule", name)
+		}
+		if !strings.Contains(instr, frag) {
+			t.Errorf("%s missing the %q keyword", name, frag)
+		}
+		if !strings.Contains(instr, "descriptions.json") {
+			t.Errorf("%s missing the schema_describe output-file convention", name)
+		}
+	}
+}
+
+// TestWriteProposalBundleWarnsMissingOutputAndPrompt verifies the bundle probe
+// surfaces (a) a section with no output: and (b) a prose section whose prompt
+// file is not among the bundle's drafted prompts — both joined into one warning.
+func TestWriteProposalBundleWarnsMissingOutputAndPrompt(t *testing.T) {
+	b := &proposalBundle{
+		Rationale: "r",
+		Outline:   "o",
+		Config: "enabled: true\nsections:\n" +
+			"  - name: quick-start\n    type: prose\n    prompt: 03-quick-start.md\n" + // no output, prompt not in bundle
+			"  - name: 02-cli\n    type: capture\n    output: 02-cli.md\n",
+		// The bundle drafted only 01-overview.md, NOT 03-quick-start.md.
+		Prompts: []promptFile{{Name: "01-overview.md", Content: "x"}},
+	}
+	dir := t.TempDir()
+	res, err := writeProposalBundle(dir, b)
+	if err != nil {
+		t.Fatalf("write: %v", err)
+	}
+	if !strings.Contains(res.ConfigWarning, `section "quick-start" has no output: filename`) {
+		t.Errorf("missing empty-output warning, got: %q", res.ConfigWarning)
+	}
+	if !strings.Contains(res.ConfigWarning, `prose section "quick-start" prompt 03-quick-start.md not in bundle`) {
+		t.Errorf("missing missing-prompt warning, got: %q", res.ConfigWarning)
+	}
+	if _, err := os.Stat(res.ConfigPath); err != nil {
+		t.Errorf("config with warnings should still be written for review: %v", err)
+	}
+}
+
+// TestValidateSectionOutputs covers the generate-side pre-spend guard: empty
+// output errors with the load-bearing fragment and lists all offenders, while a
+// fully-populated set passes.
+func TestValidateSectionOutputs(t *testing.T) {
+	// Happy path: every section has an output.
+	ok := []config.SectionConfig{
+		{Name: "01-overview", Output: "01-overview.md"},
+		{Name: "02-cli", Output: "02-cli.md"},
+	}
+	if err := validateSectionOutputs(ok); err != nil {
+		t.Fatalf("expected no error when all outputs present, got: %v", err)
+	}
+
+	// Multiple offenders: the error must carry the classifier fragment and name
+	// every offending section.
+	bad := []config.SectionConfig{
+		{Name: "quick-start", Output: ""},
+		{Name: "02-cli", Output: "02-cli.md"},
+		{Name: "03-guide", Output: "   "}, // whitespace-only counts as empty
+	}
+	err := validateSectionOutputs(bad)
+	if err == nil {
+		t.Fatal("expected an error for sections with empty output")
+	}
+	if !strings.Contains(err.Error(), "has no output: filename") {
+		t.Errorf("error missing the retry-classifier fragment: %v", err)
+	}
+	for _, name := range []string{"quick-start", "03-guide"} {
+		if !strings.Contains(err.Error(), name) {
+			t.Errorf("error does not name offender %q: %v", name, err)
+		}
+	}
+	// "1 more" — two offenders means the head plus one in the parenthetical.
+	if !strings.Contains(err.Error(), "1 more") {
+		t.Errorf("error should summarize the remaining offenders count: %v", err)
+	}
+}
+
 // TestReduceConfigForFresh verifies the sections list is dropped while the
 // settings survive, and the result is still valid YAML.
 func TestReduceConfigForFresh(t *testing.T) {
