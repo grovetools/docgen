@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
-	"path/filepath"
 	"strings"
 
 	grovelogging "github.com/grovetools/core/logging"
@@ -49,21 +48,19 @@ func (e *Enricher) Enrich(projectDir, schemaPath string, inPlace bool) error {
 		return fmt.Errorf("failed to parse schema JSON: %w", err)
 	}
 
-	// Load docgen config to get rules file setting
-	cfg, err := config.Load(projectDir)
+	// Load notebook-aware config and resolve its explicit context selection.
+	cfg, _, err := config.LoadWithNotebook(projectDir)
+	if err != nil && !os.IsNotExist(err) {
+		return fmt.Errorf("failed to load docgen config: %w", err)
+	}
+	rulesPath, err := config.ResolveDocsRulesFile(projectDir)
 	if err != nil {
-		e.logger.Warnf("No docgen.config.yml found, using default context rules")
-	} else if cfg.Settings.RulesFile != "" {
-		// Setup rules file if specified in config
-		e.logger.Infof("Setting up rules file: %s", cfg.Settings.RulesFile)
-		if err := e.setupRulesFile(projectDir, cfg.Settings.RulesFile); err != nil {
-			return fmt.Errorf("failed to setup rules file: %w", err)
-		}
+		return fmt.Errorf("failed to resolve docs rules: %w", err)
 	}
 
-	// Build context once for the entire project
+	// Build context once for the entire project.
 	e.logger.Info("Building project context with 'cx generate'...")
-	if err := e.generator.BuildContext(projectDir); err != nil {
+	if err := e.generator.BuildContext(projectDir, rulesPath); err != nil {
 		return fmt.Errorf("failed to build context: %w", err)
 	}
 
@@ -273,37 +270,4 @@ func (e *Enricher) generateDescriptionsBatch(projectDir string, properties []pro
 	}
 
 	return descriptions, nil
-}
-
-func (e *Enricher) setupRulesFile(packageDir, rulesFile string) error {
-	// Notebook-first: docs context rules now live in the notebook
-	// (workspaces/<repo>/context/rules), which `cx generate` resolves directly
-	// and ranks above the legacy repo-local .grove/rules. When the notebook
-	// owns the rules, skip .grove/rules staging so cx doesn't ignore-and-warn.
-	if nbRules, ok := config.NotebookContextRulesFile(packageDir); ok {
-		e.logger.Debugf("Notebook context rules active (%s); skipping .grove/rules staging", nbRules)
-		return nil
-	}
-
-	// Legacy fallback (non-notebook repos): read the repo-relative rules file.
-	rulesPath := filepath.Join(packageDir, "docs", rulesFile)
-	content, err := os.ReadFile(rulesPath)
-	if err != nil {
-		return fmt.Errorf("failed to read rules file %s: %w", rulesPath, err)
-	}
-
-	// Ensure .grove directory exists
-	groveDir := filepath.Join(packageDir, ".grove")
-	if err := os.MkdirAll(groveDir, 0o755); err != nil {
-		return fmt.Errorf("failed to create .grove directory: %w", err)
-	}
-
-	// Copy the rules file content to .grove/rules
-	groveRulesPath := filepath.Join(groveDir, "rules")
-	if err := os.WriteFile(groveRulesPath, content, 0o644); err != nil {
-		return fmt.Errorf("failed to write .grove/rules: %w", err)
-	}
-
-	e.logger.Debugf("Setup rules file from %s to .grove/rules", rulesFile)
-	return nil
 }
