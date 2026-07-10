@@ -47,6 +47,24 @@ type BindingEntry struct {
 	ConfigKey   string   `json:"ConfigKey"`
 }
 
+// parseTUIRegistry decodes `grove keys dump` output. It accepts both dump
+// shapes — the current object form {"tui": [...], "tmux": [...]} (the hotkey
+// registry rework added tmux bindings alongside TUIs) and the legacy bare
+// array — so docgen tolerates grove version skew in either direction.
+func parseTUIRegistry(output []byte) ([]TUIRegistryEntry, error) {
+	var wrapped struct {
+		TUI []TUIRegistryEntry `json:"tui"`
+	}
+	if err := json.Unmarshal(output, &wrapped); err == nil && wrapped.TUI != nil {
+		return wrapped.TUI, nil
+	}
+	var registry []TUIRegistryEntry
+	if err := json.Unmarshal(output, &registry); err != nil {
+		return nil, fmt.Errorf("failed to parse TUI registry JSON: %w", err)
+	}
+	return registry, nil
+}
+
 // generateFromTUIKeymaps generates markdown documentation from TUI keybinding registry.
 // This is a deterministic generator that doesn't require LLM calls.
 func (g *Generator) generateFromTUIKeymaps(packageDir string, section config.SectionConfig, cfg *config.DocgenConfig, outputBaseDir string) error {
@@ -59,9 +77,9 @@ func (g *Generator) generateFromTUIKeymaps(packageDir string, section config.Sec
 		return fmt.Errorf("failed to fetch TUI registry (ensure 'grove' is installed and built): %w\nOutput: %s", err, string(output))
 	}
 
-	var registry []TUIRegistryEntry
-	if err := json.Unmarshal(output, &registry); err != nil {
-		return fmt.Errorf("failed to parse TUI registry JSON: %w", err)
+	registry, err := parseTUIRegistry(output)
+	if err != nil {
+		return err
 	}
 
 	var sb strings.Builder
@@ -295,9 +313,9 @@ func (g *Generator) generateTUIDescriptions(packageDir string, section config.Se
 		return fmt.Errorf("failed to fetch TUI registry (ensure 'grove' is installed and built): %w", err)
 	}
 
-	var registry []TUIRegistryEntry
-	if err := json.Unmarshal(output, &registry); err != nil {
-		return fmt.Errorf("failed to parse TUI registry JSON: %w", err)
+	registry, err := parseTUIRegistry(output)
+	if err != nil {
+		return err
 	}
 
 	// Determine which TUIs to describe

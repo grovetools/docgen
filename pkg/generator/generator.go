@@ -47,8 +47,12 @@ type Generator struct {
 	// failedSections accumulates the names of sections that failed during the
 	// run (bare names in in-place mode, subdir/name in sections mode — the same
 	// forms `-s` accepts) so the usage report can surface them and a shelling
-	// caller can retry only the failed sections.
-	failedSections []string
+	// caller can retry only the failed sections. failedSectionErrors carries
+	// each failed section's error text so a shelling caller (grove release gen)
+	// can classify the failure — transient vs permanent — across the exec
+	// boundary instead of seeing only "exit status 1".
+	failedSections      []string
+	failedSectionErrors map[string]string
 }
 
 // GenerateOptions configures what sections to generate
@@ -85,18 +89,52 @@ type SectionUsage struct {
 // clean run) so callers can distinguish "no failures" from a report written by
 // an older docgen that does not know the field.
 type UsageReport struct {
-	Model                 string         `json:"model"`
-	Sections              []SectionUsage `json:"sections"`
-	FailedSections        []string       `json:"failed_sections"`
-	TotalInputTokens      int64          `json:"total_input_tokens"`
-	TotalOutputTokens     int64          `json:"total_output_tokens"`
-	TotalCacheWriteTokens int64          `json:"total_cache_write_tokens"`
-	TotalCacheReadTokens  int64          `json:"total_cache_read_tokens"`
-	TotalEstCostUSD       float64        `json:"total_est_cost_usd"`
+	Model          string         `json:"model"`
+	Sections       []SectionUsage `json:"sections"`
+	FailedSections []string       `json:"failed_sections"`
+	// FailedSectionErrors maps each failed section to its error text so a
+	// shelling caller can show the real cause and classify it (e.g. an API 400
+	// "prompt is too long" is permanent and must not be retried). Absent from
+	// reports written by older docgen binaries.
+	FailedSectionErrors   map[string]string `json:"failed_section_errors,omitempty"`
+	TotalInputTokens      int64             `json:"total_input_tokens"`
+	TotalOutputTokens     int64             `json:"total_output_tokens"`
+	TotalCacheWriteTokens int64             `json:"total_cache_write_tokens"`
+	TotalCacheReadTokens  int64             `json:"total_cache_read_tokens"`
+	TotalEstCostUSD       float64           `json:"total_est_cost_usd"`
 }
 
 func New(logger *logrus.Logger) *Generator {
 	return &Generator{logger: logger}
+}
+
+// recordSectionFailure books one failed section for the usage report and
+// emits it with the section name in the log message itself — log panes list
+// only the message line, and fifteen bare "Section failed" rows are useless
+// without a click-through — plus the error text as a field.
+func (g *Generator) recordSectionFailure(name string, err error) {
+	g.failedSections = append(g.failedSections, name)
+	if g.failedSectionErrors == nil {
+		g.failedSectionErrors = make(map[string]string)
+	}
+	g.failedSectionErrors[name] = err.Error()
+	ulog.Error(fmt.Sprintf("Section %q failed", name)).
+		Field("section", name).
+		Field("error", err.Error()).
+		Emit()
+}
+
+// failedSectionsError builds the run-level error for a set of failed
+// sections. Section failures share one root cause almost always (an
+// over-window prefix 400s every request), so the first failure's error text
+// rides along — without it the run error names the casualties but not the
+// cause, and a shelling caller sees only "exit status 1".
+func (g *Generator) failedSectionsError(failed []string) error {
+	first := g.failedSectionErrors[failed[0]]
+	if first == "" {
+		return fmt.Errorf("%d section(s) failed: %s", len(failed), strings.Join(failed, ", "))
+	}
+	return fmt.Errorf("%d section(s) failed: %s; first error: %s", len(failed), strings.Join(failed, ", "), first)
 }
 
 // Generate orchestrates an isolated documentation generation process for all sections.
@@ -255,7 +293,11 @@ func (g *Generator) generateInPlace(packageDir string, opts GenerateOptions) err
 
 	// 3a. Enable Claude cache fan-out for this run when applicable. Must run
 	// after BuildContext so the cx context exists to form the shared prefix.
-	teardownFanout := g.setupFanout(packageDir, cfg, opts)
+	// An over-window context is a hard, permanent error — see setupFanout.
+	teardownFanout, err := g.setupFanout(packageDir, cfg, opts)
+	if err != nil {
+		return err
+	}
 	defer teardownFanout()
 
 	// 3. Load system prompt if configured
@@ -285,21 +327,28 @@ func (g *Generator) generateInPlace(packageDir string, opts GenerateOptions) err
 			requestedSections[name] = true
 		}
 
-		// Filter sections and validate
+		// Filter sections and validate. Config sections may legitimately share
+		// a name (e.g. a production and a draft "overview" with different
+		// outputs), so a requested name selects EVERY section bearing it —
+		// deleting on first match would silently drop the duplicates from a
+		// retry of failed sections.
 		var filteredSections []config.SectionConfig
 		var invalidSections []string
+		foundSections := make(map[string]bool)
 
 		for _, section := range cfg.Sections {
 			// Check if this section was requested
 			if requestedSections[section.Name] {
 				filteredSections = append(filteredSections, section)
-				delete(requestedSections, section.Name) // Remove from map to track found sections
+				foundSections[section.Name] = true
 			}
 		}
 
 		// Check for any requested sections that weren't found
 		for name := range requestedSections {
-			invalidSections = append(invalidSections, name)
+			if !foundSections[name] {
+				invalidSections = append(invalidSections, name)
+			}
 		}
 
 		if len(invalidSections) > 0 {
@@ -318,11 +367,7 @@ func (g *Generator) generateInPlace(packageDir string, opts GenerateOptions) err
 	var failedSections []string
 	sectionFailed := func(name string, err error) {
 		failedSections = append(failedSections, name)
-		g.failedSections = append(g.failedSections, name)
-		ulog.Error("Section failed").
-			Field("section", name).
-			Field("error", err.Error()).
-			Emit()
+		g.recordSectionFailure(name, err)
 	}
 	for _, section := range sectionsToGenerate {
 		g.currentSection = section.Name
@@ -447,7 +492,7 @@ func (g *Generator) generateInPlace(packageDir string, opts GenerateOptions) err
 	}
 
 	if len(failedSections) > 0 {
-		return fmt.Errorf("%d section(s) failed: %s", len(failedSections), strings.Join(failedSections, ", "))
+		return g.failedSectionsError(failedSections)
 	}
 	return nil
 }
@@ -1775,7 +1820,7 @@ func (g *Generator) logFanoutUsage(u *anthropic.UsageResult) {
 // model override (may be empty); the report's Model prefers the model actually
 // billed (from the first record) and falls back to reqModel.
 func (g *Generator) writeUsageReport(path, reqModel string) {
-	report := UsageReport{Model: reqModel, Sections: g.usageRecords, FailedSections: g.failedSections}
+	report := UsageReport{Model: reqModel, Sections: g.usageRecords, FailedSections: g.failedSections, FailedSectionErrors: g.failedSectionErrors}
 	if report.Sections == nil {
 		report.Sections = []SectionUsage{}
 	}
@@ -1808,12 +1853,29 @@ func (g *Generator) writeUsageReport(path, reqModel string) {
 		path, len(report.Sections), report.TotalCacheWriteTokens, report.TotalCacheReadTokens, report.TotalEstCostUSD)
 }
 
+// docsWindowTokens is the context-window budget the docs fan-out prefix must
+// fit inside. All current claude-* docs models have (at least) a 200k window;
+// a prefix that exceeds it makes EVERY section request 400 with "prompt is
+// too long", so the run fails up front instead.
+const docsWindowTokens = 200_000
+
+// docsBytesPerToken is the conservative bytes-per-token estimate used for the
+// window precheck. Real Go source runs ~3.1 bytes/token, so dividing by 3
+// slightly over-counts tokens — erring toward failing fast rather than
+// spending on a wave of guaranteed 400s.
+const docsBytesPerToken = 3
+
 // setupFanout configures the run's cache fan-out when the effective model is a
 // Claude model. It builds a shared prefix from the cx context that BuildContext
 // has already generated for packageDir and returns a teardown func the caller
 // must defer. When fan-out does not apply (non-Claude model, or no cx context),
 // it is a no-op and CallLLM keeps shelling `grove llm request`.
-func (g *Generator) setupFanout(packageDir string, cfg *config.DocgenConfig, opts GenerateOptions) func() {
+//
+// A context that cannot fit the model window is a hard error (not a fallback):
+// the standard path would upload the same over-window context and fail every
+// section with an API 400, so the run stops before any spend with a pointer at
+// the configured rules_file preset.
+func (g *Generator) setupFanout(packageDir string, cfg *config.DocgenConfig, opts GenerateOptions) (func(), error) {
 	noop := func() {}
 
 	prefixModel := opts.Model
@@ -1824,7 +1886,7 @@ func (g *Generator) setupFanout(packageDir string, cfg *config.DocgenConfig, opt
 		if cfg.Settings.CacheFanout {
 			g.logger.Warnf("cache_fanout is set but effective model %q is not a Claude model; using the standard grove llm path", prefixModel)
 		}
-		return noop
+		return noop, nil
 	}
 
 	// Verify the context fileset before spending: an empty set means cx produced
@@ -1832,7 +1894,28 @@ func (g *Generator) setupFanout(packageDir string, cfg *config.DocgenConfig, opt
 	ctxFiles := anthropic.WorkDirContextFiles(packageDir)
 	if len(ctxFiles) == 0 {
 		g.logger.Warnf("cache fan-out requested for model %q but cx produced no context in %s; using the standard grove llm path", prefixModel, packageDir)
-		return noop
+		return noop, nil
+	}
+
+	// Window precheck — fail fast and loud before any upload/spend.
+	var ctxBytes int64
+	for _, f := range ctxFiles {
+		if fi, statErr := os.Stat(f); statErr == nil {
+			ctxBytes += fi.Size()
+		}
+	}
+	if estTokens := ctxBytes / docsBytesPerToken; estTokens > docsWindowTokens {
+		err := fmt.Errorf(
+			"docs context too large for %s: %d file(s), %.2f MB (~%dk tokens at ~%d bytes/token) exceeds the ~%dk-token window — narrow the configured settings.rules_file preset",
+			prefixModel, len(ctxFiles), float64(ctxBytes)/1e6, estTokens/1000, docsBytesPerToken, docsWindowTokens/1000)
+		ulog.Error("Docs context exceeds model window").
+			Field("model", prefixModel).
+			Field("context_bytes", ctxBytes).
+			Field("est_tokens", estTokens).
+			Field("window_tokens", docsWindowTokens).
+			Field("docs_rules_remedy", "settings.rules_file").
+			Emit()
+		return noop, err
 	}
 
 	ttl := opts.CacheTTL
@@ -1851,7 +1934,7 @@ func (g *Generator) setupFanout(packageDir string, cfg *config.DocgenConfig, opt
 	})
 	if err != nil {
 		g.logger.WithError(err).Warnf("failed to set up cache fan-out for model %q; using the standard grove llm path", prefixModel)
-		return noop
+		return noop, nil
 	}
 
 	g.prefix = prefix
@@ -1868,7 +1951,7 @@ func (g *Generator) setupFanout(packageDir string, cfg *config.DocgenConfig, opt
 		g.prefix = nil
 		g.forceModel = ""
 		g.currentSection = ""
-	}
+	}, nil
 }
 
 // lastLines returns the last n lines of s, with surrounding whitespace trimmed.
@@ -1903,8 +1986,12 @@ func (g *Generator) generateSectionsMode(packageDir, configPath string, topCfg *
 	}
 
 	// Enable Claude cache fan-out for this run when applicable (after
-	// BuildContext so the shared cx-context prefix exists).
-	teardownFanout := g.setupFanout(packageDir, topCfg, opts)
+	// BuildContext so the shared cx-context prefix exists). An over-window
+	// context is a hard, permanent error — see setupFanout.
+	teardownFanout, err := g.setupFanout(packageDir, topCfg, opts)
+	if err != nil {
+		return err
+	}
 	defer teardownFanout()
 
 	// Discover subdirectories with their own docgen.config.yml
@@ -2027,11 +2114,7 @@ func (g *Generator) generateSectionsMode(packageDir, configPath string, topCfg *
 	var failedSections []string
 	sectionFailed := func(name string, err error) {
 		failedSections = append(failedSections, name)
-		g.failedSections = append(g.failedSections, name)
-		ulog.Error("Section failed").
-			Field("section", name).
-			Field("error", err.Error()).
-			Emit()
+		g.recordSectionFailure(name, err)
 	}
 	for _, ss := range sectionsToGenerate {
 		g.currentSection = qualifiedName(ss)
@@ -2166,7 +2249,7 @@ func (g *Generator) generateSectionsMode(packageDir, configPath string, topCfg *
 	}
 
 	if len(failedSections) > 0 {
-		return fmt.Errorf("%d section(s) failed: %s", len(failedSections), strings.Join(failedSections, ", "))
+		return g.failedSectionsError(failedSections)
 	}
 	return nil
 }
