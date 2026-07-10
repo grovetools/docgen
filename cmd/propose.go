@@ -9,11 +9,14 @@ import (
 
 func newProposeCmd() *cobra.Command {
 	var (
-		model     string
-		cacheTTL  string
-		outputDir string
-		usageJSON string
-		dryRun    bool
+		model      string
+		cacheTTL   string
+		outputDir  string
+		usageJSON  string
+		dryRun     bool
+		fresh      bool
+		followup   string
+		transcript string
 	)
 
 	cmd := &cobra.Command{
@@ -39,15 +42,31 @@ The bundle written to --output-dir:
   proposed.docgen.config.yml   a complete, valid config (current settings kept)
   prompts/<nn>-<name>.md       one draft prompt per prose section
 
+A transcript.json recording the exact turns is written alongside the bundle, so
+a later --followup can replay the dialogue and refine the proposal.
+
 The live notebook config/prompts are never overwritten.
 
 Claude models only — a non-claude --model errors, because the point is the shared
 cache.
 
+Modes:
+  (default)   evolve the current outline: the suffix carries the current config,
+              prompts, and README template.
+  --fresh     green-field outline from the code alone: the suffix carries only
+              the current settings (sections/prompts/README withheld) so the
+              proposal is not anchored to today's outline. Excludes --followup.
+  --followup  refine a PRIOR proposal in a second turn: replay --transcript's
+              turns (same --model required) and add the given feedback as a new
+              user turn, re-emitting the complete proposal. Excludes --fresh.
+
 Examples:
   docgen propose --output-dir ./proposal --model claude-haiku-4-5
   docgen propose --output-dir ./proposal --model claude-haiku-4-5 --cache-ttl 1h
-  docgen propose --output-dir ./proposal --dry-run    # assemble suffix, no API call`,
+  docgen propose --output-dir ./proposal --dry-run    # assemble suffix, no API call
+  docgen propose --output-dir ./p2 --model claude-haiku-4-5 --fresh   # green-field outline
+  docgen propose --output-dir ./p2 --model claude-haiku-4-5 \
+    --followup "merge the CLI pages" --transcript ./proposal/transcript.json`,
 		SilenceUsage: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			gen := generator.New(getLogger())
@@ -58,11 +77,14 @@ Examples:
 			}
 
 			return gen.Propose(cwd, generator.ProposeOptions{
-				Model:         model,
-				CacheTTL:      cacheTTL,
-				OutputDir:     outputDir,
-				UsageJSONPath: usageJSON,
-				DryRun:        dryRun,
+				Model:          model,
+				CacheTTL:       cacheTTL,
+				OutputDir:      outputDir,
+				UsageJSONPath:  usageJSON,
+				DryRun:         dryRun,
+				Fresh:          fresh,
+				Followup:       followup,
+				TranscriptPath: transcript,
 			})
 		},
 	}
@@ -72,6 +94,9 @@ Examples:
 	cmd.Flags().StringVar(&outputDir, "output-dir", "", "Directory to write the proposal bundle to (required)")
 	cmd.Flags().StringVar(&usageJSON, "usage-json", "", "Write a machine-readable cache/usage report (JSON) to this file")
 	cmd.Flags().BoolVar(&dryRun, "dry-run", false, "Assemble and save the request suffix without any API call")
+	cmd.Flags().BoolVar(&fresh, "fresh", false, "Green-field: propose from the code alone (withhold the current sections/prompts/README); excludes --followup")
+	cmd.Flags().StringVar(&followup, "followup", "", "Reviewer feedback that refines a prior proposal in a second turn (requires --transcript); excludes --fresh")
+	cmd.Flags().StringVar(&transcript, "transcript", "", "Path to a prior run's transcript.json to replay for --followup")
 
 	_ = cmd.MarkFlagRequired("output-dir")
 

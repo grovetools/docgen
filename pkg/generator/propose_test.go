@@ -277,6 +277,271 @@ func TestProposeDryRunNoNetwork(t *testing.T) {
 	}
 }
 
+// TestWriteProposalBundleClearsStalePrompts verifies a rewrite removes prompt
+// files from a PREVIOUS bundle (whose filenames differ) plus a stale
+// PROPOSAL.raw.md, so the staged prompts/ matches exactly the new proposal.
+func TestWriteProposalBundleClearsStalePrompts(t *testing.T) {
+	dir := t.TempDir()
+
+	// Simulate a prior bundle: two prompt files and a leftover raw dump.
+	promptsDir := filepath.Join(dir, "prompts")
+	if err := os.MkdirAll(promptsDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	for _, stale := range []string{"02-channels-guide.md", "08-agent-instructions.md"} {
+		if err := os.WriteFile(filepath.Join(promptsDir, stale), []byte("old"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := os.WriteFile(filepath.Join(dir, "PROPOSAL.raw.md"), []byte("raw"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	b, err := parseProposalResponse(cannedProposalResponse)
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	if _, err := writeProposalBundle(dir, b); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+
+	entries, err := os.ReadDir(promptsDir)
+	if err != nil {
+		t.Fatalf("reading prompts dir: %v", err)
+	}
+	if len(entries) != 1 || entries[0].Name() != "01-overview.md" {
+		var names []string
+		for _, e := range entries {
+			names = append(names, e.Name())
+		}
+		t.Fatalf("stale prompts not cleared; prompts/ = %v, want only 01-overview.md", names)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "PROPOSAL.raw.md")); !os.IsNotExist(err) {
+		t.Errorf("stale PROPOSAL.raw.md not removed (err=%v)", err)
+	}
+}
+
+// TestAssembleProposeSuffixFresh asserts the --fresh suffix uses the fresh
+// instruction, withholds the current prompts/sections/README, and keeps only
+// the reduced settings.
+func TestAssembleProposeSuffixFresh(t *testing.T) {
+	in := proposeInputs{
+		repo:       "example",
+		configName: "docgen.config.yml",
+		configYAML: "enabled: true\ntitle: Example\nsettings:\n  model: claude-haiku-4-5\n",
+		fresh:      true,
+	}
+	suffix := assembleProposeSuffix(in)
+
+	if !strings.Contains(suffix, FreshProposeInstruction[:40]) {
+		t.Errorf("fresh suffix must lead with the fresh instruction")
+	}
+	if !strings.Contains(suffix, "sections withheld") {
+		t.Errorf("fresh suffix missing the withheld-sections label:\n%s", suffix)
+	}
+	if !strings.Contains(suffix, "model: claude-haiku-4-5") {
+		t.Errorf("fresh suffix should still carry the settings block")
+	}
+	// The fresh instruction must NOT carry the evolve-the-current-list framing
+	// or a KEPT/ADDED change column.
+	if strings.Contains(suffix, "Prefer evolving the current list") {
+		t.Errorf("fresh suffix should not tell the model to evolve the current list")
+	}
+	if strings.Contains(suffix, "KEPT/ADDED/REMOVED/MERGED") {
+		t.Errorf("fresh outline must not include the change column")
+	}
+	// Both instructions must enumerate the valid schema fields (hardening).
+	if !strings.Contains(suffix, "path") || !strings.Contains(suffix, "invert_filter") {
+		t.Errorf("fresh instruction should enumerate the valid schemas: fields")
+	}
+}
+
+// TestProposeInstructionHardening asserts the default instruction spells out
+// the valid schemas: entry fields (path/title only).
+func TestProposeInstructionHardening(t *testing.T) {
+	if !strings.Contains(ProposeInstruction, "path") || !strings.Contains(ProposeInstruction, "invert_filter") {
+		t.Errorf("ProposeInstruction should name path/title and forbid invert_filter")
+	}
+}
+
+// TestReduceConfigForFresh verifies the sections list is dropped while the
+// settings survive, and the result is still valid YAML.
+func TestReduceConfigForFresh(t *testing.T) {
+	full := []byte("enabled: true\ntitle: Example\nsettings:\n  model: claude-haiku-4-5\n  rules_file: doc\nsections:\n  - name: 01-overview\n    title: Overview\n    order: 1\n    type: prose\n    output: 01-overview.md\n")
+	reduced, err := reduceConfigForFresh(full)
+	if err != nil {
+		t.Fatalf("reduce: %v", err)
+	}
+	var cfg config.DocgenConfig
+	if err := yaml.Unmarshal([]byte(reduced), &cfg); err != nil {
+		t.Fatalf("reduced config not valid yaml: %v", err)
+	}
+	if len(cfg.Sections) != 0 {
+		t.Errorf("reduced config should have no sections, got %d", len(cfg.Sections))
+	}
+	if cfg.Settings.Model != "claude-haiku-4-5" {
+		t.Errorf("reduced config dropped settings.model: %q", cfg.Settings.Model)
+	}
+	if strings.Contains(reduced, "01-overview") {
+		t.Errorf("reduced config still references a section: %s", reduced)
+	}
+}
+
+// TestProposeTranscriptRoundTrip verifies transcript.json writes and loads back
+// with its model and turns intact, and that toMessageTurns preserves order.
+func TestProposeTranscriptRoundTrip(t *testing.T) {
+	dir := t.TempDir()
+	orig := &proposeTranscript{
+		Model: "claude-haiku-4-5",
+		Turns: []proposeTranscriptTurn{
+			{Role: "user", Content: "turn-0 suffix"},
+			{Role: "assistant", Content: "turn-0 proposal"},
+		},
+	}
+	if err := writeProposeTranscript(dir, orig); err != nil {
+		t.Fatalf("write transcript: %v", err)
+	}
+	loaded, err := loadProposeTranscript(filepath.Join(dir, "transcript.json"))
+	if err != nil {
+		t.Fatalf("load transcript: %v", err)
+	}
+	if loaded.Model != orig.Model || len(loaded.Turns) != 2 {
+		t.Fatalf("round-trip mismatch: %+v", loaded)
+	}
+	turns := toMessageTurns(loaded.Turns)
+	if len(turns) != 2 || turns[0].Role != "user" || turns[1].Content != "turn-0 proposal" {
+		t.Fatalf("toMessageTurns mismatch: %+v", turns)
+	}
+	if toMessageTurns(nil) != nil {
+		t.Errorf("toMessageTurns(nil) should be nil (turn 0)")
+	}
+}
+
+// TestLoadProposeTranscriptRejectsEmpty covers the missing-model / empty-turns
+// guard.
+func TestLoadProposeTranscriptRejectsEmpty(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "transcript.json")
+	if err := os.WriteFile(path, []byte(`{"model":"","turns":[]}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := loadProposeTranscript(path); err == nil {
+		t.Error("expected an error for an empty transcript")
+	}
+}
+
+// TestFollowupTaskPrompt asserts the feedback is wrapped in a re-emit
+// instruction rather than passed bare.
+func TestFollowupTaskPrompt(t *testing.T) {
+	p := followupTaskPrompt("  merge the CLI pages  ")
+	if !strings.Contains(p, "merge the CLI pages") {
+		t.Errorf("feedback not carried: %q", p)
+	}
+	if !strings.Contains(p, "COMPLETE") || !strings.Contains(p, "delimited format") {
+		t.Errorf("followup prompt should instruct a complete re-emit: %q", p)
+	}
+}
+
+// writeProposeTestRepo writes a minimal docgen repo (config + one prompt) and
+// returns its root, for the dry-run/guard tests below.
+func writeProposeTestRepo(t *testing.T) string {
+	t.Helper()
+	repo := t.TempDir()
+	docsDir := filepath.Join(repo, "docs")
+	if err := os.MkdirAll(filepath.Join(docsDir, "prompts"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	cfgYAML := "enabled: true\ntitle: Example\nsettings:\n  model: claude-haiku-4-5\n  rules_file: doc\nsections:\n  - name: 01-overview\n    title: Overview\n    order: 1\n    type: prose\n    prompt: 01-overview.md\n    output: 01-overview.md\n"
+	if err := os.WriteFile(filepath.Join(docsDir, config.ConfigFileName), []byte(cfgYAML), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(docsDir, "prompts", "01-overview.md"), []byte("# Overview\nWrite the overview."), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	return repo
+}
+
+// TestProposeFreshDryRunSuffix verifies --fresh --dry-run records a suffix that
+// uses the fresh instruction and withholds the current prompt/section.
+func TestProposeFreshDryRunSuffix(t *testing.T) {
+	repo := writeProposeTestRepo(t)
+	out := filepath.Join(t.TempDir(), "proposal")
+	g := New(newTestLogger())
+	if err := g.Propose(repo, ProposeOptions{
+		Model:     "claude-haiku-4-5",
+		OutputDir: out,
+		DryRun:    true,
+		Fresh:     true,
+	}); err != nil {
+		t.Fatalf("fresh dry-run failed: %v", err)
+	}
+	suffix, err := os.ReadFile(filepath.Join(out, "PROPOSE_SUFFIX.md"))
+	if err != nil {
+		t.Fatalf("dry run did not record the suffix: %v", err)
+	}
+	if !strings.Contains(string(suffix), "sections withheld") {
+		t.Errorf("fresh suffix missing withheld-sections framing")
+	}
+	if strings.Contains(string(suffix), "Write the overview.") {
+		t.Errorf("fresh suffix must NOT include current prompt bodies")
+	}
+	if strings.Contains(string(suffix), "01-overview\n    title") {
+		t.Errorf("fresh suffix must NOT include the current section list")
+	}
+}
+
+// TestProposeFreshFollowupMutuallyExclusive asserts the two modes cannot be
+// combined.
+func TestProposeFreshFollowupMutuallyExclusive(t *testing.T) {
+	repo := writeProposeTestRepo(t)
+	g := New(newTestLogger())
+	err := g.Propose(repo, ProposeOptions{
+		Model:     "claude-haiku-4-5",
+		OutputDir: filepath.Join(t.TempDir(), "p"),
+		Fresh:     true,
+		Followup:  "do it differently",
+	})
+	if err == nil || !strings.Contains(err.Error(), "mutually exclusive") {
+		t.Fatalf("expected a mutual-exclusion error, got %v", err)
+	}
+}
+
+// TestProposeFollowupRequiresTranscript asserts --followup without a transcript
+// path errors before any network use.
+func TestProposeFollowupRequiresTranscript(t *testing.T) {
+	repo := writeProposeTestRepo(t)
+	g := New(newTestLogger())
+	err := g.Propose(repo, ProposeOptions{
+		Model:     "claude-haiku-4-5",
+		OutputDir: filepath.Join(t.TempDir(), "p"),
+		Followup:  "revise",
+	})
+	if err == nil || !strings.Contains(err.Error(), "requires --transcript") {
+		t.Fatalf("expected a missing-transcript error, got %v", err)
+	}
+}
+
+// TestProposeFollowupModelMismatch asserts a followup against a transcript from
+// a different model is rejected (cache + coherence depend on the model).
+func TestProposeFollowupModelMismatch(t *testing.T) {
+	repo := writeProposeTestRepo(t)
+	tdir := t.TempDir()
+	tpath := filepath.Join(tdir, "transcript.json")
+	if err := os.WriteFile(tpath, []byte(`{"model":"claude-sonnet-4-5","turns":[{"role":"user","content":"x"},{"role":"assistant","content":"y"}]}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	g := New(newTestLogger())
+	err := g.Propose(repo, ProposeOptions{
+		Model:          "claude-haiku-4-5",
+		OutputDir:      filepath.Join(t.TempDir(), "p"),
+		Followup:       "revise",
+		TranscriptPath: tpath,
+	})
+	if err == nil || !strings.Contains(err.Error(), "does not match") {
+		t.Fatalf("expected a model-mismatch error, got %v", err)
+	}
+}
+
 // TestProposeRejectsNonClaudeModel asserts the claude-only guard fires before
 // any network use, with a clear message.
 func TestProposeRejectsNonClaudeModel(t *testing.T) {
