@@ -2,6 +2,7 @@ package generator
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -33,6 +34,34 @@ type ProposeOptions struct {
 	// DryRun assembles and saves the request SUFFIX without any API call (no cx
 	// build, no upload, no request).
 	DryRun bool
+	// Fresh proposes a green-field outline from the code alone: the request
+	// SUFFIX carries only a REDUCED current config (settings kept, sections
+	// dropped) and no current prompts/README, and uses FreshProposeInstruction.
+	// Mutually exclusive with Followup.
+	Fresh bool
+	// Followup, when non-empty, is reviewer feedback that refines a PRIOR
+	// proposal in a second turn. TranscriptPath must point at that prior run's
+	// transcript.json; the request replays its turns (whose model must match)
+	// then adds the feedback as a new user turn. Mutually exclusive with Fresh.
+	Followup string
+	// TranscriptPath is the prior run's transcript.json, required by Followup.
+	TranscriptPath string
+}
+
+// proposeTranscriptTurn is one recorded turn (role + verbatim content) in a
+// propose run's transcript.json.
+type proposeTranscriptTurn struct {
+	Role    string `json:"role"`
+	Content string `json:"content"`
+}
+
+// proposeTranscript is the multi-turn record a live propose run writes into its
+// output dir so a later --followup can replay the exact dialogue. Model is
+// recorded because a followup MUST use the same model — cache reuse and response
+// coherence both depend on it.
+type proposeTranscript struct {
+	Model string                  `json:"model"`
+	Turns []proposeTranscriptTurn `json:"turns"`
 }
 
 // promptFile is one named prompt document: a current prompt fed into the
@@ -54,6 +83,10 @@ type proposeInputs struct {
 	prompts    []promptFile
 	readmeName string
 	readmeTpl  string
+	// fresh selects the green-field framing: the configYAML has been reduced to
+	// its settings (sections dropped), prompts/README are withheld, and
+	// FreshProposeInstruction leads the suffix.
+	fresh bool
 }
 
 // proposalBundle is the parsed proposal, split from the model's delimited
@@ -84,6 +117,9 @@ func (g *Generator) Propose(packageDir string, opts ProposeOptions) error {
 	if strings.TrimSpace(opts.OutputDir) == "" {
 		return fmt.Errorf("propose requires an --output-dir for the proposal bundle")
 	}
+	if opts.Fresh && strings.TrimSpace(opts.Followup) != "" {
+		return fmt.Errorf("--fresh and --followup are mutually exclusive: --fresh reframes a turn-0 proposal, --followup refines a prior one")
+	}
 
 	cfg, configPath, err := config.LoadWithNotebook(packageDir)
 	if err != nil {
@@ -108,26 +144,56 @@ func (g *Generator) Propose(packageDir string, opts ProposeOptions) error {
 		ttl = anthropic.CacheTTL1h
 	}
 
-	// Assemble the request SUFFIX from the repo's current docs material.
-	inputs, err := gatherProposeInputs(packageDir, cfg, configPath)
-	if err != nil {
-		return err
+	// Assemble what this run SENDS. Two shapes:
+	//   turn 0 (default / --fresh): the request SUFFIX carries the current docs
+	//     material (or, for --fresh, just the reduced settings) plus the propose
+	//     instruction; history is empty.
+	//   --followup: the prior transcript's turns are replayed, and the new
+	//     "turn" is the reviewer feedback wrapped in a standing re-emit
+	//     instruction.
+	// sendText is the new user turn either way; it is also what PROPOSE_SUFFIX.md
+	// records so every run dir documents exactly what was sent.
+	var (
+		sendText string
+		history  []proposeTranscriptTurn
+		prior    *proposeTranscript
+	)
+	if strings.TrimSpace(opts.Followup) != "" {
+		if strings.TrimSpace(opts.TranscriptPath) == "" {
+			return fmt.Errorf("--followup requires --transcript pointing at the prior run's transcript.json")
+		}
+		prior, err = loadProposeTranscript(opts.TranscriptPath)
+		if err != nil {
+			return err
+		}
+		if prior.Model != model {
+			return fmt.Errorf("--followup model %q does not match the prior transcript's model %q; a followup must reuse the same model (cache reuse and coherence both depend on it)", model, prior.Model)
+		}
+		history = prior.Turns
+		sendText = followupTaskPrompt(opts.Followup)
+	} else {
+		inputs, gerr := gatherProposeInputs(packageDir, cfg, configPath, opts.Fresh)
+		if gerr != nil {
+			return gerr
+		}
+		sendText = assembleProposeSuffix(inputs)
 	}
-	suffix := assembleProposeSuffix(inputs)
 
-	// Dry run: save the suffix and stop before any cx build or API spend. The
-	// cached prefix (cx context) is NOT part of the suffix, so a dry run needs
-	// no context build at all.
+	// Record exactly what this run sends, on every run (dry or live), so the
+	// output dir documents the request byte-for-byte. Written BEFORE any API
+	// call so a failed request still leaves the record behind.
+	if err := os.MkdirAll(opts.OutputDir, 0o755); err != nil { //nolint:gosec // internal doc tool
+		return fmt.Errorf("creating output dir: %w", err)
+	}
+	suffixPath := filepath.Join(opts.OutputDir, "PROPOSE_SUFFIX.md")
+	if err := os.WriteFile(suffixPath, []byte(sendText), 0o644); err != nil { //nolint:gosec // internal doc tool
+		return fmt.Errorf("writing request suffix: %w", err)
+	}
+
+	// Dry run: stop before any cx build or API spend. The cached prefix (cx
+	// context) is NOT part of the suffix, so a dry run needs no context build.
 	if opts.DryRun {
-		if err := os.MkdirAll(opts.OutputDir, 0o755); err != nil { //nolint:gosec // internal doc tool
-			return fmt.Errorf("creating output dir: %w", err)
-		}
-		suffixPath := filepath.Join(opts.OutputDir, "PROPOSE_SUFFIX.md")
-		if err := os.WriteFile(suffixPath, []byte(suffix), 0o644); err != nil { //nolint:gosec // internal doc tool
-			return fmt.Errorf("writing dry-run suffix: %w", err)
-		}
-		g.logger.Infof("Dry run: assembled propose suffix (%d bytes, %d current prompt(s)) to %s — no API call",
-			len(suffix), len(inputs.prompts), suffixPath)
+		g.logger.Infof("Dry run: recorded propose request (%d bytes) to %s — no API call", len(sendText), suffixPath)
 		return nil
 	}
 
@@ -169,7 +235,8 @@ func (g *Generator) Propose(packageDir string, opts ProposeOptions) error {
 	}
 
 	g.currentSection = "propose"
-	text, usage, reqErr := prefix.Request(context.Background(), suffix)
+	reqHistory := toMessageTurns(history)
+	text, usage, reqErr := prefix.RequestWithHistory(context.Background(), reqHistory, sendText)
 	g.logFanoutUsage(usage)
 	if reqErr != nil {
 		return fmt.Errorf("propose request failed: %w", reqErr)
@@ -192,6 +259,20 @@ func (g *Generator) Propose(packageDir string, opts ProposeOptions) error {
 		g.logger.Warnf("proposed config did not validate (written anyway for review): %s", written.ConfigWarning)
 		ulog.Warn("Proposed config invalid").Field("error", written.ConfigWarning).Emit()
 	}
+
+	// Record the extended transcript so a later --followup can replay this exact
+	// dialogue. Turn 0 seeds [user:suffix, assistant:response]; a followup
+	// appends [user:feedback, assistant:response] onto the prior turns.
+	newTranscript := &proposeTranscript{
+		Model: model,
+		Turns: append(append([]proposeTranscriptTurn{}, history...),
+			proposeTranscriptTurn{Role: anthropic.MessageRoleUser, Content: sendText},
+			proposeTranscriptTurn{Role: anthropic.MessageRoleAssistant, Content: text},
+		),
+	}
+	if terr := writeProposeTranscript(opts.OutputDir, newTranscript); terr != nil {
+		g.logger.Warnf("failed to write transcript.json (bundle is still valid): %v", terr)
+	}
 	g.logger.Infof("Wrote proposal bundle to %s (%s, %s, %d prompt(s))",
 		opts.OutputDir, filepath.Base(written.ProposalPath), filepath.Base(written.ConfigPath), len(written.PromptPaths))
 	ulog.Success("Proposal bundle written").
@@ -206,10 +287,14 @@ func (g *Generator) Propose(packageDir string, opts ProposeOptions) error {
 // resolved), every current prompt file next to it, and the README template if
 // present. Prompts live in <configDir>/prompts (true in both notebook and repo
 // mode, since configDir is the docgen dir or repo docs dir respectively).
-func gatherProposeInputs(packageDir string, cfg *config.DocgenConfig, configPath string) (proposeInputs, error) {
+// When fresh is set the returned inputs carry a REDUCED config (settings kept,
+// sections dropped) and NO prompts or README template — the model is asked to
+// propose an outline from the code context alone, unbiased by the current one.
+func gatherProposeInputs(packageDir string, cfg *config.DocgenConfig, configPath string, fresh bool) (proposeInputs, error) {
 	in := proposeInputs{
 		repo:       filepath.Base(filepath.Clean(packageDir)),
 		configName: config.ConfigFileName,
+		fresh:      fresh,
 	}
 
 	data, err := os.ReadFile(configPath) //nolint:gosec // path from trusted config discovery
@@ -217,6 +302,18 @@ func gatherProposeInputs(packageDir string, cfg *config.DocgenConfig, configPath
 		return in, fmt.Errorf("reading current docgen config %s: %w", configPath, err)
 	}
 	in.configYAML = string(data)
+
+	// Fresh mode: strip the sections list so the current outline is withheld,
+	// but keep the settings/readme plumbing the model needs to emit a complete
+	// valid config. Current prompts and README template are not gathered.
+	if fresh {
+		reduced, rerr := reduceConfigForFresh(data)
+		if rerr != nil {
+			return in, rerr
+		}
+		in.configYAML = reduced
+		return in, nil
+	}
 
 	promptsDir := filepath.Join(filepath.Dir(configPath), "prompts")
 	if entries, rerr := os.ReadDir(promptsDir); rerr == nil {
@@ -261,14 +358,28 @@ func gatherProposeInputs(packageDir string, cfg *config.DocgenConfig, configPath
 // can reuse it verbatim as its first user turn.
 func assembleProposeSuffix(in proposeInputs) string {
 	var b strings.Builder
-	b.WriteString(ProposeInstruction)
+	if in.fresh {
+		b.WriteString(FreshProposeInstruction)
+	} else {
+		b.WriteString(ProposeInstruction)
+	}
 	b.WriteString("\n\n---\n\n")
-	b.WriteString(fmt.Sprintf("# Current documentation setup for `%s`\n\n", in.repo))
+	if in.fresh {
+		b.WriteString(fmt.Sprintf("# Current settings for `%s` (sections withheld — propose from the code alone)\n\n", in.repo))
+	} else {
+		b.WriteString(fmt.Sprintf("# Current documentation setup for `%s`\n\n", in.repo))
+	}
 
 	b.WriteString(fmt.Sprintf("## Current %s\n\n", in.configName))
 	b.WriteString("```yaml\n")
 	b.WriteString(strings.TrimRight(in.configYAML, "\n"))
 	b.WriteString("\n```\n\n")
+
+	// Fresh mode withholds the current prompts and README template on purpose,
+	// so the outline is proposed from the code context alone.
+	if in.fresh {
+		return b.String()
+	}
 
 	if len(in.prompts) == 0 {
 		b.WriteString("## Current prompt files\n\n(none)\n\n")
@@ -375,6 +486,16 @@ func writeProposalBundle(dir string, b *proposalBundle) (proposalWriteResult, er
 		return res, fmt.Errorf("creating proposal dir: %w", err)
 	}
 
+	// Clear stale artifacts from a PREVIOUS bundle in this dir before writing
+	// the new one: the prompts/ subdir (whose filenames vary per proposal, so
+	// per-file overwrites would leave strays from an earlier run — see the
+	// stale-prompts bug) and any PROPOSAL.raw.md a prior parse failure left.
+	// Safe here because writeProposalBundle runs ONLY after the new response has
+	// parsed — a failed run never reaches this point, so it can never destroy
+	// the previous good bundle.
+	_ = os.RemoveAll(filepath.Join(dir, "prompts"))
+	_ = os.Remove(filepath.Join(dir, "PROPOSAL.raw.md"))
+
 	var pb strings.Builder
 	pb.WriteString("# Docs Outline Proposal\n\n")
 	pb.WriteString("## Rationale\n\n")
@@ -456,6 +577,85 @@ func sanitizePromptName(name string) string {
 		name += ".md"
 	}
 	return name
+}
+
+// reduceConfigForFresh strips the sections list from a docgen config YAML,
+// keeping the settings/readme/metadata plumbing the model needs to emit a
+// complete valid config. It round-trips through DocgenConfig so the output is a
+// canonical, valid config with an empty sections list.
+func reduceConfigForFresh(configYAML []byte) (string, error) {
+	var cfg config.DocgenConfig
+	if err := yaml.Unmarshal(configYAML, &cfg); err != nil {
+		return "", fmt.Errorf("parsing current config to reduce for --fresh: %w", err)
+	}
+	cfg.Sections = nil
+	out, err := yaml.Marshal(&cfg)
+	if err != nil {
+		return "", fmt.Errorf("re-marshaling reduced config for --fresh: %w", err)
+	}
+	return string(out), nil
+}
+
+// followupTaskPrompt wraps reviewer feedback in a short standing instruction:
+// revise the prior proposal per the feedback and re-emit the COMPLETE proposal
+// in the exact same delimited format (never a diff or partial update).
+func followupTaskPrompt(feedback string) string {
+	return "Revise your previous proposal according to the feedback below, then re-emit the COMPLETE " +
+		"updated proposal in the EXACT same delimited format as before — all blocks: the rationale, the " +
+		"outline table, the full config, and a prompt block for every prose section. Do not emit a diff or a " +
+		"partial update; emit the entire bundle so it can be parsed and written directly.\n\n" +
+		"Feedback:\n" + strings.TrimSpace(feedback) + "\n"
+}
+
+// toMessageTurns converts recorded transcript turns into the grove-anthropic
+// MessageTurn shape RequestWithHistory replays. Nil in ⇒ nil out (turn 0).
+func toMessageTurns(turns []proposeTranscriptTurn) []anthropic.MessageTurn {
+	if len(turns) == 0 {
+		return nil
+	}
+	out := make([]anthropic.MessageTurn, 0, len(turns))
+	for _, t := range turns {
+		out = append(out, anthropic.MessageTurn{Role: t.Role, Content: t.Content})
+	}
+	return out
+}
+
+// loadProposeTranscript reads and validates a prior run's transcript.json.
+func loadProposeTranscript(path string) (*proposeTranscript, error) {
+	data, err := os.ReadFile(path) //nolint:gosec // caller-supplied prior-run path
+	if err != nil {
+		return nil, fmt.Errorf("reading prior transcript %s: %w", path, err)
+	}
+	var t proposeTranscript
+	if err := json.Unmarshal(data, &t); err != nil {
+		return nil, fmt.Errorf("parsing prior transcript %s: %w", path, err)
+	}
+	if strings.TrimSpace(t.Model) == "" || len(t.Turns) == 0 {
+		return nil, fmt.Errorf("prior transcript %s is empty or missing its model", path)
+	}
+	return &t, nil
+}
+
+// writeProposeTranscript writes the transcript.json record into dir.
+func writeProposeTranscript(dir string, t *proposeTranscript) error {
+	data, err := json.MarshalIndent(t, "", "  ")
+	if err != nil {
+		return fmt.Errorf("marshaling transcript: %w", err)
+	}
+	path := filepath.Join(dir, "transcript.json")
+	if err := os.WriteFile(path, ensureTrailingNewlineBytes(data), 0o644); err != nil { //nolint:gosec // internal doc tool
+		return fmt.Errorf("writing %s: %w", path, err)
+	}
+	return nil
+}
+
+// ensureTrailingNewlineBytes appends a newline to a non-empty byte slice that
+// lacks one (JSON marshalers omit it), so the file is a well-formed text line.
+func ensureTrailingNewlineBytes(b []byte) []byte {
+	if len(b) == 0 || b[len(b)-1] == '\n' {
+		return b
+	}
+	return append(b, '\n')
 }
 
 // ensureTrailingNewline appends a newline if s is non-empty and lacks one, so
