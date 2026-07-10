@@ -302,61 +302,82 @@ func (g *Generator) generateInPlace(packageDir string, opts GenerateOptions) err
 		g.logger.Infof("Generating %d of %d sections: %v", len(sectionsToGenerate), len(cfg.Sections), opts.Sections)
 	}
 
-	// 5. Generate each section
+	// 5. Generate each section. Failures don't abort the run (later sections
+	// still get their chance to generate), but they must not vanish either:
+	// callers like `grove release gen` rely on the exit code to decide whether
+	// a repo's docs are actually staged, so every failed section is surfaced
+	// and the run as a whole errors at the end.
+	var failedSections []string
+	sectionFailed := func(name string, err error) {
+		failedSections = append(failedSections, name)
+		ulog.Error("Section failed").
+			Field("section", name).
+			Field("error", err.Error()).
+			Emit()
+	}
 	for _, section := range sectionsToGenerate {
 		g.currentSection = section.Name
 		// Handle different generation types
 		if section.Type == "schema_to_md" {
 			if err := g.generateFromSchema(packageDir, section, cfg, outputBaseDir); err != nil {
 				g.logger.WithError(err).Errorf("Schema to Markdown generation failed for section '%s'", section.Name)
+				sectionFailed(section.Name, err)
 			}
 			continue
 		}
 		if section.Type == "schema_table" {
 			if err := g.generateFromSchemaTable(packageDir, section, cfg, outputBaseDir); err != nil {
 				g.logger.WithError(err).Errorf("Schema table generation failed for section '%s'", section.Name)
+				sectionFailed(section.Name, err)
 			}
 			continue
 		}
 		if section.Type == "schema_describe" {
 			if err := g.generateSchemaDescriptions(packageDir, section, cfg, outputBaseDir); err != nil {
 				g.logger.WithError(err).Errorf("Schema descriptions generation failed for section '%s'", section.Name)
+				sectionFailed(section.Name, err)
 			}
 			continue
 		}
 		if section.Type == "schema_examples" {
 			if err := g.generateSchemaExamples(packageDir, section, cfg, outputBaseDir); err != nil {
 				g.logger.WithError(err).Errorf("Schema examples generation failed for section '%s'", section.Name)
+				sectionFailed(section.Name, err)
 			}
 			continue
 		}
 		if section.Type == "doc_sections" {
 			if err := g.generateFromDocSections(packageDir, section, cfg, outputBaseDir); err != nil {
 				g.logger.WithError(err).Errorf("Doc sections generation failed for section '%s'", section.Name)
+				sectionFailed(section.Name, err)
 			}
 			continue
 		}
 		if section.Type == "capture" {
 			if err := g.generateFromCapture(packageDir, section, cfg, outputBaseDir); err != nil {
 				g.logger.WithError(err).Errorf("CLI capture generation failed for section '%s'", section.Name)
+				sectionFailed(section.Name, err)
 			}
 			continue
 		}
 		if section.Type == "nb_concept" {
 			if err := g.generateFromConcept(packageDir, section, cfg, outputBaseDir); err != nil {
 				g.logger.WithError(err).Errorf("Concept generation failed for section '%s'", section.Name)
+				sectionFailed(section.Name, err)
 			}
 			continue
 		}
 		if section.Type == "tui_keymaps" {
 			if err := g.generateFromTUIKeymaps(packageDir, section, cfg, outputBaseDir); err != nil {
 				g.logger.WithError(err).Errorf("TUI keymaps generation failed for section '%s'", section.Name)
+				sectionFailed(section.Name, err)
 			}
 			continue
 		}
 		if section.Type == "tui_describe" {
 			if err := g.generateTUIDescriptions(packageDir, section, cfg, outputBaseDir); err != nil {
 				g.logger.WithError(err).Errorf("TUI descriptions generation failed for section '%s'", section.Name)
+				sectionFailed(section.Name, err)
 			}
 			continue
 		}
@@ -397,6 +418,7 @@ func (g *Generator) generateInPlace(packageDir string, opts GenerateOptions) err
 		output, err := g.CallLLM(finalPrompt, model, genConfig, packageDir)
 		if err != nil {
 			g.logger.WithError(err).Errorf("LLM call failed for section '%s'", section.Name)
+			sectionFailed(section.Name, err)
 			continue // Continue to the next section even if one fails
 		}
 
@@ -415,6 +437,9 @@ func (g *Generator) generateInPlace(packageDir string, opts GenerateOptions) err
 			Emit()
 	}
 
+	if len(failedSections) > 0 {
+		return fmt.Errorf("%d section(s) failed: %s", len(failedSections), strings.Join(failedSections, ", "))
+	}
 	return nil
 }
 
@@ -2014,7 +2039,18 @@ func (g *Generator) generateSectionsMode(packageDir, configPath string, topCfg *
 		g.logger.Infof("Generating %d of %d sections: %v", len(sectionsToGenerate), len(allSections), opts.Sections)
 	}
 
-	// Generate each section using its subdirectory context
+	// Generate each section using its subdirectory context. As in
+	// generateInPlace, per-section failures don't abort the run but are
+	// collected and surfaced as a run-level error so callers see a nonzero
+	// exit instead of a silent no-op.
+	var failedSections []string
+	sectionFailed := func(name string, err error) {
+		failedSections = append(failedSections, name)
+		ulog.Error("Section failed").
+			Field("section", name).
+			Field("error", err.Error()).
+			Emit()
+	}
 	for _, ss := range sectionsToGenerate {
 		g.currentSection = qualifiedName(ss)
 		g.logger.Infof("Generating section: %s", qualifiedName(ss))
@@ -2029,48 +2065,56 @@ func (g *Generator) generateSectionsMode(packageDir, configPath string, topCfg *
 		if ss.section.Type == "schema_to_md" {
 			if err := g.generateFromSchema(packageDir, ss.section, ss.subCfg, outputDir); err != nil {
 				g.logger.WithError(err).Errorf("Schema to Markdown generation failed for section '%s'", ss.section.Name)
+				sectionFailed(qualifiedName(ss), err)
 			}
 			continue
 		}
 		if ss.section.Type == "schema_table" {
 			if err := g.generateFromSchemaTable(packageDir, ss.section, ss.subCfg, outputDir); err != nil {
 				g.logger.WithError(err).Errorf("Schema table generation failed for section '%s'", ss.section.Name)
+				sectionFailed(qualifiedName(ss), err)
 			}
 			continue
 		}
 		if ss.section.Type == "schema_describe" {
 			if err := g.generateSchemaDescriptions(packageDir, ss.section, ss.subCfg, outputDir); err != nil {
 				g.logger.WithError(err).Errorf("Schema descriptions generation failed for section '%s'", ss.section.Name)
+				sectionFailed(qualifiedName(ss), err)
 			}
 			continue
 		}
 		if ss.section.Type == "schema_examples" {
 			if err := g.generateSchemaExamples(packageDir, ss.section, ss.subCfg, outputDir); err != nil {
 				g.logger.WithError(err).Errorf("Schema examples generation failed for section '%s'", ss.section.Name)
+				sectionFailed(qualifiedName(ss), err)
 			}
 			continue
 		}
 		if ss.section.Type == "doc_sections" {
 			if err := g.generateFromDocSections(packageDir, ss.section, ss.subCfg, outputDir); err != nil {
 				g.logger.WithError(err).Errorf("Doc sections generation failed for section '%s'", ss.section.Name)
+				sectionFailed(qualifiedName(ss), err)
 			}
 			continue
 		}
 		if ss.section.Type == "capture" {
 			if err := g.generateFromCapture(packageDir, ss.section, ss.subCfg, outputDir); err != nil {
 				g.logger.WithError(err).Errorf("CLI capture generation failed for section '%s'", ss.section.Name)
+				sectionFailed(qualifiedName(ss), err)
 			}
 			continue
 		}
 		if ss.section.Type == "tui_keymaps" {
 			if err := g.generateFromTUIKeymaps(packageDir, ss.section, ss.subCfg, outputDir); err != nil {
 				g.logger.WithError(err).Errorf("TUI keymaps generation failed for section '%s'", ss.section.Name)
+				sectionFailed(qualifiedName(ss), err)
 			}
 			continue
 		}
 		if ss.section.Type == "tui_describe" {
 			if err := g.generateTUIDescriptions(packageDir, ss.section, ss.subCfg, outputDir); err != nil {
 				g.logger.WithError(err).Errorf("TUI descriptions generation failed for section '%s'", ss.section.Name)
+				sectionFailed(qualifiedName(ss), err)
 			}
 			continue
 		}
@@ -2120,6 +2164,7 @@ func (g *Generator) generateSectionsMode(packageDir, configPath string, topCfg *
 		output, err := g.CallLLM(finalPrompt, model, genConfig, packageDir)
 		if err != nil {
 			g.logger.WithError(err).Errorf("LLM call failed for section '%s'", ss.section.Name)
+			sectionFailed(qualifiedName(ss), err)
 			continue
 		}
 
@@ -2138,5 +2183,8 @@ func (g *Generator) generateSectionsMode(packageDir, configPath string, topCfg *
 			Emit()
 	}
 
+	if len(failedSections) > 0 {
+		return fmt.Errorf("%d section(s) failed: %s", len(failedSections), strings.Join(failedSections, ", "))
+	}
 	return nil
 }
