@@ -89,7 +89,7 @@ Rules:
 - The name in each PROMPT block header must match a prose section's name and its
   config prompt: filename stem.
 - Provide a prompt block for EVERY prose section and for no non-prose section.
-` + proposeSchemaFieldsRule + proposeOutputFieldRule
+` + proposeSchemaFieldsRule + proposeOutputFieldRule + proposeCaptureFieldsRule
 
 // proposeSchemaFieldsRule is appended to both instruction variants. Models have
 // invented unsupported keys (filter/invert_filter) on schemas: entries; the
@@ -98,6 +98,13 @@ Rules:
 const proposeSchemaFieldsRule = `- Each entry under a section's ` + "`schemas:`" + ` list supports ONLY two fields:
   ` + "`path`" + ` (the schema file) and ` + "`title`" + ` (the H2 heading). Do not add any
   other keys (there is no filter, invert_filter, or similar field).
+- Every ` + "`schemas:`" + ` ` + "`path`" + ` must point at an EXISTING generated ` + "`.schema.json`" + `
+  artifact in the repository — NEVER a ` + "`.go`" + ` source file. If the repository has
+  no generated schema artifact, do not propose schema_* sections.
+- ` + "`schema_describe`" + ` (producer: writes the descriptions JSON named by its
+  ` + "`output:`" + `) and ` + "`schema_table`" + ` (consumer: references that exact file via
+  ` + "`descriptions:`" + ` and renders the .md page) are SEPARATE sections working as a
+  pair — never collapse them into one section.
 `
 
 // proposeOutputFieldRule is appended to both instruction variants. A --fresh
@@ -112,6 +119,17 @@ const proposeOutputFieldRule = `- EVERY section MUST set an explicit ` + "`outpu
 - Rendered doc sections use ` + "`.md`" + `; a ` + "`schema_describe`" + ` section's output is a data
   file conventionally named ` + "`<repo>.descriptions.json`" + `, and any ` + "`schema_table`" + `
   section that consumes it via ` + "`descriptions:`" + ` must reference that exact filename.
+`
+
+// proposeCaptureFieldsRule is appended to both instruction variants. A live
+// --fresh run invented a `command:` field on capture sections (with no example
+// config in the suffix, the model guessed at the shape); docgen's capture
+// section takes `binary:` — a CLI binary name whose --help tree is crawled —
+// and there is no command/args field.
+const proposeCaptureFieldsRule = `- A ` + "`capture`" + ` section MUST set ` + "`binary:`" + ` — the name of an installed CLI binary
+  whose --help output is crawled (e.g. ` + "`binary: notify`" + `). There is NO ` + "`command:`" + `,
+  ` + "`args:`" + `, or similar field; one capture section covers the whole binary. Optional
+  ` + "`format:`" + ` is styled (default) or plain.
 `
 
 // FreshProposeInstruction is the green-field variant of ProposeInstruction used
@@ -182,4 +200,4 @@ Rules:
 - The name in each PROMPT block header must match a prose section's name and its
   config prompt: filename stem.
 - Provide a prompt block for EVERY prose section and for no non-prose section.
-` + proposeSchemaFieldsRule + proposeOutputFieldRule
+` + proposeSchemaFieldsRule + proposeOutputFieldRule + proposeCaptureFieldsRule

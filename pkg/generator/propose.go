@@ -3,7 +3,9 @@ package generator
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"sort"
@@ -526,7 +528,10 @@ func writeProposalBundle(dir string, b *proposalBundle) (proposalWriteResult, er
 	} else if len(probe.Sections) == 0 {
 		res.ConfigWarning = "proposed config parsed but has no sections"
 	} else {
-		res.ConfigWarning = validateProposedConfig(&probe, b.Prompts)
+		res.ConfigWarning = joinWarnings(
+			validateProposedConfig(&probe, b.Prompts),
+			strictConfigWarning(b.Config),
+		)
 	}
 
 	if len(b.Prompts) > 0 {
@@ -557,7 +562,9 @@ func writeProposalBundle(dir string, b *proposalBundle) (proposalWriteResult, er
 //     ("open .../docs: is a directory"), since an empty output joins onto the
 //     output dir as the dir itself;
 //   - a prose section whose prompt: is empty, or names a file the bundle never
-//     drafted (not among b.Prompts) — generation would fail to resolve it.
+//     drafted (not among b.Prompts) — generation would fail to resolve it;
+//   - a capture section with no binary: — a live --fresh run invented command:
+//     instead, and generate hard-fails on the missing binary.
 //
 // Warning-only: the config is written regardless so a human can review + fix it.
 func validateProposedConfig(cfg *config.DocgenConfig, prompts []promptFile) string {
@@ -570,6 +577,9 @@ func validateProposedConfig(cfg *config.DocgenConfig, prompts []promptFile) stri
 		if strings.TrimSpace(s.Output) == "" {
 			warns = append(warns, fmt.Sprintf("section %q has no output: filename", s.Name))
 		}
+		if s.Type == "capture" && strings.TrimSpace(s.Binary) == "" {
+			warns = append(warns, fmt.Sprintf("capture section %q has no binary: field", s.Name))
+		}
 		if isProseSection(s.Type) {
 			switch {
 			case strings.TrimSpace(s.Prompt) == "":
@@ -580,6 +590,32 @@ func validateProposedConfig(cfg *config.DocgenConfig, prompts []promptFile) stri
 		}
 	}
 	return strings.Join(warns, "; ")
+}
+
+// strictConfigWarning re-decodes the config YAML with KnownFields so invented
+// keys surface as a review warning — the lenient probe silently drops them.
+// Live proposals have invented filter/invert_filter on schemas: entries and
+// command: on capture sections; a strict decode catches the whole class,
+// including fields no rule anticipates yet.
+func strictConfigWarning(configYAML string) string {
+	dec := yaml.NewDecoder(strings.NewReader(configYAML))
+	dec.KnownFields(true)
+	var probe config.DocgenConfig
+	if err := dec.Decode(&probe); err != nil && !errors.Is(err, io.EOF) {
+		return fmt.Sprintf("unknown field(s) — not part of the docgen config schema: %v", err)
+	}
+	return ""
+}
+
+// joinWarnings merges warning strings, dropping empties.
+func joinWarnings(warns ...string) string {
+	var parts []string
+	for _, w := range warns {
+		if w != "" {
+			parts = append(parts, w)
+		}
+	}
+	return strings.Join(parts, "; ")
 }
 
 // isProseSection reports whether a section is prose-generated (an LLM narrative

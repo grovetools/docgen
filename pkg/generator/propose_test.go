@@ -385,6 +385,30 @@ func TestProposeInstructionsCarryOutputRule(t *testing.T) {
 	}
 }
 
+// TestProposeInstructionsCarryCaptureAndSchemaRules asserts BOTH instruction
+// variants carry the capture-fields rule (binary:, not command:) and the
+// schema-pair rules (path is a generated .schema.json, never a .go file;
+// schema_describe/schema_table stay separate sections) — the two live --fresh
+// defect classes the notify test run exposed.
+func TestProposeInstructionsCarryCaptureAndSchemaRules(t *testing.T) {
+	frags := []string{
+		"`capture` section MUST set `binary:`",
+		"There is NO `command:`",
+		"NEVER a `.go` source file",
+		"never collapse them into one section",
+	}
+	for name, instr := range map[string]string{
+		"ProposeInstruction":      ProposeInstruction,
+		"FreshProposeInstruction": FreshProposeInstruction,
+	} {
+		for _, frag := range frags {
+			if !strings.Contains(instr, frag) {
+				t.Errorf("%s missing fragment %q", name, frag)
+			}
+		}
+	}
+}
+
 // TestWriteProposalBundleWarnsMissingOutputAndPrompt verifies the bundle probe
 // surfaces (a) a section with no output: and (b) a prose section whose prompt
 // file is not among the bundle's drafted prompts — both joined into one warning.
@@ -409,8 +433,29 @@ func TestWriteProposalBundleWarnsMissingOutputAndPrompt(t *testing.T) {
 	if !strings.Contains(res.ConfigWarning, `prose section "quick-start" prompt 03-quick-start.md not in bundle`) {
 		t.Errorf("missing missing-prompt warning, got: %q", res.ConfigWarning)
 	}
+	// The capture section in the fixture has no binary: — the probe must flag it.
+	if !strings.Contains(res.ConfigWarning, `capture section "02-cli" has no binary: field`) {
+		t.Errorf("missing capture-binary warning, got: %q", res.ConfigWarning)
+	}
 	if _, err := os.Stat(res.ConfigPath); err != nil {
 		t.Errorf("config with warnings should still be written for review: %v", err)
+	}
+}
+
+// TestStrictConfigWarning covers the KnownFields re-decode: invented keys the
+// lenient probe silently drops (the live case: command: on a capture section)
+// surface as a warning, while a config using only real fields stays clean.
+func TestStrictConfigWarning(t *testing.T) {
+	invented := "enabled: true\nsections:\n" +
+		"  - name: cli\n    type: capture\n    command: notify --help\n    output: 02-cli.md\n"
+	if w := strictConfigWarning(invented); !strings.Contains(w, "not part of the docgen config schema") {
+		t.Errorf("expected unknown-field warning for invented command:, got: %q", w)
+	}
+	valid := "enabled: true\nsections:\n" +
+		"  - name: cli\n    type: capture\n    binary: notify\n    format: styled\n    output: 02-cli.md\n" +
+		"  - name: overview\n    type: prose\n    prompt: 01-overview.md\n    output: 01-overview.md\n"
+	if w := strictConfigWarning(valid); w != "" {
+		t.Errorf("expected no warning for a valid config, got: %q", w)
 	}
 }
 
@@ -449,6 +494,29 @@ func TestValidateSectionOutputs(t *testing.T) {
 	// "1 more" — two offenders means the head plus one in the parenthetical.
 	if !strings.Contains(err.Error(), "1 more") {
 		t.Errorf("error should summarize the remaining offenders count: %v", err)
+	}
+
+	// Capture without binary: fails pre-spend with the config-validation-family
+	// fragment grove's retry-classifier marks permanent.
+	capture := []config.SectionConfig{
+		{Name: "01-overview", Type: "prose", Prompt: "01-overview.md", Output: "01-overview.md"},
+		{Name: "02-cli", Type: "capture", Output: "02-cli.md"},
+	}
+	err = validateSectionOutputs(capture)
+	if err == nil {
+		t.Fatal("expected an error for a capture section with no binary")
+	}
+	if !strings.Contains(err.Error(), "section type 'capture' requires 'binary'") {
+		t.Errorf("error missing the capture config-validation fragment: %v", err)
+	}
+	if !strings.Contains(err.Error(), "02-cli") {
+		t.Errorf("error does not name the offending capture section: %v", err)
+	}
+
+	// A capture section WITH binary passes.
+	okCapture := []config.SectionConfig{{Name: "02-cli", Type: "capture", Binary: "notify", Output: "02-cli.md"}}
+	if err := validateSectionOutputs(okCapture); err != nil {
+		t.Fatalf("expected no error for capture with binary, got: %v", err)
 	}
 }
 
