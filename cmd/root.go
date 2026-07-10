@@ -13,6 +13,7 @@ func init() {
 	// Add commands
 	rootCmd.AddCommand(newVersionCmd())
 	rootCmd.AddCommand(newGenerateCmd())
+	rootCmd.AddCommand(newProposeCmd())
 	rootCmd.AddCommand(newAggregateCmd())
 	rootCmd.AddCommand(newInitCmd())
 	rootCmd.AddCommand(newRegenJSONCmd())

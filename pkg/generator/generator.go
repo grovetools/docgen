@@ -1898,23 +1898,7 @@ func (g *Generator) setupFanout(packageDir string, cfg *config.DocgenConfig, opt
 	}
 
 	// Window precheck — fail fast and loud before any upload/spend.
-	var ctxBytes int64
-	for _, f := range ctxFiles {
-		if fi, statErr := os.Stat(f); statErr == nil {
-			ctxBytes += fi.Size()
-		}
-	}
-	if estTokens := ctxBytes / docsBytesPerToken; estTokens > docsWindowTokens {
-		err := fmt.Errorf(
-			"docs context too large for %s: %d file(s), %.2f MB (~%dk tokens at ~%d bytes/token) exceeds the ~%dk-token window — narrow the configured settings.rules_file preset",
-			prefixModel, len(ctxFiles), float64(ctxBytes)/1e6, estTokens/1000, docsBytesPerToken, docsWindowTokens/1000)
-		ulog.Error("Docs context exceeds model window").
-			Field("model", prefixModel).
-			Field("context_bytes", ctxBytes).
-			Field("est_tokens", estTokens).
-			Field("window_tokens", docsWindowTokens).
-			Field("docs_rules_remedy", "settings.rules_file").
-			Emit()
+	if err := checkDocsWindow(prefixModel, ctxFiles); err != nil {
 		return noop, err
 	}
 
@@ -1926,12 +1910,7 @@ func (g *Generator) setupFanout(packageDir string, cfg *config.DocgenConfig, opt
 		ttl = "5m"
 	}
 
-	prefix, err := anthropic.NewSharedPrefixFromFiles("", ctxFiles, anthropic.SharedPrefixOptions{
-		Model:     prefixModel,
-		TTL:       ttl,
-		MaxTokens: 8192,
-		Caller:    "docgen",
-	})
+	prefix, err := newDocsSharedPrefix(ctxFiles, prefixModel, ttl)
 	if err != nil {
 		g.logger.WithError(err).Warnf("failed to set up cache fan-out for model %q; using the standard grove llm path", prefixModel)
 		return noop, nil
@@ -1952,6 +1931,53 @@ func (g *Generator) setupFanout(packageDir string, cfg *config.DocgenConfig, opt
 		g.forceModel = ""
 		g.currentSection = ""
 	}, nil
+}
+
+// checkDocsWindow enforces the pre-spend context-window precheck against the
+// docs context fileset. It is the single guard shared by the docs fan-out setup
+// (setupFanout) and the propose "turn 0" (Propose) so both refuse an over-window
+// prefix identically, before any Files-API upload or API spend. An over-window
+// context is a hard, permanent error (the same over-window bytes would 400 every
+// request), so the caller stops rather than falling back.
+func checkDocsWindow(prefixModel string, ctxFiles []string) error {
+	var ctxBytes int64
+	for _, f := range ctxFiles {
+		if fi, statErr := os.Stat(f); statErr == nil {
+			ctxBytes += fi.Size()
+		}
+	}
+	if estTokens := ctxBytes / docsBytesPerToken; estTokens > docsWindowTokens {
+		err := fmt.Errorf(
+			"docs context too large for %s: %d file(s), %.2f MB (~%dk tokens at ~%d bytes/token) exceeds the ~%dk-token window — narrow the configured settings.rules_file preset",
+			prefixModel, len(ctxFiles), float64(ctxBytes)/1e6, estTokens/1000, docsBytesPerToken, docsWindowTokens/1000)
+		ulog.Error("Docs context exceeds model window").
+			Field("model", prefixModel).
+			Field("context_bytes", ctxBytes).
+			Field("est_tokens", estTokens).
+			Field("window_tokens", docsWindowTokens).
+			Field("docs_rules_remedy", "settings.rules_file").
+			Emit()
+		return err
+	}
+	return nil
+}
+
+// newDocsSharedPrefix builds the shared cx-context prefix byte-identically for
+// the docs fan-out and the propose turn: the SAME cx-generated fileset (from
+// anthropic.WorkDirContextFiles), the SAME empty system prompt, and the SAME
+// single breakpoint. That byte-identity is the whole point — a prefix warmed by
+// `docgen propose` is cache-READ by a later `docgen generate` (and the changelog
+// rider) against the same repo/model, so the review turn's cache write is not
+// re-paid at generation time. Callers MUST have run BuildContext first so the cx
+// context exists on disk. MaxTokens is a per-request generation cap and does not
+// participate in the cached prefix, so it need not match across callers.
+func newDocsSharedPrefix(ctxFiles []string, model, ttl string) (*anthropic.SharedPrefix, error) {
+	return anthropic.NewSharedPrefixFromFiles("", ctxFiles, anthropic.SharedPrefixOptions{
+		Model:     model,
+		TTL:       ttl,
+		MaxTokens: 8192,
+		Caller:    "docgen",
+	})
 }
 
 // lastLines returns the last n lines of s, with surrounding whitespace trimmed.

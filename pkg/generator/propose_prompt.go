@@ -1,0 +1,92 @@
+package generator
+
+// Machine-splittable delimiters for the propose response. The model is asked to
+// emit exactly these header lines (each on its own line, no surrounding text) so
+// parseProposalResponse can split the response deterministically instead of
+// guessing at prose boundaries. They are deliberately unlikely to collide with
+// real markdown or YAML content.
+const (
+	proposeDelimRationale = "===GROVE-PROPOSAL-RATIONALE==="
+	proposeDelimOutline   = "===GROVE-PROPOSAL-OUTLINE==="
+	proposeDelimConfig    = "===GROVE-PROPOSAL-CONFIG==="
+	// proposeDelimPromptPrefix begins a per-prompt block; the section name
+	// follows after "name=", e.g. "===GROVE-PROPOSAL-PROMPT name=01-overview===".
+	proposeDelimPromptPrefix = "===GROVE-PROPOSAL-PROMPT name="
+	proposeDelimPromptSuffix = "==="
+	proposeDelimEnd          = "===GROVE-PROPOSAL-END==="
+)
+
+// ProposeInstruction is the standing instruction block that leads the propose
+// request SUFFIX (everything AFTER the cached cx-context prefix). It is a
+// package-level constant, factored out of the suffix assembler, so a future
+// multi-turn "docs chat" mode can reuse the exact same turn-0 instruction
+// verbatim while riding the same cached prefix. The current config, prompts, and
+// README template are appended after this block by assembleProposeSuffix.
+//
+// The instruction never restates the repo source — that is the cached prefix the
+// request rides on. It asks only for a proposed docs OUTLINE and draft prompts,
+// emitted in the delimited format above so the bundle can be split and written
+// without an LLM in the loop.
+const ProposeInstruction = `You are proposing an updated documentation OUTLINE for this repository.
+
+The repository's source code and context are provided ABOVE this message as a
+cached prefix. Below, after this instruction, you are given the repository's
+CURRENT docgen configuration, its CURRENT per-section prompt files, and (if
+present) its README template. These describe how the docs are generated today.
+
+Your job: propose how the documentation should be organized and prompted GOING
+FORWARD, given what the code actually does now. This is a review artifact — a
+human will read, edit, and later feed the approved outline back into doc
+generation. Do not write the documentation itself; propose the structure and the
+prompts that would generate it.
+
+Produce three things:
+
+1. An updated SECTION LIST. For every section give: order, name (a stable slug),
+   title, and type. Valid types are: prose (LLM-written narrative from a prompt),
+   capture (CLI --help capture), schema_to_md / schema_table / schema_describe /
+   schema_examples (config-schema docs), tui_keymaps / tui_describe (TUI docs).
+   For each section note whether it is KEPT, ADDED, REMOVED, or MERGED versus the
+   current config, with a one-line reason. Prefer evolving the current list over
+   replacing it; only add/remove/merge where the code justifies it.
+
+2. A full draft PROMPT for every PROSE section (only prose sections need a
+   prompt). Write each as a content OUTLINE that instructs the doc writer what to
+   cover, in what order, with what emphasis — the same house style as the current
+   prompt files shown below (a titled brief, an ordered list of the subsections
+   to produce, and notes on tone and what to include or omit). Do not write the
+   final prose; write the instructions that would produce it.
+
+3. A short overall RATIONALE (a few sentences) explaining the shape of the
+   proposed outline and the most significant changes.
+
+Return your answer in EXACTLY this delimited format, with each delimiter on its
+own line and nothing else on that line. Emit the sections in this order:
+
+` + proposeDelimRationale + `
+<the overall rationale prose>
+` + proposeDelimOutline + `
+| Order | Name | Title | Type | Change | Reason |
+| ----- | ---- | ----- | ---- | ------ | ------ |
+<one row per proposed section; Change is KEPT/ADDED/REMOVED/MERGED>
+` + proposeDelimConfig + `
+` + "```yaml" + `
+<a COMPLETE, valid docgen.config.yml: preserve the current settings block
+verbatim, and replace the sections list with your proposed sections. Every prose
+section's prompt: field must point at the corresponding drafted prompt filename
+below (e.g. prompt: 01-overview.md).>
+` + "```" + `
+` + proposeDelimPromptPrefix + `01-overview` + proposeDelimPromptSuffix + `
+` + "```markdown" + `
+<the full draft prompt for the section named 01-overview>
+` + "```" + `
+<repeat a ` + `===GROVE-PROPOSAL-PROMPT name=<slug>===` + ` block for every prose section>
+` + proposeDelimEnd + `
+
+Rules:
+- Emit the delimiters literally and exactly; do not add commentary outside the
+  blocks.
+- The name in each PROMPT block header must match a prose section's name and its
+  config prompt: filename stem.
+- Provide a prompt block for EVERY prose section and for no non-prose section.
+`
