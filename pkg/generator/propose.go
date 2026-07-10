@@ -525,6 +525,8 @@ func writeProposalBundle(dir string, b *proposalBundle) (proposalWriteResult, er
 		res.ConfigWarning = fmt.Sprintf("not valid YAML: %v", err)
 	} else if len(probe.Sections) == 0 {
 		res.ConfigWarning = "proposed config parsed but has no sections"
+	} else {
+		res.ConfigWarning = validateProposedConfig(&probe, b.Prompts)
 	}
 
 	if len(b.Prompts) > 0 {
@@ -545,6 +547,52 @@ func writeProposalBundle(dir string, b *proposalBundle) (proposalWriteResult, er
 	}
 
 	return res, nil
+}
+
+// validateProposedConfig collects human-review warnings for a parsed proposed
+// config, joined into one semicolon-separated string (empty ⇒ no warning). It
+// flags two mistakes a proposal can make that only bite at `docgen generate`:
+//   - a section with no output: filename — the empty-output bug that once let a
+//     --fresh proposal burn an LLM call per section and THEN fail the write
+//     ("open .../docs: is a directory"), since an empty output joins onto the
+//     output dir as the dir itself;
+//   - a prose section whose prompt: is empty, or names a file the bundle never
+//     drafted (not among b.Prompts) — generation would fail to resolve it.
+//
+// Warning-only: the config is written regardless so a human can review + fix it.
+func validateProposedConfig(cfg *config.DocgenConfig, prompts []promptFile) string {
+	promptNames := make(map[string]bool, len(prompts))
+	for _, p := range prompts {
+		promptNames[p.Name] = true
+	}
+	var warns []string
+	for _, s := range cfg.Sections {
+		if strings.TrimSpace(s.Output) == "" {
+			warns = append(warns, fmt.Sprintf("section %q has no output: filename", s.Name))
+		}
+		if isProseSection(s.Type) {
+			switch {
+			case strings.TrimSpace(s.Prompt) == "":
+				warns = append(warns, fmt.Sprintf("prose section %q has no prompt:", s.Name))
+			case !promptNames[s.Prompt]:
+				warns = append(warns, fmt.Sprintf("prose section %q prompt %s not in bundle", s.Name, s.Prompt))
+			}
+		}
+	}
+	return strings.Join(warns, "; ")
+}
+
+// isProseSection reports whether a section is prose-generated (an LLM narrative
+// written from a prompt file). The generator dispatches every explicit non-prose
+// type and falls through to prose for the literal type "prose" or an empty type,
+// so both count here.
+func isProseSection(sectionType string) bool {
+	switch sectionType {
+	case "prose", "":
+		return true
+	default:
+		return false
+	}
 }
 
 // stripFence removes surrounding blank lines and a single wrapping code fence

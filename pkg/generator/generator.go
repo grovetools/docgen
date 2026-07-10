@@ -359,6 +359,13 @@ func (g *Generator) generateInPlace(packageDir string, opts GenerateOptions) err
 		g.logger.Infof("Generating %d of %d sections: %v", len(sectionsToGenerate), len(cfg.Sections), opts.Sections)
 	}
 
+	// Pre-spend guard: fail before any LLM call if an in-scope section lacks an
+	// output: filename (an empty output writes onto the output dir itself). Only
+	// the sections this run will actually generate are validated.
+	if err := validateSectionOutputs(sectionsToGenerate); err != nil {
+		return err
+	}
+
 	// 5. Generate each section. Failures don't abort the run (later sections
 	// still get their chance to generate), but they must not vanish either:
 	// callers like `grove release gen` rely on the exit code to decide whether
@@ -495,6 +502,30 @@ func (g *Generator) generateInPlace(packageDir string, opts GenerateOptions) err
 		return g.failedSectionsError(failedSections)
 	}
 	return nil
+}
+
+// validateSectionOutputs is the pre-spend guard for a generation run: every
+// section about to be generated MUST carry an output: filename, or the write
+// after a paid-for LLM call fails with "open <dir>: is a directory" (an empty
+// output joins onto the output dir and resolves to the dir itself). It errors
+// BEFORE any LLM call, naming every offending in-scope section in one message.
+// The fragment "has no output: filename" is load-bearing: grove's release
+// retry-classifier matches on it to mark the failure permanent (no retry).
+func validateSectionOutputs(sections []config.SectionConfig) error {
+	var missing []string
+	for _, s := range sections {
+		if strings.TrimSpace(s.Output) == "" {
+			missing = append(missing, s.Name)
+		}
+	}
+	if len(missing) == 0 {
+		return nil
+	}
+	if len(missing) == 1 {
+		return fmt.Errorf("docs config error: section %q has no output: filename", missing[0])
+	}
+	return fmt.Errorf("docs config error: section %q has no output: filename (%d more: %s)",
+		missing[0], len(missing)-1, strings.Join(missing[1:], ", "))
 }
 
 const SchemaToMarkdownSystemPrompt = `You are a technical writer tasked with creating documentation from one or more JSON schemas.
@@ -2131,6 +2162,19 @@ func (g *Generator) generateSectionsMode(packageDir, configPath string, topCfg *
 
 		sectionsToGenerate = filtered
 		g.logger.Infof("Generating %d of %d sections: %v", len(sectionsToGenerate), len(allSections), opts.Sections)
+	}
+
+	// Pre-spend guard: fail before any LLM call if an in-scope section lacks an
+	// output: filename (an empty output writes onto the output dir itself). Names
+	// are qualified (subdir/section) so the error points at the exact section.
+	scoped := make([]config.SectionConfig, 0, len(sectionsToGenerate))
+	for _, ss := range sectionsToGenerate {
+		s := ss.section
+		s.Name = qualifiedName(ss)
+		scoped = append(scoped, s)
+	}
+	if err := validateSectionOutputs(scoped); err != nil {
+		return err
 	}
 
 	// Generate each section using its subdirectory context. As in
