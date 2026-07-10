@@ -507,25 +507,40 @@ func (g *Generator) generateInPlace(packageDir string, opts GenerateOptions) err
 // validateSectionOutputs is the pre-spend guard for a generation run: every
 // section about to be generated MUST carry an output: filename, or the write
 // after a paid-for LLM call fails with "open <dir>: is a directory" (an empty
-// output joins onto the output dir and resolves to the dir itself). It errors
-// BEFORE any LLM call, naming every offending in-scope section in one message.
-// The fragment "has no output: filename" is load-bearing: grove's release
-// retry-classifier matches on it to mark the failure permanent (no retry).
+// output joins onto the output dir and resolves to the dir itself); a capture
+// section MUST carry binary:, or its dispatch fails mid-run after earlier
+// sections already paid for their LLM calls. It errors BEFORE any LLM call,
+// naming every offending in-scope section in one message. Two fragments are
+// load-bearing for grove's release retry-classifier (they mark the failure
+// permanent, no retry): "has no output: filename" and the
+// "section type 'capture' requires 'binary'" config-validation family.
 func validateSectionOutputs(sections []config.SectionConfig) error {
 	var missing []string
+	var captures []string
 	for _, s := range sections {
 		if strings.TrimSpace(s.Output) == "" {
 			missing = append(missing, s.Name)
 		}
+		if s.Type == "capture" && strings.TrimSpace(s.Binary) == "" {
+			captures = append(captures, s.Name)
+		}
 	}
-	if len(missing) == 0 {
+	var parts []string
+	switch len(missing) {
+	case 0:
+	case 1:
+		parts = append(parts, fmt.Sprintf("section %q has no output: filename", missing[0]))
+	default:
+		parts = append(parts, fmt.Sprintf("section %q has no output: filename (%d more: %s)",
+			missing[0], len(missing)-1, strings.Join(missing[1:], ", ")))
+	}
+	for _, name := range captures {
+		parts = append(parts, fmt.Sprintf("section %q: section type 'capture' requires 'binary' (binary name)", name))
+	}
+	if len(parts) == 0 {
 		return nil
 	}
-	if len(missing) == 1 {
-		return fmt.Errorf("docs config error: section %q has no output: filename", missing[0])
-	}
-	return fmt.Errorf("docs config error: section %q has no output: filename (%d more: %s)",
-		missing[0], len(missing)-1, strings.Join(missing[1:], ", "))
+	return fmt.Errorf("docs config error: %s", strings.Join(parts, "; "))
 }
 
 const SchemaToMarkdownSystemPrompt = `You are a technical writer tasked with creating documentation from one or more JSON schemas.
