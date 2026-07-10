@@ -6,9 +6,11 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	coreConfig "github.com/grovetools/core/config"
 	"github.com/grovetools/core/pkg/workspace"
+	cxcontext "github.com/grovetools/cx/pkg/context"
 	"gopkg.in/yaml.v3"
 )
 
@@ -72,7 +74,7 @@ type SettingsConfig struct {
 	OutputMode           string   `yaml:"output_mode,omitempty" jsonschema:"description=Output mode: package (default) or sections for website content,enum=package,enum=sections" jsonschema_extras:"x-layer=project,x-priority=21"`
 	Ecosystems           []string `yaml:"ecosystems,omitempty" jsonschema:"description=List of ecosystem names to aggregate from" jsonschema_extras:"x-layer=ecosystem,x-priority=22"`
 	RegenerationMode     string   `yaml:"regeneration_mode,omitempty" jsonschema:"description=Regeneration mode: scratch or reference,enum=scratch,enum=reference" jsonschema_extras:"x-layer=project,x-priority=23"`
-	RulesFile            string   `yaml:"rules_file,omitempty" jsonschema:"description=Custom rules file for cx generate" jsonschema_extras:"x-layer=project,x-priority=24"`
+	RulesFile            string   `yaml:"rules_file,omitempty" jsonschema:"description=Required docs context preset name (for example doc); explicit legacy .rules paths remain supported" jsonschema_extras:"x-layer=project,x-priority=24"`
 	StructuredOutputFile string   `yaml:"structured_output_file,omitempty" jsonschema:"description=Path for JSON output" jsonschema_extras:"x-layer=project,x-priority=29"`
 	SystemPrompt         string   `yaml:"system_prompt,omitempty" jsonschema:"description=Path to system prompt file or 'default' to use built-in" jsonschema_extras:"x-layer=project,x-priority=25"`
 	OutputDir            string   `yaml:"output_dir,omitempty" jsonschema:"description=Output directory for generated docs" jsonschema_extras:"x-layer=project,x-priority=26"`
@@ -106,7 +108,7 @@ type SectionConfig struct {
 	Depth            int                `yaml:"depth,omitempty" jsonschema:"description=Recursion depth for capture type (default: 5)" jsonschema_extras:"x-layer=project,x-priority=38"`
 	SubcommandOrder  []string           `yaml:"subcommand_order,omitempty" jsonschema:"description=Priority order for subcommands (rest alphabetical)" jsonschema_extras:"x-layer=project,x-priority=39"`
 	Model            string             `yaml:"model,omitempty" jsonschema:"description=Per-section model override" jsonschema_extras:"x-layer=project,x-priority=25"`
-	RulesFile        string             `yaml:"rules_file,omitempty" jsonschema:"description=Path to a cx rules file for gathering context (for schema_describe and schema_examples types)" jsonschema_extras:"x-layer=project,x-priority=26"`
+	RulesFile        string             `yaml:"rules_file,omitempty" jsonschema:"description=Context preset name or legacy .rules path for schema_describe and schema_examples" jsonschema_extras:"x-layer=project,x-priority=26"`
 	AggStripLines    int                `yaml:"agg_strip_lines,omitempty" jsonschema:"description=Number of lines to strip from the top during aggregation" jsonschema_extras:"x-layer=project,x-priority=40"`
 	GenerationConfig `yaml:",inline"`
 }
@@ -269,34 +271,40 @@ func LoadWithNotebook(repoDir string) (*DocgenConfig, string, error) {
 	return &config, repoConfigPath, nil
 }
 
-// NotebookContextRulesFile returns the path to the notebook-scoped context
-// rules file for the repo at repoDir, and whether that file currently exists.
-//
-// Docs context rules live in the notebook (workspaces/<repo>/context/rules),
-// not in the repo. `cx generate` resolves that file directly and ranks it
-// above the legacy repo-local .grove/rules, so when the notebook owns the
-// rules a docgen generator must NOT stage a .grove/rules copy — cx would
-// ignore it and emit a stale-.grove/rules warning. Callers use this to make
-// rules resolution notebook-first and fall back to repo-local rules only when
-// no notebook rules file exists.
-func NotebookContextRulesFile(repoDir string) (path string, exists bool) {
-	node, err := workspace.GetProjectByPath(repoDir)
+// ResolveRulesFileSpec resolves a configured rules_file value for repoDir.
+// Bare values select notebook-aware CX presets; explicit legacy paths retain
+// their historical docs-relative behavior.
+func ResolveRulesFileSpec(repoDir, spec string) (string, error) {
+	mgr := cxcontext.NewManager(repoDir)
+	path, err := cxcontext.ResolveRulesSpec(mgr, repoDir, spec)
 	if err != nil {
-		return "", false
+		return "", err
 	}
-	cfg, err := coreConfig.LoadDefault()
+	if cxcontext.IsLegacyRulesSpec(spec) {
+		fmt.Fprintf(os.Stderr, "warning: docgen rules_file %q is a legacy path; migrate it to a named context preset\n", spec)
+	}
+	return path, nil
+}
+
+// ResolveDocsRulesFile is the single notebook-aware resolution point for the
+// docs context. A repository without a docgen config remains changelog-only;
+// a present config must explicitly select a resolvable rules_file.
+func ResolveDocsRulesFile(repoDir string) (string, error) {
+	cfg, configPath, err := LoadWithNotebook(repoDir)
 	if err != nil {
-		return "", false
+		if os.IsNotExist(err) {
+			return "", nil
+		}
+		return "", err
 	}
-	locator := workspace.NewNotebookLocator(cfg)
-	rulesFile, err := locator.GetContextRulesFile(node)
+	if strings.TrimSpace(cfg.Settings.RulesFile) == "" {
+		return "", fmt.Errorf("docgen config %s has no settings.rules_file; set rules_file: doc", configPath)
+	}
+	path, err := ResolveRulesFileSpec(repoDir, cfg.Settings.RulesFile)
 	if err != nil {
-		return "", false
+		return "", fmt.Errorf("resolve rules_file from %s: %w", configPath, err)
 	}
-	if _, statErr := os.Stat(rulesFile); statErr != nil {
-		return rulesFile, false
-	}
-	return rulesFile, true
+	return path, nil
 }
 
 // MergeGenerationConfig merges section-specific overrides with global defaults

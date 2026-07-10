@@ -326,10 +326,9 @@ func (g *Generator) generateTUIDescriptions(packageDir string, section config.Se
 		return nil
 	}
 
-	// Setup rules file if specified
 	if section.RulesFile != "" {
-		if err := g.setupRulesFile(packageDir, section.RulesFile); err != nil {
-			g.logger.WithError(err).Warnf("Failed to setup rules file %s", section.RulesFile)
+		if err := g.BuildContextForRulesSpec(packageDir, section.RulesFile); err != nil {
+			return fmt.Errorf("failed to build section context: %w", err)
 		}
 	}
 

@@ -5,6 +5,7 @@ go 1.25
 require (
 	github.com/fsnotify/fsnotify v1.9.0
 	github.com/grovetools/core v0.6.3
+	github.com/grovetools/cx v0.6.0
 	github.com/grovetools/grove-anthropic v0.6.1
 	github.com/invopop/jsonschema v0.13.0
 	github.com/sirupsen/logrus v1.9.3
@@ -36,7 +37,6 @@ require (
 	github.com/go-fonts/latin-modern v0.3.3 // indirect
 	github.com/go-text/typesetting v0.3.0 // indirect
 	github.com/golang/freetype v0.0.0-20170609003504-e2365dfdc4a0 // indirect
-	github.com/grovetools/cx v0.6.0 // indirect
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
 	github.com/kr/text v0.2.0 // indirect
 	github.com/lucasb-eyer/go-colorful v1.2.0 // indirect

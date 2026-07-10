@@ -206,9 +206,16 @@ func (g *Generator) generateInPlace(packageDir string, opts GenerateOptions) err
 		return fmt.Errorf("failed to load docgen config: %w", err)
 	}
 
+	// Resolve once, before building context or making any LLM request. A
+	// configured docgen run must never silently fall back to default rules.
+	rulesPath, err := config.ResolveDocsRulesFile(packageDir)
+	if err != nil {
+		return fmt.Errorf("failed to resolve docs rules: %w", err)
+	}
+
 	// Handle "sections" output mode: delegate to subdirectory-based generation
 	if cfg.Settings.OutputMode == "sections" {
-		return g.generateSectionsMode(packageDir, configPath, cfg, opts)
+		return g.generateSectionsMode(packageDir, configPath, cfg, rulesPath, opts)
 	}
 
 	// 2. Determine output base directory based on config location
@@ -240,19 +247,9 @@ func (g *Generator) generateInPlace(packageDir string, opts GenerateOptions) err
 			Emit()
 	}
 
-	// 2. Setup rules file if specified. A configured-but-missing rules file is
-	// non-fatal: cx generate falls back to the workspace/notebook default rules,
-	// which still yields usable context. This matches how the schema section
-	// generators already treat setupRulesFile errors (warn, don't abort).
-	if cfg.Settings.RulesFile != "" {
-		if err := g.setupRulesFile(packageDir, cfg.Settings.RulesFile); err != nil {
-			g.logger.WithError(err).Warnf("Failed to setup rules file %s; proceeding with default cx context", cfg.Settings.RulesFile)
-		}
-	}
-
-	// 3. Build context using `cx`
+	// 3. Build context using the explicitly resolved rules artifact.
 	g.logger.Info("Building context with 'cx generate'...")
-	if err := g.BuildContext(packageDir); err != nil {
+	if err := g.BuildContext(packageDir, rulesPath); err != nil {
 		return fmt.Errorf("failed to build context: %w", err)
 	}
 
@@ -1290,10 +1287,9 @@ func (g *Generator) generateSchemaDescriptions(packageDir string, section config
 	// Build prompt for LLM
 	var promptBuilder strings.Builder
 
-	// Setup rules file if specified (grove llm will handle context injection)
 	if section.RulesFile != "" {
-		if err := g.setupRulesFile(packageDir, section.RulesFile); err != nil {
-			g.logger.WithError(err).Warnf("Failed to setup rules file %s", section.RulesFile)
+		if err := g.BuildContextForRulesSpec(packageDir, section.RulesFile); err != nil {
+			return fmt.Errorf("failed to build section context: %w", err)
 		}
 	}
 
@@ -1398,10 +1394,9 @@ func (g *Generator) generateSchemaExamples(packageDir string, section config.Sec
 	// Build Prompt
 	var promptBuilder strings.Builder
 
-	// Setup rules file if specified (grove llm will handle context injection)
 	if section.RulesFile != "" {
-		if err := g.setupRulesFile(packageDir, section.RulesFile); err != nil {
-			g.logger.WithError(err).Warnf("Failed to setup rules file %s", section.RulesFile)
+		if err := g.BuildContextForRulesSpec(packageDir, section.RulesFile); err != nil {
+			return fmt.Errorf("failed to build section context: %w", err)
 		}
 	}
 
@@ -1571,60 +1566,31 @@ func (g *Generator) generateFromCapture(packageDir string, section config.Sectio
 	return nil
 }
 
-func (g *Generator) setupRulesFile(packageDir, rulesFile string) error {
-	// Notebook-first: docs context rules now live in the notebook
-	// (workspaces/<repo>/context/rules). `cx generate` resolves that file
-	// directly and ranks it above the legacy repo-local .grove/rules, so when
-	// the notebook owns the rules we must NOT stage a .grove/rules copy — cx
-	// would ignore it and emit a stale-.grove/rules warning. Treat the
-	// notebook rules file as authoritative and skip the legacy staging.
-	if nbRules, ok := config.NotebookContextRulesFile(packageDir); ok {
-		g.logger.Debugf("Notebook context rules active (%s); skipping .grove/rules staging", nbRules)
-		return nil
-	}
-
-	// Legacy fallback (non-notebook repos): copy the repo-relative rules file
-	// to .grove/rules so `cx generate` picks it up.
-	// If the rules file path starts with .cx/ or is an absolute path, use it directly
-	// Otherwise, look for it in the docs/ directory (legacy behavior)
-	var rulesPath string
-	if strings.HasPrefix(rulesFile, ".cx/") || filepath.IsAbs(rulesFile) {
-		rulesPath = filepath.Join(packageDir, rulesFile)
-	} else {
-		rulesPath = filepath.Join(packageDir, "docs", rulesFile)
-	}
-
-	content, err := os.ReadFile(rulesPath)
-	if err != nil {
-		return fmt.Errorf("failed to read rules file %s: %w", rulesPath, err)
-	}
-
-	// Ensure .grove directory exists
-	groveDir := filepath.Join(packageDir, ".grove")
-	if err := os.MkdirAll(groveDir, 0o755); err != nil {
-		return fmt.Errorf("failed to create .grove directory: %w", err)
-	}
-
-	// Copy the rules file content to .grove/rules
-	// Since we're now operating locally, no path adjustments are needed
-	groveRulesPath := filepath.Join(groveDir, "rules")
-	if err := os.WriteFile(groveRulesPath, content, 0o644); err != nil {
-		return fmt.Errorf("failed to write .grove/rules: %w", err)
-	}
-
-	g.logger.Debugf("Setup rules file from %s to .grove/rules", rulesFile)
-	return nil
-}
-
 // BuildContext runs cx generate to prepare context for LLM calls
-func (g *Generator) BuildContext(packageDir string) error {
-	// Use 'grove cx generate' for workspace-awareness
-	cmd := delegation.Command("cx", "generate")
+func (g *Generator) BuildContext(packageDir, rulesPath string) error {
+	args := []string{"generate"}
+	if rulesPath != "" {
+		g.logger.Infof("Docs context rules: %s", rulesPath)
+		ulog.Info("Docs context rules active").Field("rules", rulesPath).Emit()
+		args = append(args, "--rules-file", rulesPath)
+	}
+	cmd := delegation.Command("cx", args...)
 	cmd.Dir = packageDir
 	// Discard output to avoid contaminating the LLM response
 	cmd.Stdout = io.Discard
 	cmd.Stderr = io.Discard
 	return cmd.Run()
+}
+
+// BuildContextForRulesSpec regenerates context for a section-specific rules
+// selection. Unlike the removed .grove/rules staging, the LLM sees exactly the
+// artifact selected by the section's explicit rules_file.
+func (g *Generator) BuildContextForRulesSpec(packageDir, spec string) error {
+	rulesPath, err := config.ResolveRulesFileSpec(packageDir, spec)
+	if err != nil {
+		return err
+	}
+	return g.BuildContext(packageDir, rulesPath)
 }
 
 // CallLLM makes an LLM request with the given prompt and configuration.
@@ -1923,7 +1889,7 @@ func lastLines(s string, n int) string {
 // is a website content aggregator. Sections live in subdirectories (e.g., overview/,
 // concepts/), each with their own docgen.config.yml. This method discovers those
 // subdirectory configs, merges their sections, and generates from each.
-func (g *Generator) generateSectionsMode(packageDir, configPath string, topCfg *config.DocgenConfig, opts GenerateOptions) error {
+func (g *Generator) generateSectionsMode(packageDir, configPath string, topCfg *config.DocgenConfig, rulesPath string, opts GenerateOptions) error {
 	docgenDir := filepath.Dir(configPath)
 	g.logger.Infof("Sections mode: scanning subdirectories in %s", docgenDir)
 	ulog.Info("Sections mode").
@@ -1932,7 +1898,7 @@ func (g *Generator) generateSectionsMode(packageDir, configPath string, topCfg *
 
 	// Build context once for the whole package
 	g.logger.Info("Building context with 'cx generate'...")
-	if err := g.BuildContext(packageDir); err != nil {
+	if err := g.BuildContext(packageDir, rulesPath); err != nil {
 		return fmt.Errorf("failed to build context: %w", err)
 	}
 
