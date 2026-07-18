@@ -1,6 +1,6 @@
 module github.com/grovetools/docgen
 
-go 1.25
+go 1.25.0
 
 require (
 	github.com/fsnotify/fsnotify v1.9.0
@@ -61,6 +61,7 @@ require (
 	github.com/wk8/go-ordered-map/v2 v2.1.8 // indirect
 	github.com/xo/terminfo v0.0.0-20220910002029-abceb7e1c41e // indirect
 	github.com/yuin/goldmark v1.7.13 // indirect
+	golang.org/x/crypto/x509roots/fallback v0.0.0-20260717224146-ff03dafdb03e
 	golang.org/x/exp v0.0.0-20251023183803-a4bb9ffd2546 // indirect
 	golang.org/x/image v0.35.0 // indirect
 	golang.org/x/net v0.48.0 // indirect
