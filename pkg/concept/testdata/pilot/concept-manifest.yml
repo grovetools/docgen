@@ -1,0 +1,8 @@
+id: public-pilot
+title: Public Pilot Concept
+description: A safe fixture proving concept publication.
+status: active
+docgen_publish: production
+docgen_order:
+  - overview.md
+  - guides/details.md

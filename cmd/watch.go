@@ -13,6 +13,7 @@ import (
 	"github.com/fsnotify/fsnotify"
 	coreConfig "github.com/grovetools/core/config"
 	"github.com/grovetools/core/pkg/workspace"
+	"github.com/grovetools/docgen/pkg/concept"
 	"github.com/grovetools/docgen/pkg/config"
 	"github.com/grovetools/docgen/pkg/manifest"
 	"github.com/grovetools/docgen/pkg/transformer"
@@ -489,163 +490,68 @@ func rebuildPackage(pkg *watchedPackage, w *writer.AstroWriter, mode string, loc
 	return nil
 }
 
-// rebuildConcepts rebuilds concepts for a package
+// rebuildConcepts rebuilds concepts for a package using the same manifest and
+// transformation contract as aggregate.
 func rebuildConcepts(pkg *watchedPackage, w *writer.AstroWriter, mode string, quiet bool) error {
 	if pkg.conceptsDir == "" {
 		return nil
 	}
-
 	if _, err := os.Stat(pkg.conceptsDir); os.IsNotExist(err) {
 		return nil
 	}
-
-	// Reload config
 	docCfg, _, err := config.LoadWithNotebook(pkg.wsPath)
 	if err != nil || docCfg == nil {
 		return err
 	}
-
-	// Scan for concept subdirectories
 	entries, err := os.ReadDir(pkg.conceptsDir)
 	if err != nil {
 		return err
 	}
-
 	for _, entry := range entries {
 		if !entry.IsDir() {
 			continue
 		}
-
 		conceptID := entry.Name()
 		conceptDir := filepath.Join(pkg.conceptsDir, conceptID)
-
-		// Read concept manifest
-		manifestPath := filepath.Join(conceptDir, "concept-manifest.yml")
-		manifestData, err := os.ReadFile(manifestPath)
-		if err != nil {
+		cm, err := concept.LoadManifest(filepath.Join(conceptDir, "concept-manifest.yml"))
+		if err != nil || !cm.Published(mode) {
 			continue
 		}
-
-		// Parse manifest (simple YAML parsing)
-		var title, publish string
-		var docgenOrder []string
-		for _, line := range strings.Split(string(manifestData), "\n") {
-			line = strings.TrimSpace(line)
-			if strings.HasPrefix(line, "title:") {
-				title = strings.Trim(strings.TrimPrefix(line, "title:"), " \"'")
-			} else if strings.HasPrefix(line, "docgen_publish:") {
-				publish = strings.TrimSpace(strings.Split(strings.TrimPrefix(line, "docgen_publish:"), "#")[0])
-			} else if strings.HasPrefix(line, "- ") && len(docgenOrder) > 0 || strings.HasPrefix(line, "docgen_order:") {
-				if strings.HasPrefix(line, "- ") {
-					docgenOrder = append(docgenOrder, strings.TrimPrefix(line, "- "))
-				}
-			}
-		}
-
-		// Check publish status
-		if publish == "" {
-			publish = config.StatusDraft
-		}
-		if publish == config.StatusDraft {
-			continue
-		}
-		if mode == "prod" && publish == config.StatusDev {
-			continue
-		}
-
 		if !quiet {
 			ulog.Info("Rebuilding concept").Field("package", pkg.pkgName).Field("concept", conceptID).Emit()
 		}
-
-		// Get list of .md files to process
-		var mdFiles []string
-		if len(docgenOrder) > 0 {
-			for _, f := range docgenOrder {
-				path := filepath.Join(conceptDir, f)
-				if _, err := os.Stat(path); err == nil {
-					mdFiles = append(mdFiles, path)
-				}
-			}
-		} else {
-			mdFiles, _ = filepath.Glob(filepath.Join(conceptDir, "*.md"))
+		relFiles, err := concept.MarkdownFiles(conceptDir, cm.DocgenOrder)
+		if err != nil {
+			return fmt.Errorf("discover concept %s docs: %w", conceptID, err)
 		}
-
-		// Process each .md file
-		for i, mdPath := range mdFiles {
-			mdFile := filepath.Base(mdPath)
-			content, err := os.ReadFile(mdPath)
+		contentDest := filepath.Join(w.WebsiteDir(), "src/content/docs", pkg.pkgName, "concepts", conceptID)
+		for i, relPath := range relFiles {
+			content, err := os.ReadFile(filepath.Join(conceptDir, relPath))
 			if err != nil {
-				continue
+				return err
 			}
-
-			// Strip existing frontmatter
-			body := stripFrontmatter(string(content))
-
-			// Generate title from filename
-			docTitle := formatConceptDocTitle(strings.TrimSuffix(mdFile, ".md"))
-
-			// Calculate order
-			order := 2000 + i + 1
-
-			// Build new content with frontmatter
-			newContent := fmt.Sprintf(`---
-title: "%s"
-package: "%s"
-category: "%s"
-order: %d
-concept_title: "%s"
-concept_id: "%s"
----
-
-%s`, docTitle, pkg.pkgName, docCfg.Category, order, title, conceptID, body)
-
-			// Write to website
-			destPath := filepath.Join(w.WebsiteDir(), "src/content/docs", pkg.pkgName, "concepts", conceptID, mdFile)
+			content, err = concept.TransformMarkdown(content, concept.TransformOptions{
+				Package: pkg.pkgName, Category: docCfg.Category, ConceptID: conceptID,
+				ConceptTitle: cm.Title, ConceptDescription: cm.Description,
+				RelativePath: relPath, Order: 2000 + i + 1,
+			})
+			if err != nil {
+				return fmt.Errorf("transform concept %s/%s: %w", conceptID, relPath, err)
+			}
+			destPath := filepath.Join(contentDest, relPath)
 			if err := os.MkdirAll(filepath.Dir(destPath), 0o755); err != nil {
-				continue
+				return err
 			}
-			if err := os.WriteFile(destPath, []byte(newContent), 0o644); err != nil {
-				ulog.Error("Failed to write concept doc").Field("file", destPath).Err(err).Emit()
+			if err := os.WriteFile(destPath, content, 0o644); err != nil {
+				return err
 			}
 		}
+		assetDest := filepath.Join(w.WebsiteDir(), "public/docs", pkg.pkgName, "concepts", conceptID)
+		if err := concept.CopyAssets(conceptDir, assetDest); err != nil {
+			return fmt.Errorf("copy concept %s assets: %w", conceptID, err)
+		}
 	}
-
 	return nil
-}
-
-// stripFrontmatter removes YAML frontmatter from markdown content
-func stripFrontmatter(content string) string {
-	if !strings.HasPrefix(content, "---\n") {
-		return content
-	}
-	end := strings.Index(content[4:], "\n---")
-	if end == -1 {
-		return content
-	}
-	return strings.TrimLeft(content[end+8:], "\n")
-}
-
-// formatConceptDocTitle formats a filename into a title
-func formatConceptDocTitle(name string) string {
-	parts := strings.FieldsFunc(name, func(r rune) bool {
-		return r == '-' || r == '_'
-	})
-
-	acronyms := map[string]string{
-		"cli": "CLI", "tui": "TUI", "api": "API",
-		"ui": "UI", "id": "ID", "llm": "LLM",
-	}
-
-	for i, part := range parts {
-		lower := strings.ToLower(part)
-		if acronym, ok := acronyms[lower]; ok {
-			parts[i] = acronym
-		} else if len(part) > 0 {
-			parts[i] = strings.ToUpper(string(part[0])) + part[1:]
-		}
-	}
-
-	return strings.Join(parts, " ")
 }
 
 // rebuildWebsiteSections handles output_mode: sections (overview, concepts)
