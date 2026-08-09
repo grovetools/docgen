@@ -525,6 +525,7 @@ func rebuildConcepts(pkg *watchedPackage, w *writer.AstroWriter, mode string, qu
 			return fmt.Errorf("discover concept %s docs: %w", conceptID, err)
 		}
 		contentDest := filepath.Join(w.WebsiteDir(), "src/content/docs", pkg.pkgName, "concepts", conceptID)
+		hasLikeC4Map := concept.HasLikeC4Map(conceptDir)
 		for i, relPath := range relFiles {
 			content, err := os.ReadFile(filepath.Join(conceptDir, relPath))
 			if err != nil {
@@ -533,7 +534,7 @@ func rebuildConcepts(pkg *watchedPackage, w *writer.AstroWriter, mode string, qu
 			content, err = concept.TransformMarkdown(content, concept.TransformOptions{
 				Package: pkg.pkgName, Category: docCfg.Category, ConceptID: conceptID,
 				ConceptTitle: cm.Title, ConceptDescription: cm.Description,
-				RelativePath: relPath, Order: 2000 + i + 1,
+				RelativePath: relPath, Order: 2000 + i + 1, HasLikeC4Map: hasLikeC4Map,
 			})
 			if err != nil {
 				return fmt.Errorf("transform concept %s/%s: %w", conceptID, relPath, err)

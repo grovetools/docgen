@@ -105,6 +105,7 @@ type TransformOptions struct {
 	ConceptDescription string
 	RelativePath       string
 	Order              int
+	HasLikeC4Map       bool
 }
 
 // TransformMarkdown creates Astro-compatible frontmatter and sanitizes
@@ -132,6 +133,10 @@ func TransformMarkdown(content []byte, opts TransformOptions) ([]byte, error) {
 	}
 
 	body = sanitizePublicBody(body)
+	mapMetadata := ""
+	if opts.HasLikeC4Map {
+		mapMetadata = "concept_map: true\n"
+	}
 	frontmatter := fmt.Sprintf(`---
 title: "%s"
 description: "%s"
@@ -140,9 +145,9 @@ category: "%s"
 order: %d
 concept_title: "%s"
 concept_id: "%s"
----
+%s---
 
-`, yamlEscape(title), yamlEscape(description), yamlEscape(opts.Package), yamlEscape(opts.Category), opts.Order, yamlEscape(opts.ConceptTitle), yamlEscape(opts.ConceptID))
+`, yamlEscape(title), yamlEscape(description), yamlEscape(opts.Package), yamlEscape(opts.Category), opts.Order, yamlEscape(opts.ConceptTitle), yamlEscape(opts.ConceptID), mapMetadata)
 	return []byte(frontmatter + strings.TrimLeft(body, "\n")), nil
 }
 
@@ -212,14 +217,46 @@ func FormatTitle(name string) string {
 	return strings.Join(parts, " ")
 }
 
+// HasLikeC4Map reports whether a concept contains source files that LikeC4 can
+// compile. Both the older likec4/ convention and the concept-map src/ scaffold
+// are supported.
+func HasLikeC4Map(conceptDir string) bool {
+	for _, dir := range []string{"likec4", "src"} {
+		found := false
+		_ = filepath.WalkDir(filepath.Join(conceptDir, dir), func(_ string, entry fs.DirEntry, err error) error {
+			if err != nil {
+				return filepath.SkipDir
+			}
+			if !entry.IsDir() && (strings.EqualFold(filepath.Ext(entry.Name()), ".c4") || strings.EqualFold(filepath.Ext(entry.Name()), ".likec4")) {
+				found = true
+				return fs.SkipAll
+			}
+			return nil
+		})
+		if found {
+			return true
+		}
+	}
+	for _, pattern := range []string{"*.c4", "*.likec4"} {
+		matches, _ := filepath.Glob(filepath.Join(conceptDir, pattern))
+		if len(matches) > 0 {
+			return true
+		}
+	}
+	return false
+}
+
 // CopyAssets materializes the public concept asset bucket. Source assets/ is
-// copied as-is, likec4/ is copied to assets/likec4/, and root *.c4 files are
-// copied to assets/. Symlinks are ignored.
+// copied as-is. LikeC4 sources are normalized below assets/likec4/ from either
+// the older likec4/ convention or the concept-map src/ scaffold. Root *.c4
+// files are copied to assets/. Symlinks are ignored.
 func CopyAssets(conceptDir, conceptDestDir string) error {
 	assetDest := filepath.Join(conceptDestDir, "assets")
+	likec4Dest := filepath.Join(assetDest, "likec4")
 	for _, mapping := range []struct{ source, dest string }{
 		{filepath.Join(conceptDir, "assets"), assetDest},
-		{filepath.Join(conceptDir, "likec4"), filepath.Join(assetDest, "likec4")},
+		{filepath.Join(conceptDir, "likec4"), likec4Dest},
+		{filepath.Join(conceptDir, "src"), filepath.Join(likec4Dest, "src")},
 	} {
 		if info, err := os.Stat(mapping.source); err == nil && info.IsDir() {
 			if err := copyTree(mapping.source, mapping.dest); err != nil {
@@ -227,12 +264,26 @@ func CopyAssets(conceptDir, conceptDestDir string) error {
 			}
 		}
 	}
-	matches, err := filepath.Glob(filepath.Join(conceptDir, "*.c4"))
-	if err != nil {
-		return err
+	var rootSources []string
+	for _, pattern := range []string{"*.c4", "*.likec4"} {
+		matches, err := filepath.Glob(filepath.Join(conceptDir, pattern))
+		if err != nil {
+			return err
+		}
+		rootSources = append(rootSources, matches...)
 	}
-	for _, source := range matches {
-		if err := copyRegularFile(source, filepath.Join(assetDest, filepath.Base(source))); err != nil {
+	for _, source := range rootSources {
+		name := filepath.Base(source)
+		if err := copyRegularFile(source, filepath.Join(assetDest, name)); err != nil {
+			return err
+		}
+		if err := copyRegularFile(source, filepath.Join(likec4Dest, name)); err != nil {
+			return err
+		}
+	}
+	configSource := filepath.Join(conceptDir, "likec4.config.json")
+	if info, statErr := os.Stat(configSource); statErr == nil && info.Mode().IsRegular() {
+		if err := copyRegularFile(configSource, filepath.Join(likec4Dest, "likec4.config.json")); err != nil {
 			return err
 		}
 	}

@@ -52,7 +52,7 @@ Public detail.
 func TestTransformMarkdownFallsBackToManifestMetadata(t *testing.T) {
 	got, err := TransformMarkdown([]byte("Body\n"), TransformOptions{
 		Package: "flow", Category: "Agents", ConceptID: "subjobs", ConceptTitle: "Flow Subjobs",
-		ConceptDescription: "Child job lifecycle.", RelativePath: "overview.md", Order: 2001,
+		ConceptDescription: "Child job lifecycle.", RelativePath: "overview.md", Order: 2001, HasLikeC4Map: true,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -60,6 +60,9 @@ func TestTransformMarkdownFallsBackToManifestMetadata(t *testing.T) {
 	text := string(got)
 	if !strings.Contains(text, `title: "Flow Subjobs"`) || !strings.Contains(text, `description: "Child job lifecycle."`) {
 		t.Fatalf("manifest metadata not used:\n%s", text)
+	}
+	if !strings.Contains(text, "concept_map: true") {
+		t.Fatalf("map metadata not emitted:\n%s", text)
 	}
 }
 
@@ -113,7 +116,7 @@ func TestPilotFixturePublicationContract(t *testing.T) {
 		output, err := TransformMarkdown(input, TransformOptions{
 			Package: "pilot", Category: "Test", ConceptID: manifest.ID,
 			ConceptTitle: manifest.Title, ConceptDescription: manifest.Description,
-			RelativePath: rel, Order: 2001 + i,
+			RelativePath: rel, Order: 2001 + i, HasLikeC4Map: HasLikeC4Map(source),
 		})
 		if err != nil {
 			t.Fatal(err)
@@ -141,6 +144,9 @@ func TestPilotFixturePublicationContract(t *testing.T) {
 	if strings.Contains(string(published), "## Context") || strings.Contains(string(published), "/Users/") {
 		t.Fatalf("pilot leaked notebook context:\n%s", published)
 	}
+	if !strings.Contains(string(published), "concept_map: true") {
+		t.Fatalf("pilot map metadata missing:\n%s", published)
+	}
 }
 
 func TestCopyAssetsDefinesConceptBucket(t *testing.T) {
@@ -150,6 +156,8 @@ func TestCopyAssetsDefinesConceptBucket(t *testing.T) {
 		"assets/diagram.svg":     "svg",
 		"likec4/model.c4":        "model",
 		"likec4/views/system.c4": "view",
+		"src/index.c4":           "map scaffold",
+		"likec4.config.json":     `{"name":"fixture"}`,
 		"root.c4":                "root",
 	}
 	for name, content := range fixtures {
@@ -164,7 +172,10 @@ func TestCopyAssetsDefinesConceptBucket(t *testing.T) {
 	if err := CopyAssets(source, dest); err != nil {
 		t.Fatal(err)
 	}
-	for _, name := range []string{"assets/diagram.svg", "assets/likec4/model.c4", "assets/likec4/views/system.c4", "assets/root.c4"} {
+	if !HasLikeC4Map(source) {
+		t.Fatal("fixture should be detected as a LikeC4 map")
+	}
+	for _, name := range []string{"assets/diagram.svg", "assets/likec4/model.c4", "assets/likec4/views/system.c4", "assets/likec4/src/index.c4", "assets/likec4/likec4.config.json", "assets/root.c4", "assets/likec4/root.c4"} {
 		if _, err := os.Stat(filepath.Join(dest, name)); err != nil {
 			t.Errorf("missing %s: %v", name, err)
 		}

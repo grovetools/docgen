@@ -1009,6 +1009,7 @@ func (a *Aggregator) aggregateConcepts(wsPath string, wsName string, docCfg *doc
 			continue
 		}
 
+		hasLikeC4Map := concept.HasLikeC4Map(conceptDir)
 		for i, relPath := range relFiles {
 			content, err := os.ReadFile(filepath.Join(conceptDir, relPath))
 			if err != nil {
@@ -1019,7 +1020,7 @@ func (a *Aggregator) aggregateConcepts(wsPath string, wsName string, docCfg *doc
 				content, err = concept.TransformMarkdown(content, concept.TransformOptions{
 					Package: wsName, Category: docCfg.Category, ConceptID: conceptID,
 					ConceptTitle: cm.Title, ConceptDescription: cm.Description,
-					RelativePath: relPath, Order: 2000 + i + 1,
+					RelativePath: relPath, Order: 2000 + i + 1, HasLikeC4Map: hasLikeC4Map,
 				})
 				if err != nil {
 					a.logger.Warnf("Failed to transform concept doc %s: %v", relPath, err)
