@@ -277,7 +277,9 @@ func (a *Aggregator) aggregateEcosystem(rootDir string, m *manifest.Manifest, ou
 
 		// Handle "sections" output mode (for website content like overview, concepts)
 		if docCfg.Settings.OutputMode == "sections" {
-			a.processWebsiteSections(wsPath, docCfg, m, outputDir, mode, transform)
+			if err := a.processWebsiteSections(wsPath, docCfg, m, outputDir, mode, transform); err != nil {
+				return fmt.Errorf("process website sections for %s: %w", wsName, err)
+			}
 			continue
 		}
 
@@ -529,7 +531,7 @@ func (a *Aggregator) aggregateEcosystem(rootDir string, m *manifest.Manifest, ou
 
 		// Aggregate concepts from the workspace's concepts directory
 		if err := a.aggregateConcepts(wsPath, wsName, docCfg, distDest, mode, transform); err != nil {
-			a.logger.Warnf("Failed to aggregate concepts for %s: %v", wsName, err)
+			return fmt.Errorf("aggregate concepts for %s: %w", wsName, err)
 		}
 
 		sort.Slice(sectionsToAggregate, func(i, j int) bool {
@@ -797,15 +799,14 @@ func copyDir(src, dst string) error {
 //
 // Each section subdirectory should have its own docgen.config.yml (like a mini-package),
 // mirroring the structure of package docgen directories (docs/, prompts/, images/, etc.)
-func (a *Aggregator) processWebsiteSections(wsPath string, cfg *docgenConfig.DocgenConfig, m *manifest.Manifest, outputDir, mode, transform string) {
+func (a *Aggregator) processWebsiteSections(wsPath string, cfg *docgenConfig.DocgenConfig, m *manifest.Manifest, outputDir, mode, transform string) error {
 	wsName := filepath.Base(wsPath)
 	a.logger.Infof("Processing website sections for %s", wsName)
 
 	// Resolve base docgen directory (notebook first, then repo)
 	node, err := workspace.GetProjectByPath(wsPath)
 	if err != nil {
-		a.logger.Warnf("Could not resolve workspace for %s, skipping sections: %v", wsPath, err)
-		return
+		return fmt.Errorf("resolve workspace for %s: %w", wsPath, err)
 	}
 
 	// Determine base path for docs - try notebook first
@@ -828,8 +829,7 @@ func (a *Aggregator) processWebsiteSections(wsPath string, cfg *docgenConfig.Doc
 	// Discover section subdirectories that have their own docgen.config.yml
 	entries, err := os.ReadDir(baseDocgenDir)
 	if err != nil {
-		a.logger.Warnf("Failed to read docgen dir %s: %v", baseDocgenDir, err)
-		return
+		return fmt.Errorf("read docgen dir %s: %w", baseDocgenDir, err)
 	}
 
 	for _, entry := range entries {
@@ -945,6 +945,23 @@ func (a *Aggregator) processWebsiteSections(wsPath string, cfg *docgenConfig.Doc
 			})
 		}
 
+		// The sections workspace represents the ecosystem website, while concept
+		// notes live at the ecosystem notebook workspace rather than under the
+		// website project's own notebook directory. Publish those concepts into
+		// the concepts section as release inputs too.
+		if sectionName == "concepts" && coreCfg != nil {
+			locator := workspace.NewNotebookLocator(coreCfg)
+			if projectDocgenDir, locateErr := locator.GetDocgenDir(node); locateErr == nil {
+				workspaceRoot := filepath.Dir(filepath.Dir(projectDocgenDir))
+				ecosystemConcepts := filepath.Join(workspaceRoot, node.NotebookName, "concepts")
+				published, publishErr := a.publishWebsiteConcepts(ecosystemConcepts, destDir, node.NotebookName, sectionCfg.Category, mode, transform)
+				if publishErr != nil {
+					return fmt.Errorf("publish ecosystem concepts: %w", publishErr)
+				}
+				websiteSection.Files = append(websiteSection.Files, published...)
+			}
+		}
+
 		// Sort files by order
 		sort.Slice(websiteSection.Files, func(i, j int) bool {
 			return websiteSection.Files[i].Order < websiteSection.Files[j].Order
@@ -955,6 +972,66 @@ func (a *Aggregator) processWebsiteSections(wsPath string, cfg *docgenConfig.Doc
 			a.logger.Infof("Added website section %s with %d files", sectionName, len(websiteSection.Files))
 		}
 	}
+	return nil
+}
+
+func (a *Aggregator) publishWebsiteConcepts(conceptsDir, destDir, packageName, category, mode, transform string) ([]manifest.SectionManifest, error) {
+	if !dirExists(conceptsDir) {
+		return nil, nil
+	}
+	entries, err := os.ReadDir(conceptsDir)
+	if err != nil {
+		return nil, fmt.Errorf("read ecosystem concepts: %w", err)
+	}
+	var published []manifest.SectionManifest
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			continue
+		}
+		conceptID := entry.Name()
+		conceptDir := filepath.Join(conceptsDir, conceptID)
+		cm, err := concept.LoadManifest(filepath.Join(conceptDir, "concept-manifest.yml"))
+		if err != nil || !cm.Published(mode) {
+			continue
+		}
+		relFiles, err := concept.MarkdownFiles(conceptDir, cm.DocgenOrder)
+		if err != nil {
+			return nil, fmt.Errorf("discover concept %s docs: %w", conceptID, err)
+		}
+		conceptDest := filepath.Join(destDir, conceptID)
+		hasLikeC4Map := concept.HasLikeC4Map(conceptDir)
+		for i, relPath := range relFiles {
+			content, err := os.ReadFile(filepath.Join(conceptDir, relPath))
+			if err != nil {
+				return nil, fmt.Errorf("read concept %s/%s: %w", conceptID, relPath, err)
+			}
+			if transform == "astro" {
+				content, err = concept.TransformMarkdown(content, concept.TransformOptions{
+					Package: packageName, Category: category, ConceptID: conceptID,
+					ConceptTitle: cm.Title, ConceptDescription: cm.Description,
+					RelativePath: relPath, Order: 2000 + i + 1, HasLikeC4Map: hasLikeC4Map,
+				})
+				if err != nil {
+					return nil, fmt.Errorf("transform concept %s/%s: %w", conceptID, relPath, err)
+				}
+			}
+			target := filepath.Join(conceptDest, relPath)
+			if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
+				return nil, err
+			}
+			if err := os.WriteFile(target, content, 0o644); err != nil {
+				return nil, err
+			}
+			published = append(published, manifest.SectionManifest{
+				Name: filepath.ToSlash(filepath.Join(conceptID, relPath)), Title: cm.Title,
+				Order: 2000 + i + 1, Path: fmt.Sprintf("./concepts/%s", filepath.ToSlash(filepath.Join(conceptID, relPath))),
+			})
+		}
+		if err := concept.CopyAssets(conceptDir, conceptDest, mode); err != nil {
+			return nil, fmt.Errorf("copy concept %s assets: %w", conceptID, err)
+		}
+	}
+	return published, nil
 }
 
 // aggregateConcepts scans the workspace's concepts directory and copies publishable concepts.
@@ -1036,8 +1113,8 @@ func (a *Aggregator) aggregateConcepts(wsPath string, wsName string, docCfg *doc
 				a.logger.Errorf("Failed to write %s: %v", destPath, err)
 			}
 		}
-		if err := concept.CopyAssets(conceptDir, conceptDestDir); err != nil {
-			a.logger.Warnf("Failed to copy concept assets for %s: %v", conceptID, err)
+		if err := concept.CopyAssets(conceptDir, conceptDestDir, mode); err != nil {
+			return fmt.Errorf("copy concept %s assets: %w", conceptID, err)
 		}
 	}
 	return nil

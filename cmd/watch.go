@@ -548,7 +548,7 @@ func rebuildConcepts(pkg *watchedPackage, w *writer.AstroWriter, mode string, qu
 			}
 		}
 		assetDest := filepath.Join(w.WebsiteDir(), "public/docs", pkg.pkgName, "concepts", conceptID)
-		if err := concept.CopyAssets(conceptDir, assetDest); err != nil {
+		if err := concept.CopyAssets(conceptDir, assetDest, mode); err != nil {
 			return fmt.Errorf("copy concept %s assets: %w", conceptID, err)
 		}
 	}

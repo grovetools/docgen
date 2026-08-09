@@ -3,6 +3,7 @@
 package concept
 
 import (
+	"encoding/json"
 	"fmt"
 	"io"
 	"io/fs"
@@ -249,10 +250,14 @@ func HasLikeC4Map(conceptDir string) bool {
 // CopyAssets materializes the public concept asset bucket. Source assets/ is
 // copied as-is. LikeC4 sources are normalized below assets/likec4/ from either
 // the older likec4/ convention or the concept-map src/ scaffold. Root *.c4
-// files are copied to assets/. Symlinks are ignored.
-func CopyAssets(conceptDir, conceptDestDir string) error {
+// files are copied to assets/. Symlinks are ignored. Configured includes are
+// vendored only when their owning concepts are publishable in mode.
+func CopyAssets(conceptDir, conceptDestDir, mode string) error {
 	assetDest := filepath.Join(conceptDestDir, "assets")
 	likec4Dest := filepath.Join(assetDest, "likec4")
+	if err := os.RemoveAll(filepath.Join(likec4Dest, "_includes")); err != nil {
+		return fmt.Errorf("clear vendored LikeC4 includes: %w", err)
+	}
 	for _, mapping := range []struct{ source, dest string }{
 		{filepath.Join(conceptDir, "assets"), assetDest},
 		{filepath.Join(conceptDir, "likec4"), likec4Dest},
@@ -283,11 +288,212 @@ func CopyAssets(conceptDir, conceptDestDir string) error {
 	}
 	configSource := filepath.Join(conceptDir, "likec4.config.json")
 	if info, statErr := os.Stat(configSource); statErr == nil && info.Mode().IsRegular() {
-		if err := copyRegularFile(configSource, filepath.Join(likec4Dest, "likec4.config.json")); err != nil {
+		if err := vendorLikeC4Includes(configSource, likec4Dest, mode); err != nil {
 			return err
 		}
 	}
+	if err := sanitizeLikeC4Tree(assetDest); err != nil {
+		return err
+	}
 	return nil
+}
+
+type likeC4Config struct {
+	Include *struct {
+		Paths []string `json:"paths"`
+	} `json:"include,omitempty"`
+}
+
+type conceptSource struct {
+	root, workspace, id string
+}
+
+// vendorLikeC4Includes makes a release LikeC4 project independent of notebook
+// paths. It follows configs on included concepts so transitive includes are
+// represented in the root config as a flat, deterministic closure.
+func vendorLikeC4Includes(configPath, likec4Dest, mode string) error {
+	rootData, err := os.ReadFile(configPath)
+	if err != nil {
+		return err
+	}
+	var root map[string]any
+	if err := json.Unmarshal(rootData, &root); err != nil {
+		return fmt.Errorf("parse LikeC4 config %s: %w", configPath, err)
+	}
+	var parsed likeC4Config
+	if err := json.Unmarshal(rootData, &parsed); err != nil {
+		return fmt.Errorf("parse LikeC4 includes %s: %w", configPath, err)
+	}
+
+	type pendingInclude struct{ value, configDir string }
+	var pending []pendingInclude
+	if parsed.Include != nil {
+		for _, value := range parsed.Include.Paths {
+			pending = append(pending, pendingInclude{value, filepath.Dir(configPath)})
+		}
+	}
+	seen := make(map[string]bool)
+	var rewritten []string
+	for len(pending) > 0 {
+		next := pending[0]
+		pending = pending[1:]
+		if next.value == "" || filepath.IsAbs(next.value) {
+			return fmt.Errorf("LikeC4 include %q in %s must be a non-empty relative path", next.value, configPath)
+		}
+		resolved, err := filepath.EvalSymlinks(filepath.Join(next.configDir, filepath.FromSlash(next.value)))
+		if err != nil {
+			return fmt.Errorf("resolve LikeC4 include %q from %s: %w", next.value, next.configDir, err)
+		}
+		info, err := os.Stat(resolved)
+		if err != nil || !info.IsDir() {
+			return fmt.Errorf("LikeC4 include %q resolved to %s, which is not a directory", next.value, resolved)
+		}
+		if seen[resolved] {
+			continue
+		}
+		seen[resolved] = true
+
+		owner, err := locateConceptSource(resolved)
+		if err != nil {
+			return fmt.Errorf("LikeC4 include %q: %w", next.value, err)
+		}
+		manifest, err := LoadManifest(filepath.Join(owner.root, "concept-manifest.yml"))
+		if err != nil {
+			return fmt.Errorf("LikeC4 include %q has no valid concept manifest: %w", next.value, err)
+		}
+		if !manifest.Published(mode) {
+			return fmt.Errorf("LikeC4 include %q depends on unpublished concept %s:%s (docgen_publish=%q) in %s mode", next.value, owner.workspace, owner.id, manifest.DocgenPublish, mode)
+		}
+		rel, err := filepath.Rel(owner.root, resolved)
+		if err != nil || rel == "." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+			return fmt.Errorf("LikeC4 include %q is not a source directory inside concept %s:%s", next.value, owner.workspace, owner.id)
+		}
+		vendorRel := filepath.Join("_includes", owner.workspace, owner.id, rel)
+		if err := copyLikeC4Sources(resolved, filepath.Join(likec4Dest, vendorRel)); err != nil {
+			return fmt.Errorf("vendor LikeC4 include %s:%s: %w", owner.workspace, owner.id, err)
+		}
+		rewritten = append(rewritten, filepath.ToSlash(vendorRel))
+
+		dependencyConfig := filepath.Join(owner.root, "likec4.config.json")
+		if dependencyConfig == configPath {
+			continue
+		}
+		if data, readErr := os.ReadFile(dependencyConfig); readErr == nil {
+			var dependency likeC4Config
+			if err := json.Unmarshal(data, &dependency); err != nil {
+				return fmt.Errorf("parse included LikeC4 config %s: %w", dependencyConfig, err)
+			}
+			if dependency.Include != nil {
+				for _, value := range dependency.Include.Paths {
+					pending = append(pending, pendingInclude{value, owner.root})
+				}
+			}
+		} else if !os.IsNotExist(readErr) {
+			return fmt.Errorf("read included LikeC4 config %s: %w", dependencyConfig, readErr)
+		}
+	}
+
+	if len(rewritten) > 0 {
+		include, _ := root["include"].(map[string]any)
+		if include == nil {
+			include = make(map[string]any)
+			root["include"] = include
+		}
+		include["paths"] = rewritten
+	}
+	output, err := json.MarshalIndent(root, "", "  ")
+	if err != nil {
+		return err
+	}
+	output = append(output, '\n')
+	if err := os.MkdirAll(likec4Dest, 0o755); err != nil {
+		return err
+	}
+	return os.WriteFile(filepath.Join(likec4Dest, "likec4.config.json"), output, 0o644)
+}
+
+func locateConceptSource(source string) (conceptSource, error) {
+	for dir := source; ; dir = filepath.Dir(dir) {
+		parent := filepath.Dir(dir)
+		if filepath.Base(parent) == "concepts" {
+			workspaceDir := filepath.Dir(parent)
+			if filepath.Base(filepath.Dir(workspaceDir)) != "workspaces" {
+				return conceptSource{}, fmt.Errorf("source %s is not beneath a notebook workspace concept", source)
+			}
+			return conceptSource{root: dir, workspace: filepath.Base(workspaceDir), id: filepath.Base(dir)}, nil
+		}
+		if parent == dir {
+			return conceptSource{}, fmt.Errorf("source %s is not beneath a notebook workspace concept", source)
+		}
+	}
+}
+
+func copyLikeC4Sources(source, dest string) error {
+	copied := 0
+	err := filepath.WalkDir(source, func(path string, entry fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if entry.Type()&os.ModeSymlink != 0 {
+			if entry.IsDir() {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		if entry.IsDir() {
+			return nil
+		}
+		ext := strings.ToLower(filepath.Ext(entry.Name()))
+		if ext != ".c4" && ext != ".likec4" {
+			return nil
+		}
+		rel, err := filepath.Rel(source, path)
+		if err != nil {
+			return err
+		}
+		copied++
+		return copyRegularFile(path, filepath.Join(dest, rel))
+	})
+	if err != nil {
+		return err
+	}
+	if copied == 0 {
+		return fmt.Errorf("source directory %s contains no .c4 or .likec4 files", source)
+	}
+	return nil
+}
+
+func sanitizeLikeC4Tree(root string) error {
+	return filepath.WalkDir(root, func(path string, entry fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if entry.IsDir() {
+			return nil
+		}
+		ext := strings.ToLower(filepath.Ext(entry.Name()))
+		if ext != ".c4" && ext != ".likec4" {
+			return nil
+		}
+		data, err := os.ReadFile(path)
+		if err != nil {
+			return err
+		}
+		lines := strings.SplitAfter(string(data), "\n")
+		filtered := lines[:0]
+		for _, line := range lines {
+			trimmed := strings.TrimSpace(line)
+			if strings.HasPrefix(trimmed, "link file://") && localPathPattern.MatchString(line) {
+				continue
+			}
+			filtered = append(filtered, line)
+		}
+		output := strings.Join(filtered, "")
+		if localPathPattern.MatchString(output) {
+			return fmt.Errorf("LikeC4 source %s contains an unsupported absolute local path", path)
+		}
+		return os.WriteFile(path, []byte(output), 0o644)
+	})
 }
 
 func copyTree(source, dest string) error {

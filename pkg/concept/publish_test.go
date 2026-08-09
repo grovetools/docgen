@@ -129,7 +129,7 @@ func TestPilotFixturePublicationContract(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	if err := CopyAssets(source, dest); err != nil {
+	if err := CopyAssets(source, dest, "prod"); err != nil {
 		t.Fatal(err)
 	}
 	for _, rel := range []string{"overview.md", "guides/details.md", "assets/likec4/model.c4"} {
@@ -169,7 +169,7 @@ func TestCopyAssetsDefinesConceptBucket(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	if err := CopyAssets(source, dest); err != nil {
+	if err := CopyAssets(source, dest, "prod"); err != nil {
 		t.Fatal(err)
 	}
 	if !HasLikeC4Map(source) {
@@ -179,5 +179,84 @@ func TestCopyAssetsDefinesConceptBucket(t *testing.T) {
 		if _, err := os.Stat(filepath.Join(dest, name)); err != nil {
 			t.Errorf("missing %s: %v", name, err)
 		}
+	}
+}
+
+func TestCopyAssetsVendorsPublishedIncludeClosure(t *testing.T) {
+	notebook := t.TempDir()
+	root := filepath.Join(notebook, "workspaces", "core", "concepts", "architecture")
+	dependency := filepath.Join(notebook, "workspaces", "ui", "concepts", "panels")
+	transitive := filepath.Join(notebook, "workspaces", "core", "concepts", "identity")
+	writeFixture := func(name, content string) {
+		t.Helper()
+		if err := os.MkdirAll(filepath.Dir(name), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(name, []byte(content), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	writeFixture(filepath.Join(root, "src", "model.c4"), "model {}\n")
+	writeFixture(filepath.Join(root, "likec4.config.json"), `{"name":"architecture","include":{"paths":["../../../ui/concepts/panels/likec4"]}}`)
+	writeFixture(filepath.Join(dependency, "concept-manifest.yml"), "id: panels\ndocgen_publish: production\n")
+	writeFixture(filepath.Join(dependency, "likec4", "panels.c4"), "model panels {}\n  link file:///Users/alice/Notebooks/private.md 'local source'\n")
+	writeFixture(filepath.Join(dependency, "likec4.config.json"), `{"include":{"paths":["../../../core/concepts/identity/likec4"]}}`)
+	writeFixture(filepath.Join(transitive, "concept-manifest.yml"), "id: identity\ndocgen_publish: production\n")
+	writeFixture(filepath.Join(transitive, "likec4", "identity.c4"), "model identity {}\n")
+
+	dest := t.TempDir()
+	if err := CopyAssets(root, dest, "prod"); err != nil {
+		t.Fatal(err)
+	}
+	config, err := os.ReadFile(filepath.Join(dest, "assets", "likec4", "likec4.config.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := string(config)
+	for _, want := range []string{"_includes/ui/panels/likec4", "_includes/core/identity/likec4"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("rewritten config missing %q:\n%s", want, got)
+		}
+	}
+	if strings.Contains(got, notebook) || strings.Contains(got, "../../../") {
+		t.Fatalf("rewritten config leaked notebook path:\n%s", got)
+	}
+	for _, rel := range []string{
+		"assets/likec4/_includes/ui/panels/likec4/panels.c4",
+		"assets/likec4/_includes/core/identity/likec4/identity.c4",
+	} {
+		if _, err := os.Stat(filepath.Join(dest, rel)); err != nil {
+			t.Errorf("missing vendored source %s: %v", rel, err)
+		}
+	}
+	panelSource, err := os.ReadFile(filepath.Join(dest, "assets/likec4/_includes/ui/panels/likec4/panels.c4"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(panelSource), "/Users/") || !strings.Contains(string(panelSource), "model panels") {
+		t.Fatalf("vendored source was not safely sanitized:\n%s", panelSource)
+	}
+}
+
+func TestCopyAssetsRejectsUnpublishedInclude(t *testing.T) {
+	notebook := t.TempDir()
+	root := filepath.Join(notebook, "workspaces", "core", "concepts", "architecture")
+	dependency := filepath.Join(notebook, "workspaces", "ui", "concepts", "private-map")
+	for name, content := range map[string]string{
+		filepath.Join(root, "src", "model.c4"):                "model {}\n",
+		filepath.Join(root, "likec4.config.json"):             `{"include":{"paths":["../../../ui/concepts/private-map/likec4"]}}`,
+		filepath.Join(dependency, "concept-manifest.yml"):     "id: private-map\ndocgen_publish: draft\n",
+		filepath.Join(dependency, "likec4", "private.likec4"): "model private {}\n",
+	} {
+		if err := os.MkdirAll(filepath.Dir(name), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(name, []byte(content), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	err := CopyAssets(root, t.TempDir(), "prod")
+	if err == nil || !strings.Contains(err.Error(), "unpublished concept ui:private-map") {
+		t.Fatalf("expected actionable unpublished dependency error, got %v", err)
 	}
 }
