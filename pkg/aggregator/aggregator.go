@@ -95,7 +95,7 @@ func (a *Aggregator) Aggregate(outputDir string, mode string, transform string) 
 			if eco, ok := ecoByName[name]; ok {
 				ecosystemsToProcess = append(ecosystemsToProcess, eco)
 			} else {
-				a.logger.Warnf("Ecosystem '%s' not found in groves config", name)
+				a.logger.Warnf("Ecosystem '%s' not found among the configured code roots", name)
 			}
 		}
 

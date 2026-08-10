@@ -1121,7 +1121,7 @@ func (g *Generator) generateFromSchemaTable(packageDir string, section config.Se
 // It preserves the hierarchical structure and includes all metadata for rich UI rendering.
 type ConfigNode struct {
 	Name             string       `json:"name"`
-	Path             string       `json:"path"` // Full dotted path (e.g., "groves.mygrove.enabled")
+	Path             string       `json:"path"` // Full dotted path (e.g., "roots.code.path")
 	Type             string       `json:"type"`
 	Description      string       `json:"description"`
 	Required         bool         `json:"required,omitempty"`
