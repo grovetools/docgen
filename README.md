@@ -6,7 +6,7 @@
 
 **Section-Based Configuration**: Documentation is defined in `docgen.config.yml`. The configuration organizes documentation into logical "sections" (e.g., Overview, Usage). Each section maps a specific prompt file to an output Markdown file and can define specific LLM parameters or context rules.
 
-**Notebook Decoupling**: Configuration and prompts can reside either in the source repository or within a `nb` workspace. This allows documentation logic and drafting to occur independently of the source code, keeping repositories clean and enabling private iteration before publishing.
+**Notebook Decoupling**: Configuration and prompts can reside either in the source repository or within an `nb` notespace. This allows documentation logic and drafting to occur independently of the source code, keeping repositories clean and enabling private iteration before publishing.
 
 **Context-Aware Generation**: The tool utilizes `grove cx` to assemble file-based context from the repository. It combines prompts, the previous documentation iteration, and `cx` codebase context to generate content via `grove llm`.
 
@@ -32,7 +32,7 @@
 
 *   **`cx`**: Used to generate repository context files based on `.grove/rules`.
 *   **`flow`**: Orchestrates interactive customization plans.
-*   **`nb`**: Resolves workspace locations for storing prompts and drafts outside the source repository.
+*   **`nb`**: Resolves notespace locations for storing prompts and drafts outside the source repository.
 
 <!-- DOCGEN:OVERVIEW:END -->
 

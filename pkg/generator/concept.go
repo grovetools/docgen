@@ -86,10 +86,10 @@ func (g *Generator) generateFromConcept(packageDir string, section config.Sectio
 		return fmt.Errorf("could not resolve docgen directory: %w", err)
 	}
 
-	// docgenDir is {notebook_root}/workspaces/{name}/docgen
-	// so concepts is {notebook_root}/workspaces/{name}/concepts
-	workspaceDir := filepath.Dir(docgenDir)
-	conceptDir := filepath.Join(workspaceDir, "concepts", conceptID)
+	// docgenDir is {notebook_root}/notespaces/{name}/docgen
+	// so concepts is {notebook_root}/notespaces/{name}/concepts
+	notespaceDir := filepath.Dir(docgenDir)
+	conceptDir := filepath.Join(notespaceDir, "concepts", conceptID)
 	if _, err := os.Stat(conceptDir); os.IsNotExist(err) {
 		return fmt.Errorf("concept directory not found: %s", conceptDir)
 	}

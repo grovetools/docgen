@@ -26,7 +26,7 @@ func newSyncToRepoCmd() *cobra.Command {
 to the repository's docs/ directory for publishing/committing.
 
 This command:
-1. Resolves your workspace's notebook docgen/docs directory
+1. Resolves your code workspace's paired notespace docgen/docs directory
 2. Copies all .md files to the repository's docs/ directory
 3. Optionally copies images, asciicasts, and other assets
 4. Reports what was copied

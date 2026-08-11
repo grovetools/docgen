@@ -65,7 +65,7 @@
         },
         {
           "title": "Integrations",
-          "content": "*   **`cx`**: Used to generate repository context files based on `.grove/rules`.\n*   **`flow`**: Orchestrates interactive customization plans.\n*   **`nb`**: Resolves workspace locations for storing prompts and drafts outside the source repository."
+          "content": "*   **`cx`**: Used to generate repository context files based on `.grove/rules`.\n*   **`flow`**: Orchestrates interactive customization plans.\n*   **`nb`**: Resolves notespace locations for storing prompts and drafts outside the source repository."
         }
       ]
     }

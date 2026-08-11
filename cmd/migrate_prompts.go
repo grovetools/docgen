@@ -17,12 +17,12 @@ var migrateDryRun bool
 func newMigratePromptsCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "migrate-prompts",
-		Short: "Migrate prompts from docs/prompts to notebook workspace",
+		Short: "Migrate prompts from docs/prompts to a notespace",
 		Long: `Moves prompt files from the local docs/prompts directory to the
-associated notebook workspace and updates docgen.config.yml.
+associated notespace and updates docgen.config.yml.
 
 The command will:
-1. Resolve your workspace's notebook location
+1. Resolve your code workspace's paired notespace
 2. Copy prompt files from docs/prompts/ to the notebook's docgen directory
 3. Update docgen.config.yml to use basenames only (e.g., "01-overview.md" instead of "prompts/01-overview.md")
 4. Optionally delete the old docs/prompts directory

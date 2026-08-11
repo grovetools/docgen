@@ -991,9 +991,9 @@ func (a *Aggregator) aggregateConcepts(wsPath string, wsName string, docCfg *doc
 		return nil
 	}
 
-	// concepts is at the same level as docgen: {notebook}/workspaces/{name}/concepts/
-	workspaceDir := filepath.Dir(docgenDir)
-	conceptsDir := filepath.Join(workspaceDir, "concepts")
+	// concepts is at the same level as docgen: {notebook}/notespaces/{name}/concepts/
+	notespaceDir := filepath.Dir(docgenDir)
+	conceptsDir := filepath.Join(notespaceDir, "concepts")
 
 	if !dirExists(conceptsDir) {
 		a.logger.Debugf("No concepts directory found for %s", wsName)

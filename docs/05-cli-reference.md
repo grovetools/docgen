@@ -19,8 +19,8 @@ Available Commands:
   help            Help about any command
   init            Initialize docgen configuration and prompts for a package
   logo            Logo asset generation commands
-  migrate-config  Migrate docgen config from docs/ to notebook workspace
-  migrate-prompts Migrate prompts from docs/prompts to notebook workspace
+  migrate-config  Migrate docgen config from docs/ to a notespace
+  migrate-prompts Migrate prompts from docs/prompts to a notespace
   recipe          Manage and display documentation recipes
   regen-json      Regenerate the structured JSON output from existing markdown files
   schema          Manage and process JSON schemas

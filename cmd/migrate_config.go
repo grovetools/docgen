@@ -16,11 +16,11 @@ var migrateConfigDryRun bool
 func newMigrateConfigCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "migrate-config",
-		Short: "Migrate docgen config from docs/ to notebook workspace",
+		Short: "Migrate docgen config from docs/ to a notespace",
 		Long: `Moves the docgen.config.yml file from docs/ to the notebook's docgen directory.
 
 The command will:
-1. Resolve your workspace's notebook docgen location
+1. Resolve your code workspace's paired notespace
 2. Copy docgen.config.yml from docs/ to the notebook's docgen directory
 3. Keep the original file in docs/ (no deletion)
 

@@ -24,8 +24,8 @@ import (
 // watchedPackage holds cached information about a package being watched
 type watchedPackage struct {
 	wsPath      string // workspace path (e.g., /path/to/grove-flow)
-	docgenDir   string // docgen dir in notebook (e.g., /path/to/nb/workspaces/flow/docgen)
-	conceptsDir string // concepts dir in notebook (e.g., /path/to/nb/workspaces/flow/concepts)
+	docgenDir   string // docgen dir in notespace (e.g., /path/to/nb/notespaces/flow/docgen)
+	conceptsDir string // concepts dir in notespace (e.g., /path/to/nb/notespaces/flow/concepts)
 	pkgName     string // package name (e.g., "flow")
 	config      *config.DocgenConfig
 }
@@ -344,9 +344,9 @@ func setupWatchForEcosystem(
 		}
 
 		// Also watch concepts directory if it exists
-		// concepts is at the same level as docgen: {notebook}/workspaces/{name}/concepts/
-		workspaceDir := filepath.Dir(docgenDir)
-		conceptsDir := filepath.Join(workspaceDir, "concepts")
+		// concepts is at the same level as docgen: {notebook}/notespaces/{name}/concepts/
+		notespaceDir := filepath.Dir(docgenDir)
+		conceptsDir := filepath.Join(notespaceDir, "concepts")
 		if _, err := os.Stat(conceptsDir); err == nil {
 			if err := w.AddRecursive(conceptsDir, wsPath); err != nil {
 				if !quiet {
